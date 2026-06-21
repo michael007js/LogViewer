@@ -70,5 +70,20 @@ namespace LogViewer.Properties {
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("")]
         public string AdbPath { get { return ((string)(this["AdbPath"])); } set { this["AdbPath"] = value; } }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string ScrcpyPath { get { return ((string)(this["ScrcpyPath"])); } set { this["ScrcpyPath"] = value; } }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool AutoStartScrcpyForSelectedDevice { get { return ((bool)(this["AutoStartScrcpyForSelectedDevice"])); } set { this["AutoStartScrcpyForSelectedDevice"] = value; } }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("340")]
+        public int LastLeftPanelWidth { get { return ((int)(this["LastLeftPanelWidth"])); } set { this["LastLeftPanelWidth"] = value; } }
     }
 }

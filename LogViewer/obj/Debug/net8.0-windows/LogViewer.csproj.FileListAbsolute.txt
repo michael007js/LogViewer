@@ -180,3 +180,4 @@ D:\app\android.log.client\_build_tmp\verify3\LogViewer.deps.json
 D:\app\android.log.client\_build_tmp\verify3\LogViewer.runtimeconfig.json
 D:\app\android.log.client\_build_tmp\verify3\LogViewer.dll
 D:\app\android.log.client\_build_tmp\verify3\LogViewer.pdb
+D:\app\android.log.client\LogViewer\obj\Debug\net8.0-windows\LogViewer.sourcelink.json

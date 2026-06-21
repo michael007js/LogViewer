@@ -9,11 +9,14 @@ namespace LogViewer.UI;
 
 public partial class MainForm : Form
 {
+    private const int DefaultLeftPanelWidth = 340;
     private readonly LogServer _server = new();
     private readonly AdbHelper _adbHelper = new();
+    private readonly ScrcpyManager _scrcpyManager = new();
     private readonly Dictionary<string, LogcatReader> _logcatReaders = new();
     private AppSettings _settings;
     private CancellationTokenSource? _adbScanCts;
+    private CancellationTokenSource? _scrcpyStartCts;
 
     private readonly Dictionary<string, RingBuffer<LogEntry>> _deviceLogs = new();
     private readonly RingBuffer<LogEntry> _allLogs;
@@ -23,6 +26,12 @@ public partial class MainForm : Form
     private bool _systemLogFlushScheduled;
     private bool _networkRefreshScheduled;
     private bool _networkRefreshNeedsFullFilter;
+    private ScrcpySession? _scrcpySession;
+    private readonly List<ScrcpySession> _externalScrcpySessions = new();
+    private int _scrcpyRotationIndex;
+    private bool _scrcpyPreparing;
+    private string? _scrcpyDeployStatus;
+    private string? _scrcpyDeployError;
 
     private string? _currentDeviceId;
     private bool _showingSystemLog;
@@ -118,6 +127,11 @@ public partial class MainForm : Form
             _adbHelper.SetManualPath(_settings.AdbPath);
         }
 
+        if (!string.IsNullOrEmpty(_settings.ScrcpyPath))
+        {
+            _scrcpyManager.SetManualPath(_settings.ScrcpyPath);
+        }
+
         if (_adbHelper.IsAdbAvailable())
         {
             _adbHelper.EnsureServerStarted();
@@ -152,10 +166,13 @@ public partial class MainForm : Form
         _server.LogReceived += OnLogReceived;
         _btnAdbReverse.DropDownOpening += OnAdbReverseOpening;
         _devicePanel.DeviceSelected += OnDeviceSelected;
-        _devicePanel.DeleteDeviceRequested += OnDeleteDevice;
-        _devicePanel.AdbReverseRequested += OnAdbReverseForDevice;
-        _devicePanel.LogcatToggleRequested += OnLogcatToggle;
         _devicePanel.RefreshAdbRequested += OnRefreshAdbDevices;
+        _devicePanel.MirrorStartRequested += OnMirrorStartRequested;
+        _devicePanel.MirrorStopRequested += OnMirrorStopRequested;
+        _devicePanel.MirrorReconnectRequested += OnMirrorReconnectRequested;
+        _devicePanel.MirrorRotateRequested += OnMirrorRotateRequested;
+        _devicePanel.MirrorScreenshotRequested += OnMirrorScreenshotRequested;
+        _devicePanel.MirrorPopoutRequested += OnMirrorPopoutRequested;
         _tabLogType.SelectedIndexChanged += (s, e) =>
         {
             _showingSystemLog = _tabLogType.SelectedIndex == 1;
@@ -223,8 +240,14 @@ public partial class MainForm : Form
         _btnClear.Click += OnClear;
         _btnExportJson.Click += OnExportJson;
         _btnExportTxt.Click += OnExportTxt;
-        Load += (s, e) => _outerSplit.SplitterDistance = (int)(ClientSize.Width * 0.15);
-        Shown += async (s, e) => await PrimeAdbDeviceListAsync();
+        _outerSplit.SplitterMoved += (_, _) =>
+        {
+            RememberLeftPanelWidth();
+            SyncMirrorHostBounds();
+        };
+        Load += OnMainFormLoad;
+        Shown += async (s, e) => await OnMainFormShownAsync();
+        Resize += (_, _) => SyncMirrorHostBounds();
     }
 
     private static bool IsDesignTimeMode()
@@ -247,8 +270,25 @@ public partial class MainForm : Form
     private void UpdateAdbStatus()
     {
         var adbPath = _adbHelper.GetAdbPath();
-        _lblAdbStatus.Text = adbPath != null ? $"ADB: {adbPath}" : "ADB: Not found (Tools→Settings)";
-        _lblAdbStatus.ForeColor = adbPath != null ? Color.Green : Color.Red;
+        var scrcpyPath = _scrcpyManager.GetScrcpyPath();
+        var adbText = adbPath != null ? $"ADB: {Path.GetFileName(adbPath)}" : "ADB: Not found";
+        var scrcpyText = _scrcpyPreparing
+            ? "scrcpy: Deploying..."
+            : scrcpyPath != null
+                ? $"scrcpy: {Path.GetFileName(scrcpyPath)}"
+                : !string.IsNullOrEmpty(_scrcpyDeployError)
+                    ? "scrcpy: Deploy failed"
+                    : "scrcpy: Not ready";
+        _lblAdbStatus.Text = $"{adbText} | {scrcpyText}";
+        _lblAdbStatus.ForeColor = adbPath == null
+            ? Color.Red
+            : string.IsNullOrEmpty(_scrcpyDeployError) ? Color.Green : Color.DarkOrange;
+    }
+
+    private async Task OnMainFormShownAsync()
+    {
+        await PrimeAdbDeviceListAsync();
+        await EnsureScrcpyReadyAsync(forceDeploy: false, reportToMirrorPanel: false);
     }
 
     private void ApplySettings()
@@ -259,11 +299,13 @@ public partial class MainForm : Form
         _jsonHeaders.SetFont(font);
         _jsonRequestBody.SetFont(font);
         _jsonResponseBody.SetFont(font);
+        ApplyLeftPanelWidthSetting();
         if (_cmbMethod.SelectedIndex < 0 && _cmbMethod.Items.Count > 0) _cmbMethod.SelectedIndex = 0;
         if (_cmbStatusCode.SelectedIndex < 0 && _cmbStatusCode.Items.Count > 0) _cmbStatusCode.SelectedIndex = 0;
         if (_cmbLogLevel.SelectedIndex < 0 && _cmbLogLevel.Items.Count > 0) _cmbLogLevel.SelectedIndex = 0;
         if (_cmbLogTag.SelectedIndex < 0 && _cmbLogTag.Items.Count > 0) _cmbLogTag.SelectedIndex = 0;
         UpdateLogCount();
+        RefreshMirrorPanelState();
     }
 
     private JsonTreeView? GetActiveJsonView()
@@ -325,6 +367,7 @@ public partial class MainForm : Form
             TryMatchAdbSerial(info);
             _devicePanel.AddOrUpdateDevice(info, 0);
             UpdateDeviceCountStatus();
+            RefreshMirrorPanelState();
 
             if (_settings.AutoStartLogcat && _adbHelper.IsAdbAvailable())
             {
@@ -396,6 +439,7 @@ public partial class MainForm : Form
         {
             _devicePanel.SetDeviceConnected(deviceId, false);
             UpdateDeviceCountStatus();
+            RefreshMirrorPanelState();
             RequestAdbScan();
         }));
     }
@@ -844,11 +888,26 @@ public partial class MainForm : Form
 
     private void OnDeviceSelected(object? sender, string? deviceId)
     {
+        var previousDeviceId = _currentDeviceId;
         _currentDeviceId = deviceId;
+        if (!string.Equals(previousDeviceId, deviceId, StringComparison.Ordinal))
+        {
+            StopMirror(clearStatusOnly: true);
+        }
         RefreshNetworkFilter();
         RefreshSystemLogList();
         _selectedLogEntry = null;
         ShowLogDetail(null);
+        _scrcpyRotationIndex = 0;
+        RefreshMirrorPanelState();
+        if (!string.IsNullOrEmpty(deviceId) && _settings.AutoStartScrcpyForSelectedDevice)
+        {
+            _ = StartMirrorForCurrentDeviceAsync(restart: true);
+        }
+        else if (string.IsNullOrEmpty(deviceId))
+        {
+            StopMirror(clearStatusOnly: true);
+        }
     }
 
     private void OnDeleteDevice(object? sender, string deviceId)
@@ -873,10 +932,12 @@ public partial class MainForm : Form
             _currentDeviceId = null;
             _selectedLogEntry = null;
             ShowLogDetail(null);
+            StopMirror(clearStatusOnly: true);
         }
 
         RefreshNetworkFilter();
         RefreshSystemLogList();
+        RefreshMirrorPanelState();
     }
 
     private void OnAdbReverseForDevice(object? sender, string deviceId)
@@ -1154,6 +1215,7 @@ public partial class MainForm : Form
         ShowLogDetail(null);
         RefreshNetworkFilter();
         RefreshSystemLogList();
+        RefreshMirrorPanelState();
     }
 
     private void OnExportJson(object? sender, EventArgs e)
@@ -1207,6 +1269,10 @@ public partial class MainForm : Form
                 _adbHelper.SetManualPath(_settings.AdbPath);
             }
 
+            _scrcpyManager.SetManualPath(_settings.ScrcpyPath);
+            _scrcpyDeployError = null;
+            _scrcpyDeployStatus = null;
+
             foreach (var kvp in _deviceLogs)
             {
                 kvp.Value.Resize(_settings.MaxLogEntriesPerDevice);
@@ -1219,6 +1285,7 @@ public partial class MainForm : Form
             }
 
             UpdateAdbStatus();
+            RefreshMirrorPanelState();
         }
     }
 
@@ -1227,6 +1294,14 @@ public partial class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         StopAdbScanLoop();
+        StopMirror(clearStatusOnly: true);
+        _scrcpyStartCts?.Cancel();
+        _scrcpyStartCts?.Dispose();
+        foreach (var session in _externalScrcpySessions.ToArray())
+        {
+            session.Dispose();
+        }
+        _externalScrcpySessions.Clear();
         foreach (var reader in _logcatReaders.Values) reader.Stop();
         _systemSnapshotCts?.Cancel();
         _systemSnapshotCts?.Dispose();
@@ -1257,5 +1332,382 @@ public partial class MainForm : Form
             return true;
         }
         return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    private void OnMainFormLoad(object? sender, EventArgs e)
+    {
+        ApplyLeftPanelWidthSetting();
+        RefreshMirrorPanelState();
+    }
+
+    private void ApplyLeftPanelWidthSetting()
+    {
+        if (!IsHandleCreated && !Visible)
+        {
+            return;
+        }
+
+        var targetWidth = Math.Clamp(_settings.LastLeftPanelWidth > 0 ? _settings.LastLeftPanelWidth : DefaultLeftPanelWidth, 220, 460);
+        var maxWidth = Math.Max(_outerSplit.Panel1MinSize, ClientSize.Width - _innerSplit.Panel1MinSize - 120);
+        _outerSplit.SplitterDistance = Math.Min(targetWidth, Math.Max(_outerSplit.Panel1MinSize, maxWidth));
+    }
+
+    private void RememberLeftPanelWidth()
+    {
+        if (_outerSplit.SplitterDistance <= 0)
+        {
+            return;
+        }
+
+        _settings.LastLeftPanelWidth = _outerSplit.SplitterDistance;
+        _settings.Save();
+    }
+
+    private void RefreshMirrorPanelState()
+    {
+        if (IsDesignTimeMode())
+        {
+            return;
+        }
+
+        UpdateAdbStatus();
+
+        if (string.IsNullOrEmpty(_currentDeviceId))
+        {
+            _devicePanel.SetMirrorStatus("\u8BF7\u9009\u62E9\u5177\u4F53\u8BBE\u5907\u4EE5\u64CD\u63A7\u624B\u673A", hostVisible: false, isRunning: false, isReady: false);
+            return;
+        }
+
+        var serial = ResolveAdbSerial(_currentDeviceId);
+        if (string.IsNullOrEmpty(serial))
+        {
+            _devicePanel.SetMirrorStatus("\u5F53\u524D\u8BBE\u5907\u672A\u5339\u914D ADB serial\uFF0C\u65E0\u6CD5\u542F\u52A8\u624B\u673A\u955C\u50CF", hostVisible: false, isRunning: false, isReady: false);
+            return;
+        }
+
+        if (_scrcpyPreparing)
+        {
+            _devicePanel.SetMirrorStatus(_scrcpyDeployStatus ?? "\u6B63\u5728\u90E8\u7F72 scrcpy...", hostVisible: false, isRunning: false, isReady: false);
+            return;
+        }
+
+        var scrcpyPath = _scrcpyManager.GetScrcpyPath();
+        if (string.IsNullOrEmpty(scrcpyPath))
+        {
+            var message = !string.IsNullOrEmpty(_scrcpyDeployError)
+                ? $"\u81EA\u52A8\u90E8\u7F72 scrcpy \u5931\u8D25\uFF1A{_scrcpyDeployError}"
+                : "\u672A\u5B8C\u6210 scrcpy \u90E8\u7F72\uFF0C\u7A0D\u540E\u4F1A\u81EA\u52A8\u51C6\u5907";
+            _devicePanel.SetMirrorStatus(message, hostVisible: false, isRunning: false, isReady: false);
+            return;
+        }
+
+        if (_scrcpySession?.IsRunning == true && string.Equals(_scrcpySession.DeviceSerial, serial, StringComparison.Ordinal))
+        {
+            _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true, isRunning: true, isReady: true);
+            SyncMirrorHostBounds();
+            return;
+        }
+
+        _devicePanel.SetMirrorStatus($"\u5DF2\u5C31\u7EEA\uFF0C\u53EF\u542F\u52A8\u955C\u50CF\uFF1A{serial}", hostVisible: false, isRunning: false, isReady: false);
+    }
+
+    private async Task<string?> EnsureScrcpyReadyAsync(bool forceDeploy, bool reportToMirrorPanel)
+    {
+        try
+        {
+            _scrcpyPreparing = true;
+            _scrcpyDeployError = null;
+            _scrcpyDeployStatus = "\u6B63\u5728\u90E8\u7F72 scrcpy...";
+            UpdateAdbStatus();
+
+            if (reportToMirrorPanel && !string.IsNullOrEmpty(_currentDeviceId))
+            {
+                _devicePanel.SetMirrorStatus(_scrcpyDeployStatus, hostVisible: false, isRunning: false, isReady: false);
+            }
+
+            var progress = new Progress<string>(message =>
+            {
+                _scrcpyDeployStatus = message;
+                UpdateAdbStatus();
+
+                if (reportToMirrorPanel && !string.IsNullOrEmpty(_currentDeviceId) && _scrcpySession?.IsRunning != true)
+                {
+                    _devicePanel.SetMirrorStatus(message, hostVisible: false, isRunning: false, isReady: false);
+                }
+            });
+
+            var scrcpyPath = await _scrcpyManager
+                .EnsureScrcpyAvailableAsync(forceDeploy, progress, CancellationToken.None)
+                .ConfigureAwait(true);
+
+            if (!string.IsNullOrEmpty(scrcpyPath) &&
+                !string.Equals(_settings.ScrcpyPath, scrcpyPath, StringComparison.OrdinalIgnoreCase))
+            {
+                _settings.ScrcpyPath = scrcpyPath;
+                _settings.Save();
+            }
+
+            if (!string.IsNullOrEmpty(scrcpyPath))
+            {
+                _scrcpyDeployStatus = $"\u5DF2\u5B8C\u6210 scrcpy \u90E8\u7F72\uFF1A{Path.GetFileName(scrcpyPath)}";
+            }
+
+            return scrcpyPath;
+        }
+        catch (Exception ex)
+        {
+            _scrcpyDeployError = ex.Message;
+            _scrcpyDeployStatus = null;
+            return null;
+        }
+        finally
+        {
+            _scrcpyPreparing = false;
+            UpdateAdbStatus();
+
+            if (reportToMirrorPanel)
+            {
+                RefreshMirrorPanelState();
+            }
+        }
+    }
+
+    private string? ResolveAdbSerial(string deviceId)
+    {
+        var info = _server.GetDeviceInfo(deviceId);
+        return info?.AdbSerial ?? _devicePanel.GetAdbSerialForKey(deviceId);
+    }
+
+    private async void OnMirrorStartRequested(object? sender, string deviceId)
+    {
+        if (!string.Equals(deviceId, _currentDeviceId, StringComparison.Ordinal))
+        {
+            _currentDeviceId = deviceId;
+        }
+
+        await StartMirrorForCurrentDeviceAsync(restart: true);
+    }
+
+    private void OnMirrorStopRequested(object? sender, string deviceId)
+    {
+        StopMirror(clearStatusOnly: false);
+        RefreshMirrorPanelState();
+    }
+
+    private async void OnMirrorReconnectRequested(object? sender, string deviceId)
+    {
+        await StartMirrorForCurrentDeviceAsync(restart: true);
+    }
+
+    private async void OnMirrorRotateRequested(object? sender, string deviceId)
+    {
+        _scrcpyRotationIndex = (_scrcpyRotationIndex + 1) % 4;
+        await StartMirrorForCurrentDeviceAsync(restart: true);
+    }
+
+    private async void OnMirrorPopoutRequested(object? sender, string deviceId)
+    {
+        await StartMirrorSessionAsync(embedded: false, restartCurrent: false);
+    }
+
+    private void OnMirrorScreenshotRequested(object? sender, string deviceId)
+    {
+        CaptureDeviceScreenshot(deviceId);
+    }
+
+    private async Task StartMirrorForCurrentDeviceAsync(bool restart)
+    {
+        if (string.IsNullOrEmpty(_currentDeviceId))
+        {
+            RefreshMirrorPanelState();
+            return;
+        }
+
+        await StartMirrorSessionAsync(embedded: true, restartCurrent: restart);
+    }
+
+    private async Task StartMirrorSessionAsync(bool embedded, bool restartCurrent)
+    {
+        var deviceId = _currentDeviceId;
+        if (string.IsNullOrEmpty(deviceId))
+        {
+            RefreshMirrorPanelState();
+            return;
+        }
+
+        var serial = ResolveAdbSerial(deviceId);
+        if (string.IsNullOrEmpty(serial))
+        {
+            RefreshMirrorPanelState();
+            return;
+        }
+
+        var scrcpyPath = await EnsureScrcpyReadyAsync(forceDeploy: false, reportToMirrorPanel: true);
+        if (string.IsNullOrEmpty(scrcpyPath))
+        {
+            RefreshMirrorPanelState();
+            return;
+        }
+
+        if (restartCurrent)
+        {
+            StopMirror(clearStatusOnly: true);
+        }
+
+        _scrcpyStartCts?.Cancel();
+        _scrcpyStartCts?.Dispose();
+        _scrcpyStartCts = new CancellationTokenSource();
+        var token = _scrcpyStartCts.Token;
+
+        if (embedded)
+        {
+            _devicePanel.SetMirrorStatus($"\u6B63\u5728\u542F\u52A8\u955C\u50CF\uFF1A{serial}", hostVisible: false, isRunning: false, isReady: false);
+        }
+
+        try
+        {
+            var session = await _scrcpyManager.StartSessionAsync(new ScrcpyStartOptions
+            {
+                ScrcpyPath = scrcpyPath,
+                DeviceSerial = serial,
+                WindowTitle = $"LogViewer.scrcpy.{serial}.{Guid.NewGuid():N}",
+                Mode = embedded ? ScrcpySessionMode.Embedded : ScrcpySessionMode.External,
+                HostHandle = embedded ? _devicePanel.MirrorHostHandle : IntPtr.Zero,
+                AngleDegrees = _scrcpyRotationIndex * 90
+            }, token).ConfigureAwait(false);
+
+            if (token.IsCancellationRequested || IsDisposed)
+            {
+                session.Dispose();
+                return;
+            }
+
+            if (embedded)
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    _scrcpySession?.Dispose();
+                    _scrcpySession = session;
+                    _scrcpySession.Exited += OnScrcpySessionExited;
+                    _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true, isRunning: true, isReady: true);
+                    SyncMirrorHostBounds();
+                }));
+            }
+            else
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    _externalScrcpySessions.Add(session);
+                    session.Exited += (_, _) =>
+                    {
+                        if (!IsDisposed && IsHandleCreated)
+                        {
+                            BeginInvoke(new Action(() => _externalScrcpySessions.Remove(session)));
+                        }
+                    };
+                }));
+            }
+        }
+        catch (Exception ex)
+        {
+            if (!IsDisposed)
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    _devicePanel.SetMirrorStatus($"\u955C\u50CF\u542F\u52A8\u5931\u8D25\uFF1A{ex.Message}", hostVisible: false, isRunning: false, isReady: false);
+                }));
+            }
+        }
+    }
+
+    private void OnScrcpySessionExited(object? sender, EventArgs e)
+    {
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        BeginInvoke(new Action(() =>
+        {
+            _scrcpySession?.Dispose();
+            _scrcpySession = null;
+            RefreshMirrorPanelState();
+        }));
+    }
+
+    private void StopMirror(bool clearStatusOnly)
+    {
+        _scrcpyStartCts?.Cancel();
+        _scrcpySession?.Dispose();
+        _scrcpySession = null;
+        if (clearStatusOnly)
+        {
+            _devicePanel.ClearMirrorHost();
+        }
+    }
+
+    private void SyncMirrorHostBounds()
+    {
+        _devicePanel.SyncMirrorBounds();
+        _scrcpySession?.SyncEmbeddedBounds();
+    }
+
+    private void CaptureDeviceScreenshot(string deviceId)
+    {
+        var adbPath = _adbHelper.GetAdbPath();
+        var serial = ResolveAdbSerial(deviceId);
+        if (adbPath == null || string.IsNullOrEmpty(serial))
+        {
+            RefreshMirrorPanelState();
+            return;
+        }
+
+        using var dialog = new SaveFileDialog
+        {
+            Filter = "PNG|*.png",
+            FileName = $"screenshot_{serial}_{DateTime.Now:yyyyMMdd_HHmmss}.png"
+        };
+
+        if (dialog.ShowDialog() != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            var bytes = RunAdbBinary(adbPath, serial, "exec-out screencap -p");
+            File.WriteAllBytes(dialog.FileName, bytes);
+            _devicePanel.SetMirrorStatus($"\u622A\u56FE\u5DF2\u4FDD\u5B58\uFF1A{Path.GetFileName(dialog.FileName)}", hostVisible: _scrcpySession?.IsRunning == true, isRunning: _scrcpySession?.IsRunning == true, isReady: _scrcpySession != null);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"\u622A\u56FE\u5931\u8D25\uFF1A{ex.Message}", "Screenshot", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            RefreshMirrorPanelState();
+        }
+    }
+
+    private static byte[] RunAdbBinary(string adbPath, string serial, string arguments)
+    {
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = adbPath,
+            Arguments = $"-s {serial} {arguments}",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        }) ?? throw new InvalidOperationException("Failed to start adb.");
+
+        using var memory = new MemoryStream();
+        process.StandardOutput.BaseStream.CopyTo(memory);
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit(5000);
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? "adb screenshot failed." : error.Trim());
+        }
+
+        return memory.ToArray();
     }
 }

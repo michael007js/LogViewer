@@ -14,5 +14,8 @@
     <AdbScanIntervalMs>2000</AdbScanIntervalMs>
     <LogcatFilter></LogcatFilter>
     <AdbPath></AdbPath>
+    <ScrcpyPath></ScrcpyPath>
+    <AutoStartScrcpyForSelectedDevice>False</AutoStartScrcpyForSelectedDevice>
+    <LastLeftPanelWidth>340</LastLeftPanelWidth>
   </PropertyGroup>
 </Project>

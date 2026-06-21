@@ -28,7 +28,8 @@
 
 ## 3. 外部依赖
 
-**无第三方 NuGet 包**。项目完全依赖 .NET 8 内置库。
+**无第三方 NuGet 包**。项目完全依赖 .NET 8 内置库。  
+运行时接入 `scrcpy.exe` 作为外部工具，用于左侧 ADB 手机镜像与控制；首次启动可自动从官方 GitHub Releases 部署到 `%LocalAppData%\\LogViewer\\Tools\\scrcpy\\`，不通过 NuGet 分发。
 
 ## 4. 通信协议
 
@@ -85,9 +86,10 @@ adb -s {serial} logcat -v threadtime {filter}
 | MainForm | `UI/MainForm.cs` | 主窗口（日志列表/详情/设备/设置） |
 | JsonDetailForm | `UI/JsonDetailForm.cs` | JSON 详情窗口（左右 4:6 分栏 + Tree/Raw） |
 | JsonTreeView | `UI/JsonTreeView.cs` | JSON 折叠 + 语法高亮 TreeView（OwnerDrawText） |
-| DevicePanel | `UI/DevicePanel.cs` | 设备列表 + 切换面板 |
-| SettingsDialog | `UI/SettingsDialog.cs` | 设置对话框（ADB 路径 Browse/AutoDetect） |
+| DevicePanel | `UI/DevicePanel.cs` | 左侧 ADB 设备操控面板（设备选择 + scrcpy 宿主 + 控制条） |
+| SettingsDialog | `UI/SettingsDialog.cs` | 设置对话框（ADB 路径检测 + scrcpy 自动部署/高级覆盖） |
 | AdbHelper | `Utils/AdbHelper.cs` | ADB 搜索/验证/设备列表/Reverse |
+| ScrcpyManager | `Utils/ScrcpyManager.cs` | scrcpy 搜索/启动/内嵌宿主/窗口生命周期管理 |
 | JsonFormatter | `Utils/JsonFormatter.cs` | JSON 格式化 + JSONPath |
 
 ## 6. 测试
@@ -132,6 +134,9 @@ Program.cs → ApplicationConfiguration.Initialize() → Application.Run(new Mai
 | Font Size (pt) | 11 | 列表和详情字体大小 |
 | Logcat Filter | (空) | adb logcat 过滤表达式 |
 | ADB Path | (空) | 手动指定 adb.exe 路径 |
+| Scrcpy Path | (空) | scrcpy 已部署路径或高级覆盖路径 |
+| Auto Start Scrcpy For Selected Device | false | 选择具体设备时自动启动左侧镜像 |
+| Last Left Panel Width | 340 | 左侧设备操控区上次宽度 |
 
 ## 10. 架构分层
 
@@ -146,7 +151,7 @@ UI/ ──→ Network/ ──→ Models/
 | 数据模型 | `Models/` | LogEntry/SystemLogEntry/DeviceInfo/AppSettings/RingBuffer | 无 |
 | 通信层 | `Network/` | TCP Server + 协议解析 + adb logcat | → Models |
 | 界面层 | `UI/` | 主窗口 + JSON 详情 + 设备面板 + 设置 | → Network, Utils, Models |
-| 工具层 | `Utils/` | ADB 操作 + JSON 格式化 | → Models |
+| 工具层 | `Utils/` | ADB 操作 + scrcpy 宿主 + JSON 格式化 | → Models |
 
 ## 11. 给 AI 的工作约束
 
@@ -162,6 +167,8 @@ UI/ ──→ Network/ ──→ Models/
 - 协议长度字段必须处理大端序
 - ListView 必须用 VirtualMode
 - RingBuffer 非线程安全，UI 更新必须 BeginInvoke
+- scrcpy 仅作为外部可执行工具接入，不引入第三方 NuGet 包，首次启动自动部署官方 Windows 包
+- 左侧设备区现为 ADB 手机操控区，默认内嵌 scrcpy，设备选择与日志 scope 共用一个选择器
 
 ## 12. 一句话摘要
 

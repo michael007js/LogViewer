@@ -15,6 +15,9 @@ public class AppSettings
     public int AdbScanIntervalMs { get; set; } = 2000;
     public string LogcatFilter { get; set; } = "";
     public string AdbPath { get; set; } = "";
+    public string ScrcpyPath { get; set; } = "";
+    public bool AutoStartScrcpyForSelectedDevice { get; set; }
+    public int LastLeftPanelWidth { get; set; } = 340;
 
     public void Save()
     {
@@ -32,6 +35,9 @@ public class AppSettings
         s.AdbScanIntervalMs = AdbScanIntervalMs;
         s.LogcatFilter = LogcatFilter;
         s.AdbPath = AdbPath;
+        s.ScrcpyPath = ScrcpyPath;
+        s.AutoStartScrcpyForSelectedDevice = AutoStartScrcpyForSelectedDevice;
+        s.LastLeftPanelWidth = LastLeftPanelWidth;
         s.Save();
     }
 
@@ -52,7 +58,10 @@ public class AppSettings
             FontSize = s.FontSize,
             AdbScanIntervalMs = s.AdbScanIntervalMs,
             LogcatFilter = s.LogcatFilter ?? "",
-            AdbPath = s.AdbPath ?? ""
+            AdbPath = s.AdbPath ?? "",
+            ScrcpyPath = s.ScrcpyPath ?? "",
+            AutoStartScrcpyForSelectedDevice = s.AutoStartScrcpyForSelectedDevice,
+            LastLeftPanelWidth = s.LastLeftPanelWidth
         };
     }
 }

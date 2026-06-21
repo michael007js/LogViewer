@@ -1,29 +1,44 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using LogViewer.Models;
-using LogViewer.Utils;
 
 namespace LogViewer.UI;
 
-public class DevicePanel : UserControl
+public sealed class DevicePanel : UserControl
 {
     private ComboBox _cmbDevices = null!;
-    private Button _btnDeviceActions = null!;
     private Button _btnRefreshAdb = null!;
-    private Panel _workspacePanel = null!;
-    private ContextMenuStrip _deviceMenu = null!;
-    private Dictionary<string, DeviceRecord> _devices = new();
+    private Panel _mirrorHostPanel = null!;
+    private Label _lblMirrorPlaceholder = null!;
+    private Label _lblMirrorStatus = null!;
+    private Button _btnMirrorToggle = null!;
+    private Button _btnMirrorReconnect = null!;
+    private Button _btnMirrorRotate = null!;
+    private Button _btnMirrorScreenshot = null!;
+    private Button _btnMirrorPopout = null!;
+    private readonly Dictionary<string, DeviceRecord> _devices = new();
     private string? _selectedDeviceId;
+    private bool _mirrorRunning;
+    private bool _mirrorReady;
+    private bool _mirrorHostVisible;
+    private string _mirrorStatusText = "请选择具体设备以操控手机";
 
     public event EventHandler<string?>? DeviceSelected;
-    public event EventHandler<string>? DeleteDeviceRequested;
-    public event EventHandler<string>? AdbReverseRequested;
-    public event EventHandler<string>? LogcatToggleRequested;
     public event EventHandler? RefreshAdbRequested;
+    public event EventHandler<string>? MirrorStartRequested;
+    public event EventHandler<string>? MirrorStopRequested;
+    public event EventHandler<string>? MirrorReconnectRequested;
+    public event EventHandler<string>? MirrorRotateRequested;
+    public event EventHandler<string>? MirrorScreenshotRequested;
+    public event EventHandler<string>? MirrorPopoutRequested;
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public string? SelectedDeviceId => _selectedDeviceId;
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public IntPtr MirrorHostHandle => _mirrorHostPanel?.IsHandleCreated == true ? _mirrorHostPanel.Handle : IntPtr.Zero;
 
     public DevicePanel()
     {
@@ -44,34 +59,52 @@ public class DevicePanel : UserControl
             return;
         }
 
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 3,
+            ColumnCount = 1,
+            Padding = new Padding(8)
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
+
         var selector = new ComboBox
         {
             Dock = DockStyle.Top,
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Height = 30,
             Font = new Font("Consolas", 9f)
         };
         selector.Items.Add("● All");
         selector.SelectedIndex = 0;
 
-        var refresh = new Button
-        {
-            Text = "\u21BB Scan ADB",
-            Dock = DockStyle.Top,
-            Height = 26,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Consolas", 8f)
-        };
-
-        var workspace = new Panel
+        var mirror = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = SystemColors.Control
+            BorderStyle = BorderStyle.FixedSingle,
+            BackColor = Color.Black
         };
+        mirror.Controls.Add(new Label
+        {
+            Dock = DockStyle.Fill,
+            Text = "scrcpy host",
+            ForeColor = Color.WhiteSmoke,
+            TextAlign = ContentAlignment.MiddleCenter
+        });
 
-        Controls.Add(workspace);
-        Controls.Add(refresh);
-        Controls.Add(selector);
+        var controls = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill
+        };
+        controls.Controls.Add(new Button { Text = "Start", AutoSize = true });
+        controls.Controls.Add(new Button { Text = "Rotate", AutoSize = true });
+        controls.Controls.Add(new Button { Text = "Shot", AutoSize = true });
+
+        layout.Controls.Add(selector, 0, 0);
+        layout.Controls.Add(mirror, 0, 1);
+        layout.Controls.Add(controls, 0, 2);
+        Controls.Add(layout);
     }
 
     private void InitializeComponents()
@@ -81,77 +114,156 @@ public class DevicePanel : UserControl
             return;
         }
 
+        BackColor = SystemColors.Control;
+        Padding = new Padding(8);
+
         _cmbDevices = new ComboBox
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
             DropDownStyle = ComboBoxStyle.DropDownList,
-            Height = 30,
-            Font = new Font("Consolas", 9f)
+            Font = new Font("Consolas", 9f),
+            Height = 28
         };
         _cmbDevices.SelectedIndexChanged += OnDeviceSelected;
 
-        _btnDeviceActions = new Button
-        {
-            Text = "...",
-            Dock = DockStyle.Right,
-            Width = 32,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Consolas", 9f, FontStyle.Bold)
-        };
-        _btnDeviceActions.Click += (s, e) => ShowDeviceMenu();
-
         _btnRefreshAdb = new Button
         {
-            Text = "\u21BB Scan ADB",
+            Text = "Scan ADB",
             Dock = DockStyle.Top,
             Height = 26,
             FlatStyle = FlatStyle.Flat,
             Font = new Font("Consolas", 8f)
         };
-        _btnRefreshAdb.Click += (s, e) => RefreshAdbRequested?.Invoke(this, EventArgs.Empty);
+        _btnRefreshAdb.Click += (_, _) => RefreshAdbRequested?.Invoke(this, EventArgs.Empty);
 
-        _deviceMenu = new ContextMenuStrip();
-        _deviceMenu.Items.Add("Delete Logs", null, (s, ev) =>
+        _mirrorHostPanel = new Panel
         {
-            if (_selectedDeviceId != null && _devices.TryGetValue(_selectedDeviceId, out var r) && !r.IsAdbOnly)
-                DeleteDeviceRequested?.Invoke(this, _selectedDeviceId);
-        });
-        _deviceMenu.Items.Add("ADB Reverse", null, (s, ev) =>
-        {
-            if (_selectedDeviceId != null)
-                AdbReverseRequested?.Invoke(this, _selectedDeviceId);
-        });
-        _deviceMenu.Items.Add("Toggle Logcat", null, (s, ev) =>
-        {
-            if (_selectedDeviceId != null && (_devices.TryGetValue(_selectedDeviceId, out var r) && (!r.IsAdbOnly || r.Info.AdbSerial != null)))
-                LogcatToggleRequested?.Invoke(this, _selectedDeviceId);
-        });
-
-        _workspacePanel = new Panel
-        {
-            Dock = DockStyle.Fill
+            Dock = DockStyle.Fill,
+            BackColor = Color.Black,
+            BorderStyle = BorderStyle.FixedSingle,
+            Margin = new Padding(0, 8, 0, 8)
         };
 
-        var selectorPanel = new Panel
+        _lblMirrorPlaceholder = new Label
         {
-            Dock = DockStyle.Top,
-            Height = 30
+            Dock = DockStyle.Fill,
+            ForeColor = Color.Gainsboro,
+            BackColor = Color.Black,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Text = _mirrorStatusText
         };
-        selectorPanel.Controls.Add(_cmbDevices);
-        selectorPanel.Controls.Add(_btnDeviceActions);
+        _mirrorHostPanel.Controls.Add(_lblMirrorPlaceholder);
 
-        var panel = new Panel { Dock = DockStyle.Fill };
-        panel.Controls.Add(_workspacePanel);
-        panel.Controls.Add(_btnRefreshAdb);
-        panel.Controls.Add(selectorPanel);
+        _lblMirrorStatus = new Label
+        {
+            Dock = DockStyle.Bottom,
+            Height = 36,
+            ForeColor = Color.DimGray,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(2, 0, 2, 0),
+            Text = _mirrorStatusText
+        };
 
-        Controls.Add(panel);
+        _btnMirrorToggle = CreateControlButton("Start");
+        _btnMirrorToggle.Click += (_, _) =>
+        {
+            if (TryGetSelectedDeviceForAction(out var deviceId))
+            {
+                if (_mirrorRunning)
+                {
+                    MirrorStopRequested?.Invoke(this, deviceId);
+                }
+                else
+                {
+                    MirrorStartRequested?.Invoke(this, deviceId);
+                }
+            }
+        };
+
+        _btnMirrorReconnect = CreateControlButton("Reconnect");
+        _btnMirrorReconnect.Click += (_, _) =>
+        {
+            if (TryGetSelectedDeviceForAction(out var deviceId))
+            {
+                MirrorReconnectRequested?.Invoke(this, deviceId);
+            }
+        };
+
+        _btnMirrorRotate = CreateControlButton("Rotate");
+        _btnMirrorRotate.Click += (_, _) =>
+        {
+            if (TryGetSelectedDeviceForAction(out var deviceId))
+            {
+                MirrorRotateRequested?.Invoke(this, deviceId);
+            }
+        };
+
+        _btnMirrorScreenshot = CreateControlButton("Shot");
+        _btnMirrorScreenshot.Click += (_, _) =>
+        {
+            if (TryGetSelectedDeviceForAction(out var deviceId))
+            {
+                MirrorScreenshotRequested?.Invoke(this, deviceId);
+            }
+        };
+
+        _btnMirrorPopout = CreateControlButton("Popout");
+        _btnMirrorPopout.Click += (_, _) =>
+        {
+            if (TryGetSelectedDeviceForAction(out var deviceId))
+            {
+                MirrorPopoutRequested?.Invoke(this, deviceId);
+            }
+        };
+
+        var buttonBar = new TableLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            ColumnCount = 2,
+            RowCount = 3,
+            Height = 102,
+            Margin = new Padding(0)
+        };
+        buttonBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        buttonBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        buttonBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        buttonBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        buttonBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+
+        buttonBar.Controls.Add(_btnMirrorToggle, 0, 0);
+        buttonBar.Controls.Add(_btnMirrorReconnect, 1, 0);
+        buttonBar.Controls.Add(_btnMirrorRotate, 0, 1);
+        buttonBar.Controls.Add(_btnMirrorScreenshot, 1, 1);
+        buttonBar.Controls.Add(_btnMirrorPopout, 0, 2);
+        buttonBar.SetColumnSpan(_btnMirrorPopout, 2);
+
+        var container = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 5
+        };
+        container.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        container.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        container.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        container.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        container.RowStyles.Add(new RowStyle(SizeType.Absolute, 102));
+
+        container.Controls.Add(_cmbDevices, 0, 0);
+        container.Controls.Add(_btnRefreshAdb, 0, 1);
+        container.Controls.Add(_mirrorHostPanel, 0, 2);
+        container.Controls.Add(_lblMirrorStatus, 0, 3);
+        container.Controls.Add(buttonBar, 0, 4);
+
+        Controls.Add(container);
         RefreshList();
+        UpdateMirrorUiState();
+        Resize += (_, _) => UpdateMirrorHostBounds();
     }
 
     public void AddOrUpdateDevice(DeviceInfo info, int logCount)
     {
-        var id = info.DeviceId ?? "";
+        var id = info.DeviceId ?? string.Empty;
         if (!_devices.ContainsKey(id))
         {
             _devices[id] = new DeviceRecord { Info = info, LogCount = logCount };
@@ -171,6 +283,7 @@ public class DevicePanel : UserControl
                 record.IsAdbOnly = false;
             }
         }
+
         RefreshList();
     }
 
@@ -182,20 +295,23 @@ public class DevicePanel : UserControl
             RefreshList();
             return false;
         }
-        if (!_devices.ContainsKey(serial))
+
+        if (_devices.ContainsKey(serial))
         {
-            var info = new DeviceInfo
-            {
-                DeviceId = serial,
-                DeviceModel = model,
-                AdbSerial = serial,
-                IsConnected = false
-            };
-            _devices[serial] = new DeviceRecord { Info = info, LogCount = 0, IsAdbOnly = true };
-            RefreshList();
-            return true;
+            return false;
         }
-        return false;
+
+        var info = new DeviceInfo
+        {
+            DeviceId = serial,
+            DeviceModel = model,
+            AdbSerial = serial,
+            IsConnected = false
+        };
+
+        _devices[serial] = new DeviceRecord { Info = info, LogCount = 0, IsAdbOnly = true };
+        RefreshList();
+        return true;
     }
 
     public void RemoveMissingAdbDevices(HashSet<string> currentAdbSerials)
@@ -204,9 +320,16 @@ public class DevicePanel : UserControl
         foreach (var kvp in toRemove)
         {
             _devices.Remove(kvp.Key);
-            if (_selectedDeviceId == kvp.Key) _selectedDeviceId = null;
+            if (_selectedDeviceId == kvp.Key)
+            {
+                _selectedDeviceId = null;
+            }
         }
-        if (toRemove.Count > 0) RefreshList();
+
+        if (toRemove.Count > 0)
+        {
+            RefreshList();
+        }
     }
 
     public void MergeTcpDevice(string adbSerial, DeviceInfo tcpInfo, int logCount)
@@ -217,7 +340,7 @@ public class DevicePanel : UserControl
             existing.LogCount = logCount;
             existing.IsAdbOnly = false;
             _devices.Remove(adbSerial);
-            _devices[tcpInfo.DeviceId ?? ""] = existing;
+            _devices[tcpInfo.DeviceId ?? string.Empty] = existing;
             RefreshList();
         }
     }
@@ -236,7 +359,11 @@ public class DevicePanel : UserControl
         if (_devices.TryGetValue(deviceId, out var record))
         {
             record.Info.IsConnected = connected;
-            if (connected) record.IsAdbOnly = false;
+            if (connected)
+            {
+                record.IsAdbOnly = false;
+            }
+
             RefreshList();
         }
     }
@@ -244,45 +371,71 @@ public class DevicePanel : UserControl
     public void RemoveDevice(string deviceId)
     {
         _devices.Remove(deviceId);
-        if (_selectedDeviceId == deviceId) _selectedDeviceId = null;
-        RefreshList();
-    }
+        if (_selectedDeviceId == deviceId)
+        {
+            _selectedDeviceId = null;
+        }
 
-    public void ClearAll()
-    {
-        _devices.Clear();
-        _selectedDeviceId = null;
         RefreshList();
     }
 
     public string? GetAdbSerialForKey(string deviceId)
     {
-        if (_devices.TryGetValue(deviceId, out var record))
-            return record.Info.AdbSerial;
-        return null;
+        return _devices.TryGetValue(deviceId, out var record) ? record.Info.AdbSerial : null;
     }
 
-    private void SelectDevice(string? deviceId)
+    public void SetMirrorStatus(string text, bool hostVisible, bool isRunning, bool isReady)
     {
-        _selectedDeviceId = deviceId;
-        SyncSelectedItem();
-        UpdateDeviceMenuState();
-        DeviceSelected?.Invoke(this, deviceId);
+        _mirrorStatusText = text;
+        _mirrorHostVisible = hostVisible;
+        _mirrorRunning = isRunning;
+        _mirrorReady = isReady;
+        UpdateMirrorUiState();
+    }
+
+    public void ClearMirrorHost()
+    {
+        _mirrorHostVisible = false;
+        _mirrorReady = false;
+        UpdateMirrorUiState();
+    }
+
+    public void SyncMirrorBounds()
+    {
+        UpdateMirrorHostBounds();
+    }
+
+    private Button CreateControlButton(string text)
+    {
+        return new Button
+        {
+            Text = text,
+            Dock = DockStyle.Fill,
+            Height = 28,
+            Margin = new Padding(0, 0, 6, 6),
+            FlatStyle = FlatStyle.Flat,
+            Font = new Font("Consolas", 8f)
+        };
+    }
+
+    private bool TryGetSelectedDeviceForAction(out string deviceId)
+    {
+        deviceId = _selectedDeviceId ?? string.Empty;
+        return !string.IsNullOrEmpty(deviceId);
     }
 
     private void RefreshList()
     {
         InitializeComponents();
+
         _cmbDevices.BeginUpdate();
         _cmbDevices.SelectedIndexChanged -= OnDeviceSelected;
         _cmbDevices.Items.Clear();
-        _cmbDevices.Items.Add(new DeviceSelectorItem(null, "\u25CF All"));
+        _cmbDevices.Items.Add(new DeviceSelectorItem(null, "● All"));
 
-        foreach (var kvp in _devices)
+        foreach (var kvp in _devices.OrderBy(static pair => pair.Value.Info.DisplayName, StringComparer.OrdinalIgnoreCase))
         {
-            var id = kvp.Key;
-            var record = kvp.Value;
-            _cmbDevices.Items.Add(new DeviceSelectorItem(id, BuildDeviceDisplayText(record)));
+            _cmbDevices.Items.Add(new DeviceSelectorItem(kvp.Key, BuildDeviceDisplayText(kvp.Value)));
         }
 
         if (_selectedDeviceId != null && !_devices.ContainsKey(_selectedDeviceId))
@@ -293,29 +446,34 @@ public class DevicePanel : UserControl
         SyncSelectedItem();
         _cmbDevices.SelectedIndexChanged += OnDeviceSelected;
         _cmbDevices.EndUpdate();
-        UpdateDeviceMenuState();
+        UpdateMirrorUiState();
     }
 
     private string BuildDeviceDisplayText(DeviceRecord record)
     {
-        var status = record.IsAdbOnly || !record.Info.IsConnected ? "\u25CB" : "\u25CF";
-        var qa = record.Info.IsQa ? " [QA]" : "";
-        var adb = record.IsAdbOnly ? " [ADB]" : "";
-        return $"{status} {record.Info.DisplayName}{qa}{adb} ({record.LogCount} logs)";
+        var status = record.IsAdbOnly || !record.Info.IsConnected ? "○" : "●";
+        var qa = record.Info.IsQa ? " [QA]" : string.Empty;
+        var adb = record.Info.AdbSerial != null ? " [ADB]" : string.Empty;
+        return $"{status} {record.Info.DisplayName}{qa}{adb} ({record.LogCount})";
     }
 
     private void OnDeviceSelected(object? sender, EventArgs e)
     {
-        if (_cmbDevices.SelectedItem is DeviceSelectorItem item)
+        if (_cmbDevices.SelectedItem is not DeviceSelectorItem item)
         {
-            if (string.Equals(_selectedDeviceId ?? string.Empty, item.DeviceId ?? string.Empty, StringComparison.Ordinal))
-            {
-                UpdateDeviceMenuState();
-                return;
-            }
-
-            SelectDevice(item.DeviceId);
+            return;
         }
+
+        if (string.Equals(_selectedDeviceId ?? string.Empty, item.DeviceId ?? string.Empty, StringComparison.Ordinal))
+        {
+            UpdateMirrorUiState();
+            return;
+        }
+
+        _selectedDeviceId = item.DeviceId;
+        SyncSelectedItem();
+        UpdateMirrorUiState();
+        DeviceSelected?.Invoke(this, item.DeviceId);
     }
 
     private void SyncSelectedItem()
@@ -331,31 +489,42 @@ public class DevicePanel : UserControl
         }
     }
 
-    private void UpdateDeviceMenuState()
+    private void UpdateMirrorUiState()
     {
-        DeviceRecord? record = null;
-        var hasDevice = _selectedDeviceId != null && _devices.TryGetValue(_selectedDeviceId, out record);
-        _btnDeviceActions.Enabled = hasDevice;
-        if (_deviceMenu.Items.Count < 3)
+        if (_lblMirrorPlaceholder == null)
         {
             return;
         }
 
-        _deviceMenu.Items[0].Enabled = hasDevice && record != null && !record.IsAdbOnly;
-        _deviceMenu.Items[1].Enabled = hasDevice;
-        _deviceMenu.Items[2].Enabled = hasDevice && record != null && (!record.IsAdbOnly || record.Info.AdbSerial != null);
+        var hasSpecificDevice = !string.IsNullOrEmpty(_selectedDeviceId);
+        DeviceRecord? selectedRecord = null;
+        var hasSelectedRecord = hasSpecificDevice && _devices.TryGetValue(_selectedDeviceId!, out selectedRecord);
+        var hasAdb = hasSelectedRecord && !string.IsNullOrEmpty(selectedRecord?.Info.AdbSerial);
+
+        _lblMirrorPlaceholder.Text = _mirrorStatusText;
+        _lblMirrorPlaceholder.Visible = !_mirrorHostVisible;
+        _lblMirrorPlaceholder.BringToFront();
+        _lblMirrorStatus.Text = _mirrorStatusText;
+
+        _btnMirrorToggle.Enabled = hasAdb;
+        _btnMirrorReconnect.Enabled = hasAdb && _mirrorRunning;
+        _btnMirrorRotate.Enabled = hasAdb && _mirrorRunning;
+        _btnMirrorScreenshot.Enabled = hasAdb;
+        _btnMirrorPopout.Enabled = hasAdb;
+        _btnMirrorToggle.Text = _mirrorRunning ? "Stop" : "Start";
     }
 
-    private void ShowDeviceMenu()
+    private void UpdateMirrorHostBounds()
     {
-        UpdateDeviceMenuState();
-        if (_btnDeviceActions.Enabled)
+        if (_mirrorHostPanel?.IsHandleCreated != true)
         {
-            _deviceMenu.Show(_btnDeviceActions, new Point(0, _btnDeviceActions.Height));
+            return;
         }
+
+        _mirrorHostPanel.Invalidate();
     }
 
-    private class DeviceRecord
+    private sealed class DeviceRecord
     {
         public DeviceInfo Info { get; set; } = new();
         public int LogCount { get; set; }

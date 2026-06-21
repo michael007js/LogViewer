@@ -7,6 +7,7 @@ public class SettingsDialog : Form
 {
     private readonly AppSettings _settings;
     private readonly AdbHelper _adbHelper;
+    private readonly ScrcpyManager _scrcpyManager = new();
 
     private NumericUpDown _nudPort = null!;
     private NumericUpDown _nudMaxPerDevice = null!;
@@ -21,9 +22,14 @@ public class SettingsDialog : Form
     private NumericUpDown _nudAdbScanInterval = null!;
     private TextBox _txtLogcatFilter = null!;
     private TextBox _txtAdbPath = null!;
+    private TextBox _txtScrcpyPath = null!;
     private Button _btnBrowseAdb = null!;
     private Button _btnAutoDetectAdb = null!;
+    private Button _btnBrowseScrcpy = null!;
+    private Button _btnDeployScrcpy = null!;
     private Label _lblAdbStatus = null!;
+    private Label _lblScrcpyStatus = null!;
+    private CheckBox _chkAutoStartScrcpy = null!;
     private Button _btnOk = null!;
     private Button _btnCancel = null!;
 
@@ -31,6 +37,10 @@ public class SettingsDialog : Form
     {
         _settings = settings;
         _adbHelper = adbHelper;
+        if (!string.IsNullOrEmpty(_settings.ScrcpyPath))
+        {
+            _scrcpyManager.SetManualPath(_settings.ScrcpyPath);
+        }
         InitializeComponents();
         LoadValues();
     }
@@ -38,7 +48,7 @@ public class SettingsDialog : Form
     private void InitializeComponents()
     {
         Text = "Settings";
-        Size = new Size(460, 600);
+        Size = new Size(500, 700);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -49,7 +59,7 @@ public class SettingsDialog : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
-            RowCount = 15,
+            RowCount = 20,
             Padding = new Padding(15),
             AutoSize = true
         };
@@ -77,6 +87,24 @@ public class SettingsDialog : Form
         panel.Controls.Add(_btnAutoDetectAdb, 2, row);
         row++;
 
+        var scrcpyLabel = new Label { Text = "scrcpy Override:", AutoSize = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
+        _txtScrcpyPath = new TextBox { Text = _settings.ScrcpyPath, Dock = DockStyle.Fill };
+        _btnBrowseScrcpy = new Button { Text = "Browse...", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat };
+        _btnBrowseScrcpy.Click += OnBrowseScrcpy;
+        _btnDeployScrcpy = new Button { Text = "Deploy / Repair", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat };
+        _btnDeployScrcpy.Click += OnDeployScrcpy;
+
+        panel.Controls.Add(scrcpyLabel, 0, row);
+        panel.Controls.Add(_txtScrcpyPath, 1, row);
+        panel.Controls.Add(_btnBrowseScrcpy, 2, row);
+        row++;
+
+        _lblScrcpyStatus = new Label { Text = "", Dock = DockStyle.Fill, AutoSize = true };
+        panel.Controls.Add(_lblScrcpyStatus, 0, row);
+        panel.SetColumnSpan(_lblScrcpyStatus, 2);
+        panel.Controls.Add(_btnDeployScrcpy, 2, row);
+        row++;
+
         row++;
 
         AddRow(panel, row++, "Server Port:", _nudPort = CreateNumeric(1024, 65535, _settings.ServerPort));
@@ -94,6 +122,11 @@ public class SettingsDialog : Form
         _chkAutoLogcat = new CheckBox { Text = "Auto start Logcat on device connect", Checked = _settings.AutoStartLogcat };
         panel.Controls.Add(_chkAutoLogcat, 0, row);
         panel.SetColumnSpan(_chkAutoLogcat, 3);
+        row++;
+
+        _chkAutoStartScrcpy = new CheckBox { Text = "Auto start scrcpy when selecting a device", Checked = _settings.AutoStartScrcpyForSelectedDevice };
+        panel.Controls.Add(_chkAutoStartScrcpy, 0, row);
+        panel.SetColumnSpan(_chkAutoStartScrcpy, 3);
         row++;
 
         _chkAutoFormatJson = new CheckBox { Text = "Auto format JSON with folding", Checked = _settings.AutoFormatJson };
@@ -152,6 +185,7 @@ public class SettingsDialog : Form
         CancelButton = _btnCancel;
 
         ValidateAdbPath();
+        ValidateScrcpyPath();
     }
 
     private void AddRow(TableLayoutPanel panel, int row, string label, Control control)
@@ -214,6 +248,63 @@ public class SettingsDialog : Form
         }
     }
 
+    private void OnBrowseScrcpy(object? sender, EventArgs e)
+    {
+        using var dlg = new OpenFileDialog
+        {
+            Filter = "scrcpy executable|scrcpy.exe|All executables|*.exe|All files|*.*",
+            Title = "Select scrcpy executable",
+            CheckFileExists = true
+        };
+        if (!string.IsNullOrEmpty(_txtScrcpyPath.Text) && File.Exists(_txtScrcpyPath.Text))
+        {
+            try { dlg.InitialDirectory = Path.GetDirectoryName(_txtScrcpyPath.Text); } catch { }
+        }
+        if (dlg.ShowDialog() == DialogResult.OK)
+        {
+            _txtScrcpyPath.Text = dlg.FileName;
+            _scrcpyManager.SetManualPath(dlg.FileName);
+            ValidateScrcpyPath();
+        }
+    }
+
+    private async void OnDeployScrcpy(object? sender, EventArgs e)
+    {
+        _btnDeployScrcpy.Enabled = false;
+        _lblScrcpyStatus.Text = "正在部署 scrcpy...";
+        _lblScrcpyStatus.ForeColor = Color.DarkOrange;
+
+        try
+        {
+            var progress = new Progress<string>(message =>
+            {
+                _lblScrcpyStatus.Text = message;
+                _lblScrcpyStatus.ForeColor = Color.DarkOrange;
+            });
+
+            var path = await _scrcpyManager.EnsureScrcpyAvailableAsync(forceDeploy: true, progress, CancellationToken.None);
+            if (string.IsNullOrEmpty(path))
+            {
+                _lblScrcpyStatus.Text = "自动部署 scrcpy 失败";
+                _lblScrcpyStatus.ForeColor = Color.Red;
+                return;
+            }
+
+            _txtScrcpyPath.Text = path;
+            _scrcpyManager.SetManualPath(path);
+            ValidateScrcpyPath();
+        }
+        catch (Exception ex)
+        {
+            _lblScrcpyStatus.Text = "部署失败: " + ex.Message;
+            _lblScrcpyStatus.ForeColor = Color.Red;
+        }
+        finally
+        {
+            _btnDeployScrcpy.Enabled = true;
+        }
+    }
+
     private void ValidateAdbPath()
     {
         var path = _txtAdbPath.Text.Trim();
@@ -250,6 +341,42 @@ public class SettingsDialog : Form
         }
     }
 
+    private void ValidateScrcpyPath()
+    {
+        var path = _txtScrcpyPath.Text.Trim();
+        if (string.IsNullOrEmpty(path))
+        {
+            var autoFound = _scrcpyManager.GetScrcpyPath();
+            if (autoFound != null)
+            {
+                _lblScrcpyStatus.Text = "已就绪: " + autoFound;
+                _lblScrcpyStatus.ForeColor = Color.Green;
+            }
+            else
+            {
+                _lblScrcpyStatus.Text = "首次启动会自动部署 scrcpy，也可点 Deploy / Repair 立即修复";
+                _lblScrcpyStatus.ForeColor = Color.DarkOrange;
+            }
+            return;
+        }
+
+        if (_scrcpyManager.ValidateScrcpy(path))
+        {
+            _lblScrcpyStatus.Text = "scrcpy 可用";
+            _lblScrcpyStatus.ForeColor = Color.Green;
+        }
+        else if (!File.Exists(path))
+        {
+            _lblScrcpyStatus.Text = "文件不存在";
+            _lblScrcpyStatus.ForeColor = Color.Red;
+        }
+        else
+        {
+            _lblScrcpyStatus.Text = "文件存在，但不是可用的 scrcpy";
+            _lblScrcpyStatus.ForeColor = Color.Red;
+        }
+    }
+
     private void LoadValues()
     {
         _nudPort.Value = _settings.ServerPort;
@@ -265,6 +392,8 @@ public class SettingsDialog : Form
         _nudAdbScanInterval.Value = _settings.AdbScanIntervalMs;
         _txtLogcatFilter.Text = _settings.LogcatFilter;
         _txtAdbPath.Text = _settings.AdbPath;
+        _txtScrcpyPath.Text = _settings.ScrcpyPath;
+        _chkAutoStartScrcpy.Checked = _settings.AutoStartScrcpyForSelectedDevice;
     }
 
     private void OnOkClick(object? sender, EventArgs e)
@@ -282,6 +411,8 @@ public class SettingsDialog : Form
         _settings.AdbScanIntervalMs = (int)_nudAdbScanInterval.Value;
         _settings.LogcatFilter = _txtLogcatFilter.Text;
         _settings.AdbPath = _txtAdbPath.Text.Trim();
+        _settings.ScrcpyPath = _txtScrcpyPath.Text.Trim();
+        _settings.AutoStartScrcpyForSelectedDevice = _chkAutoStartScrcpy.Checked;
         _settings.Save();
         DialogResult = DialogResult.OK;
         Close();

@@ -50,15 +50,16 @@
 | `MainForm.SystemLogs.cs` | System Logs 的 snapshot/filter/pause + VirtualMode ListView 运行逻辑 |
 | `JsonDetailForm.cs` | 双击弹出 JSON 详情窗口（左右 4:6 分栏 + Tree/Raw 切换） |
 | `JsonTreeView.cs` | JSON 折叠 + 语法高亮 TreeView（OwnerDrawText 自绘） |
-| `DevicePanel.cs` | 设备列表 + 切换面板（空状态提示） |
+| `DevicePanel.cs` | 左侧 ADB 设备操控面板（设备选择 + scrcpy 宿主 + 控制条） |
 | `SystemLogSnapshot.cs` | systemlogs 当前 scope/filter 快照，支持稳定 viewIndex/key |
 | `BufferedListView.cs` | ListView 双缓冲/顶部锚点恢复辅助，供 networklogs/systemlogs 共用 |
-| `SettingsDialog.cs` | 设置对话框（ADB 路径 Browse/AutoDetect） |
+| `SettingsDialog.cs` | 设置对话框（ADB 路径检测 + scrcpy 自动部署/高级覆盖） |
 
 ### 工具类 (Utils/)
 | 文件 | 说明 |
 |------|------|
 | `AdbHelper.cs` | ADB 搜索（5 路径策略）/ 验证 / 设备列表 / Reverse |
+| `ScrcpyManager.cs` | scrcpy 搜索/启动/内嵌宿主/窗口生命周期管理 |
 | `JsonFormatter.cs` | JSON 格式化 + JSONPath 查询 |
 | `SystemLogSessionStore.cs` | systemlogs 会话存储，负责 SequenceId、scope 索引、jsonl 追加写入 |
 
@@ -208,6 +209,9 @@ rtk git diff                                                     # Git 差异
 | LogEntry.content 截断 | Android 端超过 50KB 截断并追加 `[truncated, original: XXX KB]` |
 | 非模态子窗口 ContextMenuStrip 吃掉主窗口右键消息 | JsonDetailForm.Show() 打开后，ToolStripManager.ModalMenuFilter 拦截 WM_CONTEXTMENU，导致主窗口其他控件右键菜单弹不出。修复：给需要右键的控件设置固定的 ContextMenuStrip，不用 MouseUp+new ContextMenuStrip |
 | 新建 ADB 设备须自动 adb reverse | 拔出重插后，ADB 扫描检测到设备但 adb reverse 未执行 → Android 端无法连 TCP → 面板不更新。ApplyAdbDevices 对新建设备后台 Task.Run 执行 reverse |
+| 左侧设备区已升级为 scrcpy 宿主 | DevicePanel 不再只是设备下拉框；设备选择与日志 scope 共用一个选择器，选择 `All` 时左侧只显示占位提示，不启动镜像 |
+| scrcpy 自动部署优先 | 保持项目零 NuGet 依赖；启动时自动从官方 GitHub Releases 部署到 LocalAppData，本地路径输入只作为高级覆盖/修复兜底 |
+| 切换设备前先停旧 scrcpy | 内嵌镜像与当前设备强绑定；切换设备必须先停旧实例，再起新实例，避免窗口错绑和孤儿进程 |
 
 ---
 

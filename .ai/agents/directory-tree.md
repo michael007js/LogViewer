@@ -42,7 +42,7 @@ LogViewer/                            ← 项目根目录
 │   ├── LogEntry.cs                         ← 网络日志13字段模型+预览属性（Url/Method/Code等）
 │   ├── SystemLogEntry.cs                   ← 系统日志模型+Level着色+SequenceId/SourceDeviceId
 │   ├── DeviceInfo.cs                       ← 设备注册信息模型（deviceId/deviceModel/androidVersion等）
-│   ├── AppSettings.cs                      ← 设置模型+Properties.Settings持久化
+│   ├── AppSettings.cs                      ← 设置模型+Properties.Settings持久化（ADB/scrcpy/左栏宽度）
 │   └── RingBuffer.cs                       ← O(1)高性能环形缓冲区（非线程安全，UI线程专用）
 │
 ├── Network/                                ← 通信层（3 .cs，零UI依赖）
@@ -51,7 +51,7 @@ LogViewer/                            ← 项目根目录
 │   └── LogcatReader.cs                     ← adb logcat进程流式读取+正则解析threadtime格式
 │
 ├── UI/                                     ← 界面层（12 .cs）
-│   ├── MainForm.cs                         ← 主窗口手写逻辑（事件/网络日志/设备/设置）
+│   ├── MainForm.cs                         ← 主窗口手写逻辑（事件/网络日志/设备/scrcpy宿主/设置）
 │   ├── MainForm.SystemLogs.cs              ← System Logs 快照/过滤/Pause/Resume 运行时逻辑
 │   ├── MainForm.Designer.cs                ← 主窗口设计器控件树（支持设计器拖动）
 │   ├── BufferedListView.cs                 ← ListView 双缓冲/精确顶部索引/滚动恢复辅助
@@ -60,13 +60,14 @@ LogViewer/                            ← 项目根目录
 │   ├── JsonDetailForm.Designer.cs          ← JSON详情窗口设计器控件树（左右分栏+工具栏）
 │   ├── JsonTreeView.cs                     ← JSON折叠+语法高亮TreeView（OwnerDrawText自绘+渲染/交互）
 │   ├── JsonTreeViewLoader.cs               ← JSON→TreeNode构建扩展方法（LoadJson/LoadPlainText/Search/Collapse）
-│   ├── DevicePanel.cs                      ← 设备列表+切换面板（空状态提示）
+│   ├── DevicePanel.cs                      ← 左侧ADB设备操控面板（设备选择+scrcpy宿主+控制条）
 │   ├── SystemLogSnapshot.cs                ← System Logs 当前 scope/filter 只读快照
-│   └── SettingsDialog.cs                   ← 设置对话框（ADB路径Browse/AutoDetect）
+│   └── SettingsDialog.cs                   ← 设置对话框（ADB路径检测 + scrcpy自动部署/高级覆盖）
 │
-├── Utils/                                  ← 工具类（3 .cs）
+├── Utils/                                  ← 工具类（4 .cs）
 │   ├── AdbHelper.cs                        ← ADB搜索/验证/设备列表/Reverse
 │   ├── JsonFormatter.cs                    ← JSON格式化+JSONPath
+│   ├── ScrcpyManager.cs                    ← scrcpy搜索/启动/内嵌宿主/窗口生命周期管理
 │   └── SystemLogSessionStore.cs            ← System Logs 会话级 jsonl 追加存储+索引+热缓存
 │
 ├── Properties/                             ← 设置资源
