@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns='http://schemas.microsoft.com/developer/msbuild/2003'>
+  <PropertyGroup>
+    <ServerPort>9527</ServerPort>
+    <MaxLogEntriesPerDevice>5000</MaxLogEntriesPerDevice>
+    <MaxLogEntriesAll>10000</MaxLogEntriesAll>
+    <MaxSystemLogEntries>10000</MaxSystemLogEntries>
+    <AndroidQueueSize>1000</AndroidQueueSize>
+    <MaxBodySizeKb>500</MaxBodySizeKb>
+    <AutoAdbReverse>True</AutoAdbReverse>
+    <AutoStartLogcat>True</AutoStartLogcat>
+    <AutoFormatJson>True</AutoFormatJson>
+    <FontSize>11</FontSize>
+    <AdbScanIntervalMs>2000</AdbScanIntervalMs>
+    <LogcatFilter></LogcatFilter>
+    <AdbPath></AdbPath>
+  </PropertyGroup>
+</Project>

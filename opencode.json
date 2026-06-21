@@ -1,0 +1,20 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": {
+      "*": "allow"
+    }
+  },
+  "mcp": {
+    "edge": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@latest", "--browser", "msedge"],
+      "enabled": true
+    },
+    "rider": {
+      "type": "remote",
+      "url": "http://127.0.0.1:64342/sse",
+      "enabled": true
+    }
+  }
+}
