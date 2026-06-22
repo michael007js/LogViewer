@@ -66,15 +66,6 @@ namespace LogViewer.Properties {
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("")]
         public string LogcatFilter { get { return ((string)(this["LogcatFilter"])); } set { this["LogcatFilter"] = value; } }
-    [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("")]
-        public string AdbPath { get { return ((string)(this["AdbPath"])); } set { this["AdbPath"] = value; } }
-
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("")]
-        public string ScrcpyPath { get { return ((string)(this["ScrcpyPath"])); } set { this["ScrcpyPath"] = value; } }
 
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]

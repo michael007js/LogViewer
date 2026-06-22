@@ -32,6 +32,8 @@ public partial class MainForm : Form
     private bool _scrcpyPreparing;
     private string? _scrcpyDeployStatus;
     private string? _scrcpyDeployError;
+    private bool _adbValidated;
+    private bool _scrcpyValidated;
 
     private string? _currentDeviceId;
     private bool _showingSystemLog;
@@ -122,16 +124,6 @@ public partial class MainForm : Form
         WireComponentEvents();
         ApplySettings();
 
-        if (!string.IsNullOrEmpty(_settings.AdbPath))
-        {
-            _adbHelper.SetManualPath(_settings.AdbPath);
-        }
-
-        if (!string.IsNullOrEmpty(_settings.ScrcpyPath))
-        {
-            _scrcpyManager.SetManualPath(_settings.ScrcpyPath);
-        }
-
         if (_adbHelper.IsAdbAvailable())
         {
             _adbHelper.EnsureServerStarted();
@@ -139,18 +131,7 @@ public partial class MainForm : Form
 
         if (!_adbHelper.IsAdbAvailable())
         {
-            this.BeginInvoke(new Action(() =>
-            {
-                var result = MessageBox.Show(
-                    "ADB was not found automatically.\n\nWould you like to set the ADB path manually?",
-                    "ADB Not Found",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question);
-                if (result == DialogResult.Yes)
-                {
-                    OnSettingsClick(this, EventArgs.Empty);
-                }
-            }));
+            Shown += OnMissingAdbPromptShown;
         }
 
         StartAdbScanLoop();
@@ -250,6 +231,21 @@ public partial class MainForm : Form
         Resize += (_, _) => SyncMirrorHostBounds();
     }
 
+    private void OnMissingAdbPromptShown(object? sender, EventArgs e)
+    {
+        Shown -= OnMissingAdbPromptShown;
+
+        var result = MessageBox.Show(
+            "ADB was not found in the application directory.\n\nWould you like to set the ADB path manually?",
+            "ADB Not Found",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+        if (result == DialogResult.Yes)
+        {
+            OnSettingsClick(this, EventArgs.Empty);
+        }
+    }
+
     private static bool IsDesignTimeMode()
     {
         if (LicenseManager.UsageMode == LicenseUsageMode.Designtime)
@@ -271,12 +267,16 @@ public partial class MainForm : Form
     {
         var adbPath = _adbHelper.GetAdbPath();
         var scrcpyPath = _scrcpyManager.GetScrcpyPath();
-        var adbText = adbPath != null ? $"ADB: {Path.GetFileName(adbPath)}" : "ADB: Not found";
+        var adbText = adbPath != null
+            ? _adbValidated ? $"ADB: {Path.GetFileName(adbPath)}" : "ADB: Checking..."
+            : "ADB: Not found";
         var scrcpyText = _scrcpyPreparing
             ? "scrcpy: Deploying..."
-            : scrcpyPath != null
+            : scrcpyPath != null && _scrcpyValidated
                 ? $"scrcpy: {Path.GetFileName(scrcpyPath)}"
-                : !string.IsNullOrEmpty(_scrcpyDeployError)
+                : scrcpyPath != null
+                    ? "scrcpy: Checking..."
+                    : !string.IsNullOrEmpty(_scrcpyDeployError)
                     ? "scrcpy: Deploy failed"
                     : "scrcpy: Not ready";
         _lblAdbStatus.Text = $"{adbText} | {scrcpyText}";
@@ -287,8 +287,31 @@ public partial class MainForm : Form
 
     private async Task OnMainFormShownAsync()
     {
+        _ = ValidateBundledToolsAsync();
         await PrimeAdbDeviceListAsync();
         await EnsureScrcpyReadyAsync(forceDeploy: false, reportToMirrorPanel: false);
+    }
+
+    private async Task ValidateBundledToolsAsync()
+    {
+        var adbPath = _adbHelper.GetAdbPath();
+        var scrcpyPath = _scrcpyManager.GetScrcpyPath();
+
+        var adbValid = !string.IsNullOrEmpty(adbPath) && await Task.Run(() => _adbHelper.ValidateAdb(adbPath));
+        var scrcpyValid = !string.IsNullOrEmpty(scrcpyPath) && await Task.Run(() => _scrcpyManager.ValidateScrcpy(scrcpyPath));
+
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        BeginInvoke(new Action(() =>
+        {
+            _adbValidated = adbValid;
+            _scrcpyValidated = scrcpyValid;
+            UpdateAdbStatus();
+            RefreshMirrorPanelState();
+        }));
     }
 
     private void ApplySettings()
@@ -1258,12 +1281,6 @@ public partial class MainForm : Form
             _settings = AppSettings.Load();
             ApplySettings();
 
-            if (!string.IsNullOrEmpty(_settings.AdbPath))
-            {
-                _adbHelper.SetManualPath(_settings.AdbPath);
-            }
-
-            _scrcpyManager.SetManualPath(_settings.ScrcpyPath);
             _scrcpyDeployError = null;
             _scrcpyDeployStatus = null;
 
@@ -1386,11 +1403,13 @@ public partial class MainForm : Form
         }
 
         var scrcpyPath = _scrcpyManager.GetScrcpyPath();
-        if (string.IsNullOrEmpty(scrcpyPath))
+        if (string.IsNullOrEmpty(scrcpyPath) || !_scrcpyValidated)
         {
             var message = !string.IsNullOrEmpty(_scrcpyDeployError)
                 ? $"\u81EA\u52A8\u90E8\u7F72 scrcpy \u5931\u8D25\uFF1A{_scrcpyDeployError}"
-                : "\u672A\u5B8C\u6210 scrcpy \u90E8\u7F72\uFF0C\u7A0D\u540E\u4F1A\u81EA\u52A8\u51C6\u5907";
+                : string.IsNullOrEmpty(scrcpyPath)
+                    ? "\u672A\u5B8C\u6210 scrcpy \u90E8\u7F72\uFF0C\u7A0D\u540E\u4F1A\u81EA\u52A8\u51C6\u5907"
+                    : "scrcpy 校验中...";
             _devicePanel.SetMirrorStatus(message, hostVisible: false, isRunning: false, isReady: false);
             return;
         }
@@ -1433,13 +1452,6 @@ public partial class MainForm : Form
             var scrcpyPath = await _scrcpyManager
                 .EnsureScrcpyAvailableAsync(forceDeploy, progress, CancellationToken.None)
                 .ConfigureAwait(true);
-
-            if (!string.IsNullOrEmpty(scrcpyPath) &&
-                !string.Equals(_settings.ScrcpyPath, scrcpyPath, StringComparison.OrdinalIgnoreCase))
-            {
-                _settings.ScrcpyPath = scrcpyPath;
-                _settings.Save();
-            }
 
             if (!string.IsNullOrEmpty(scrcpyPath))
             {

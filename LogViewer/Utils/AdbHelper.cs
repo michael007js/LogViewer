@@ -13,39 +13,17 @@ public class AdbDevice
 public class AdbHelper
 {
     private string? _adbPath;
-    private string? _manualAdbPath;
-    private bool _autoSearchDone;
-
-    public void SetManualPath(string path)
-    {
-        _manualAdbPath = path;
-        _adbPath = null;
-        _autoSearchDone = false;
-    }
+    private static string BundledAdbPath => Path.Combine(AppContext.BaseDirectory, "adb.exe");
 
     public string? GetAdbPath()
     {
         if (_adbPath != null && File.Exists(_adbPath)) return _adbPath;
         if (_adbPath != null) _adbPath = null;
 
-        if (!string.IsNullOrEmpty(_manualAdbPath) && File.Exists(_manualAdbPath))
+        if (File.Exists(BundledAdbPath))
         {
-            if (ValidateAdb(_manualAdbPath))
-            {
-                _adbPath = _manualAdbPath;
-                return _adbPath;
-            }
-        }
-
-        if (!_autoSearchDone)
-        {
-            _autoSearchDone = true;
-            var found = AutoSearchAdb();
-            if (found != null)
-            {
-                _adbPath = found;
-                return _adbPath;
-            }
+            _adbPath = BundledAdbPath;
+            return _adbPath;
         }
 
         return null;
@@ -76,54 +54,7 @@ public class AdbHelper
 
     public List<string> GetSearchPaths()
     {
-        var pathList = new List<string>();
-
-        var envPath = Environment.GetEnvironmentVariable("PATH") ?? "";
-        foreach (var dir in envPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var candidate = Path.Combine(dir.Trim(), "adb.exe");
-            if (File.Exists(candidate)) pathList.Add(candidate);
-        }
-
-        pathList.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Android", "android-sdk", "platform-tools", "adb.exe"));
-        pathList.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Android", "android-sdk", "platform-tools", "adb.exe"));
-        pathList.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Android", "Sdk", "platform-tools", "adb.exe"));
-
-        try
-        {
-            using var regKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Android Studio");
-            if (regKey?.GetValue("SdkPath") is string sdkPath)
-                pathList.Add(Path.Combine(sdkPath, "platform-tools", "adb.exe"));
-        }
-        catch { }
-
-        try
-        {
-            using var regKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Android Studio");
-            if (regKey?.GetValue("SdkPath") is string sdkPath)
-                pathList.Add(Path.Combine(sdkPath, "platform-tools", "adb.exe"));
-        }
-        catch { }
-
-        foreach (var drive in Directory.GetLogicalDrives())
-        {
-            var sdkPath = Path.Combine(drive, "SDK", "platform-tools", "adb.exe");
-            if (File.Exists(sdkPath)) pathList.Add(sdkPath);
-        }
-
-        return pathList.Distinct().ToList();
-    }
-
-    private string? AutoSearchAdb()
-    {
-        var paths = GetSearchPaths();
-
-        foreach (var p in paths)
-        {
-            if (ValidateAdb(p)) return p;
-        }
-
-        return null;
+        return new List<string> { BundledAdbPath };
     }
 
     public List<AdbDevice> GetDevices()

@@ -29,7 +29,7 @@
 ## 3. 外部依赖
 
 **无第三方 NuGet 包**。项目完全依赖 .NET 8 内置库。  
-运行时接入 `scrcpy.exe` 作为外部工具，用于左侧 ADB 手机镜像与控制；首次启动可自动从官方 GitHub Releases 部署到 `%LocalAppData%\\LogViewer\\Tools\\scrcpy\\`，不通过 NuGet 分发。
+运行时接入 `adb.exe` 与 `scrcpy.exe` 作为外部工具，统一从程序目录读取并随项目输出复制，不通过 NuGet 分发。
 
 ## 4. 通信协议
 
@@ -133,8 +133,6 @@ Program.cs → ApplicationConfiguration.Initialize() → Application.Run(new Mai
 | Auto Format JSON | true | 日志详情默认折叠显示 JSON |
 | Font Size (pt) | 11 | 列表和详情字体大小 |
 | Logcat Filter | (空) | adb logcat 过滤表达式 |
-| ADB Path | (空) | 手动指定 adb.exe 路径 |
-| Scrcpy Path | (空) | scrcpy 已部署路径或高级覆盖路径 |
 | Auto Start Scrcpy For Selected Device | false | 选择具体设备时自动启动左侧镜像 |
 | Last Left Panel Width | 340 | 左侧设备操控区上次宽度 |
 

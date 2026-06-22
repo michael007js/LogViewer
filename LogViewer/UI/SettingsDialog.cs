@@ -6,8 +6,6 @@ namespace LogViewer.UI;
 public class SettingsDialog : Form
 {
     private readonly AppSettings _settings;
-    private readonly AdbHelper _adbHelper;
-    private readonly ScrcpyManager _scrcpyManager = new();
 
     private NumericUpDown _nudPort = null!;
     private NumericUpDown _nudMaxPerDevice = null!;
@@ -21,14 +19,6 @@ public class SettingsDialog : Form
     private NumericUpDown _nudFontSize = null!;
     private NumericUpDown _nudAdbScanInterval = null!;
     private TextBox _txtLogcatFilter = null!;
-    private TextBox _txtAdbPath = null!;
-    private TextBox _txtScrcpyPath = null!;
-    private Button _btnBrowseAdb = null!;
-    private Button _btnAutoDetectAdb = null!;
-    private Button _btnBrowseScrcpy = null!;
-    private Button _btnDeployScrcpy = null!;
-    private Label _lblAdbStatus = null!;
-    private Label _lblScrcpyStatus = null!;
     private CheckBox _chkAutoStartScrcpy = null!;
     private Button _btnOk = null!;
     private Button _btnCancel = null!;
@@ -36,11 +26,6 @@ public class SettingsDialog : Form
     public SettingsDialog(AppSettings settings, AdbHelper adbHelper)
     {
         _settings = settings;
-        _adbHelper = adbHelper;
-        if (!string.IsNullOrEmpty(_settings.ScrcpyPath))
-        {
-            _scrcpyManager.SetManualPath(_settings.ScrcpyPath);
-        }
         InitializeComponents();
         LoadValues();
     }
@@ -48,7 +33,7 @@ public class SettingsDialog : Form
     private void InitializeComponents()
     {
         Text = "Settings";
-        Size = new Size(500, 700);
+        Size = new Size(500, 560);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -59,7 +44,7 @@ public class SettingsDialog : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
-            RowCount = 20,
+            RowCount = 16,
             Padding = new Padding(15),
             AutoSize = true
         };
@@ -67,46 +52,7 @@ public class SettingsDialog : Form
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
 
-        int row = 0;
-
-        var adbLabel = new Label { Text = "ADB Path:", AutoSize = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
-        _txtAdbPath = new TextBox { Text = _settings.AdbPath, Dock = DockStyle.Fill };
-        _btnBrowseAdb = new Button { Text = "Browse...", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat };
-        _btnBrowseAdb.Click += OnBrowseAdb;
-        _btnAutoDetectAdb = new Button { Text = "Auto Detect", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat };
-        _btnAutoDetectAdb.Click += OnAutoDetectAdb;
-
-        panel.Controls.Add(adbLabel, 0, row);
-        panel.Controls.Add(_txtAdbPath, 1, row);
-        panel.Controls.Add(_btnBrowseAdb, 2, row);
-        row++;
-
-        _lblAdbStatus = new Label { Text = "", Dock = DockStyle.Fill, AutoSize = true };
-        panel.Controls.Add(_lblAdbStatus, 0, row);
-        panel.SetColumnSpan(_lblAdbStatus, 2);
-        panel.Controls.Add(_btnAutoDetectAdb, 2, row);
-        row++;
-
-        var scrcpyLabel = new Label { Text = "scrcpy Override:", AutoSize = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
-        _txtScrcpyPath = new TextBox { Text = _settings.ScrcpyPath, Dock = DockStyle.Fill };
-        _btnBrowseScrcpy = new Button { Text = "Browse...", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat };
-        _btnBrowseScrcpy.Click += OnBrowseScrcpy;
-        _btnDeployScrcpy = new Button { Text = "Deploy / Repair", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat };
-        _btnDeployScrcpy.Click += OnDeployScrcpy;
-
-        panel.Controls.Add(scrcpyLabel, 0, row);
-        panel.Controls.Add(_txtScrcpyPath, 1, row);
-        panel.Controls.Add(_btnBrowseScrcpy, 2, row);
-        row++;
-
-        _lblScrcpyStatus = new Label { Text = "", Dock = DockStyle.Fill, AutoSize = true };
-        panel.Controls.Add(_lblScrcpyStatus, 0, row);
-        panel.SetColumnSpan(_lblScrcpyStatus, 2);
-        panel.Controls.Add(_btnDeployScrcpy, 2, row);
-        row++;
-
-        row++;
-
+        var row = 0;
         AddRow(panel, row++, "Server Port:", _nudPort = CreateNumeric(1024, 65535, _settings.ServerPort));
         AddRow(panel, row++, "Max Logs Per Device:", _nudMaxPerDevice = CreateNumeric(100, 100000, _settings.MaxLogEntriesPerDevice));
         AddRow(panel, row++, "Max Logs All Devices:", _nudMaxAll = CreateNumeric(100, 100000, _settings.MaxLogEntriesAll));
@@ -161,7 +107,6 @@ public class SettingsDialog : Form
         };
         panel.Controls.Add(filterNote, 0, row);
         panel.SetColumnSpan(filterNote, 3);
-        row++;
 
         Controls.Add(panel);
 
@@ -183,9 +128,6 @@ public class SettingsDialog : Form
 
         AcceptButton = _btnOk;
         CancelButton = _btnCancel;
-
-        ValidateAdbPath();
-        ValidateScrcpyPath();
     }
 
     private void AddRow(TableLayoutPanel panel, int row, string label, Control control)
@@ -196,7 +138,7 @@ public class SettingsDialog : Form
         panel.SetColumnSpan(control, 2);
     }
 
-    private NumericUpDown CreateNumeric(int min, int max, int value)
+    private static NumericUpDown CreateNumeric(int min, int max, int value)
     {
         return new NumericUpDown
         {
@@ -205,176 +147,6 @@ public class SettingsDialog : Form
             Value = value,
             Dock = DockStyle.Fill
         };
-    }
-
-    private void OnBrowseAdb(object? sender, EventArgs e)
-    {
-        using var dlg = new OpenFileDialog
-        {
-            Filter = "ADB executable|adb.exe|All executables|*.exe|All files|*.*",
-            Title = "Select ADB executable",
-            CheckFileExists = true
-        };
-        if (!string.IsNullOrEmpty(_txtAdbPath.Text) && File.Exists(_txtAdbPath.Text))
-        {
-            try { dlg.InitialDirectory = Path.GetDirectoryName(_txtAdbPath.Text); } catch { }
-        }
-        if (dlg.ShowDialog() == DialogResult.OK)
-        {
-            _txtAdbPath.Text = dlg.FileName;
-            ValidateAdbPath();
-        }
-    }
-
-    private void OnAutoDetectAdb(object? sender, EventArgs e)
-    {
-        var paths = _adbHelper.GetSearchPaths();
-        var found = paths.FirstOrDefault(p => _adbHelper.ValidateAdb(p));
-
-        if (found != null)
-        {
-            _txtAdbPath.Text = found;
-            ValidateAdbPath();
-        }
-        else
-        {
-            _lblAdbStatus.Text = "\u2716 ADB not found in any searched location";
-            _lblAdbStatus.ForeColor = Color.Red;
-            MessageBox.Show(
-                "ADB could not be found automatically.\n\nSearched locations:\n" +
-                paths.Where(File.Exists).Aggregate("", (acc, p) => acc + p + "\n") +
-                "\nPlease install Android SDK Platform Tools and set the path manually.",
-                "ADB Not Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-    }
-
-    private void OnBrowseScrcpy(object? sender, EventArgs e)
-    {
-        using var dlg = new OpenFileDialog
-        {
-            Filter = "scrcpy executable|scrcpy.exe|All executables|*.exe|All files|*.*",
-            Title = "Select scrcpy executable",
-            CheckFileExists = true
-        };
-        if (!string.IsNullOrEmpty(_txtScrcpyPath.Text) && File.Exists(_txtScrcpyPath.Text))
-        {
-            try { dlg.InitialDirectory = Path.GetDirectoryName(_txtScrcpyPath.Text); } catch { }
-        }
-        if (dlg.ShowDialog() == DialogResult.OK)
-        {
-            _txtScrcpyPath.Text = dlg.FileName;
-            _scrcpyManager.SetManualPath(dlg.FileName);
-            ValidateScrcpyPath();
-        }
-    }
-
-    private async void OnDeployScrcpy(object? sender, EventArgs e)
-    {
-        _btnDeployScrcpy.Enabled = false;
-        _lblScrcpyStatus.Text = "正在部署 scrcpy...";
-        _lblScrcpyStatus.ForeColor = Color.DarkOrange;
-
-        try
-        {
-            var progress = new Progress<string>(message =>
-            {
-                _lblScrcpyStatus.Text = message;
-                _lblScrcpyStatus.ForeColor = Color.DarkOrange;
-            });
-
-            var path = await _scrcpyManager.EnsureScrcpyAvailableAsync(forceDeploy: true, progress, CancellationToken.None);
-            if (string.IsNullOrEmpty(path))
-            {
-                _lblScrcpyStatus.Text = "自动部署 scrcpy 失败";
-                _lblScrcpyStatus.ForeColor = Color.Red;
-                return;
-            }
-
-            _txtScrcpyPath.Text = path;
-            _scrcpyManager.SetManualPath(path);
-            ValidateScrcpyPath();
-        }
-        catch (Exception ex)
-        {
-            _lblScrcpyStatus.Text = "部署失败: " + ex.Message;
-            _lblScrcpyStatus.ForeColor = Color.Red;
-        }
-        finally
-        {
-            _btnDeployScrcpy.Enabled = true;
-        }
-    }
-
-    private void ValidateAdbPath()
-    {
-        var path = _txtAdbPath.Text.Trim();
-        if (string.IsNullOrEmpty(path))
-        {
-            var autoFound = _adbHelper.GetAdbPath();
-            if (autoFound != null)
-            {
-                _lblAdbStatus.Text = "\u2714 Auto detected: " + autoFound;
-                _lblAdbStatus.ForeColor = Color.Green;
-            }
-            else
-            {
-                _lblAdbStatus.Text = "\u2716 ADB not found - click Auto Detect or Browse";
-                _lblAdbStatus.ForeColor = Color.Red;
-            }
-            return;
-        }
-
-        if (_adbHelper.ValidateAdb(path))
-        {
-            _lblAdbStatus.Text = "\u2714 ADB valid";
-            _lblAdbStatus.ForeColor = Color.Green;
-        }
-        else if (!File.Exists(path))
-        {
-            _lblAdbStatus.Text = "\u2716 File does not exist";
-            _lblAdbStatus.ForeColor = Color.Red;
-        }
-        else
-        {
-            _lblAdbStatus.Text = "\u2716 File exists but not a valid ADB";
-            _lblAdbStatus.ForeColor = Color.Red;
-        }
-    }
-
-    private void ValidateScrcpyPath()
-    {
-        var path = _txtScrcpyPath.Text.Trim();
-        if (string.IsNullOrEmpty(path))
-        {
-            var autoFound = _scrcpyManager.GetScrcpyPath();
-            if (autoFound != null)
-            {
-                _lblScrcpyStatus.Text = "已就绪: " + autoFound;
-                _lblScrcpyStatus.ForeColor = Color.Green;
-            }
-            else
-            {
-                _lblScrcpyStatus.Text = "首次启动会自动部署 scrcpy，也可点 Deploy / Repair 立即修复";
-                _lblScrcpyStatus.ForeColor = Color.DarkOrange;
-            }
-            return;
-        }
-
-        if (_scrcpyManager.ValidateScrcpy(path))
-        {
-            _lblScrcpyStatus.Text = "scrcpy 可用";
-            _lblScrcpyStatus.ForeColor = Color.Green;
-        }
-        else if (!File.Exists(path))
-        {
-            _lblScrcpyStatus.Text = "文件不存在";
-            _lblScrcpyStatus.ForeColor = Color.Red;
-        }
-        else
-        {
-            _lblScrcpyStatus.Text = "文件存在，但不是可用的 scrcpy";
-            _lblScrcpyStatus.ForeColor = Color.Red;
-        }
     }
 
     private void LoadValues()
@@ -391,8 +163,6 @@ public class SettingsDialog : Form
         _nudFontSize.Value = _settings.FontSize;
         _nudAdbScanInterval.Value = _settings.AdbScanIntervalMs;
         _txtLogcatFilter.Text = _settings.LogcatFilter;
-        _txtAdbPath.Text = _settings.AdbPath;
-        _txtScrcpyPath.Text = _settings.ScrcpyPath;
         _chkAutoStartScrcpy.Checked = _settings.AutoStartScrcpyForSelectedDevice;
     }
 
@@ -410,8 +180,6 @@ public class SettingsDialog : Form
         _settings.FontSize = (int)_nudFontSize.Value;
         _settings.AdbScanIntervalMs = (int)_nudAdbScanInterval.Value;
         _settings.LogcatFilter = _txtLogcatFilter.Text;
-        _settings.AdbPath = _txtAdbPath.Text.Trim();
-        _settings.ScrcpyPath = _txtScrcpyPath.Text.Trim();
         _settings.AutoStartScrcpyForSelectedDevice = _chkAutoStartScrcpy.Checked;
         _settings.Save();
         DialogResult = DialogResult.OK;

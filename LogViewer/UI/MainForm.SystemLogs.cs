@@ -5,6 +5,9 @@ namespace LogViewer.UI;
 
 public partial class MainForm
 {
+    private const int SystemLogFlushBatchSize = 200;
+    private const int SystemLogUiRefreshDebounceMs = 80;
+
     private readonly record struct SystemLogQuery(
         string? DeviceId,
         string Keyword,
@@ -31,6 +34,8 @@ public partial class MainForm
     private long _systemPausedBacklog;
     private bool _systemVisibleRefreshPending;
     private long _systemContextSequenceId;
+    private bool _systemUiRefreshScheduled;
+    private bool _systemUiRefreshNeedsSnapshot;
 
     private void InitializeSystemLogRuntime()
     {
@@ -327,94 +332,117 @@ public partial class MainForm
             _systemLogFlushScheduled = true;
         }
 
-        if (IsHandleCreated)
+        _ = Task.Run(FlushPendingSystemLogsAsync);
+    }
+
+    private async Task FlushPendingSystemLogsAsync()
+    {
+        while (true)
         {
-            BeginInvoke(new Action(FlushPendingSystemLogs));
+            var entries = new List<SystemLogEntry>();
+            lock (_pendingSystemLogsLock)
+            {
+                while (_pendingSystemLogs.Count > 0 && entries.Count < SystemLogFlushBatchSize)
+                {
+                    entries.Add(_pendingSystemLogs.Dequeue());
+                }
+
+                if (entries.Count == 0)
+                {
+                    _systemLogFlushScheduled = false;
+                    return;
+                }
+            }
+
+            if (!IsSystemLogRuntimeReady())
+            {
+                continue;
+            }
+
+            var selectedDeviceId = _currentDeviceId;
+            var scopeChanged = false;
+
+            foreach (var entry in entries)
+            {
+                var serial = entry.SourceDeviceSerial ?? string.Empty;
+                var deviceId = _adbSerialToDeviceId.TryGetValue(serial, out var mappedDeviceId) ? mappedDeviceId : serial;
+                entry.SourceDeviceId = deviceId;
+                _systemLogStore.Append(entry);
+
+                if (!string.IsNullOrEmpty(selectedDeviceId) &&
+                    !string.Equals(deviceId, selectedDeviceId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                scopeChanged = true;
+                if (_systemLogPaused)
+                {
+                    Interlocked.Increment(ref _systemPausedBacklog);
+                }
+            }
+
+            if (scopeChanged || _systemLogPaused)
+            {
+                ScheduleSystemUiRefresh(scopeChanged && !_systemLogPaused);
+            }
         }
     }
 
-    private void FlushPendingSystemLogs()
+    private void ScheduleSystemUiRefresh(bool needSnapshot)
     {
-        var entries = new List<SystemLogEntry>();
-        lock (_pendingSystemLogsLock)
+        if (needSnapshot)
         {
-            while (_pendingSystemLogs.Count > 0)
-            {
-                entries.Add(_pendingSystemLogs.Dequeue());
-            }
-
-            _systemLogFlushScheduled = false;
+            _systemUiRefreshNeedsSnapshot = true;
         }
 
-        if (entries.Count == 0 || !IsSystemLogRuntimeReady())
+        if (_systemUiRefreshScheduled || !IsHandleCreated || IsDisposed)
         {
             return;
         }
 
-        var query = CaptureSystemLogQuery();
-        var appendedVisibleRecords = false;
-        var scopeChanged = false;
-
-        foreach (var entry in entries)
+        _systemUiRefreshScheduled = true;
+        _ = Task.Run(async () =>
         {
-            var serial = entry.SourceDeviceSerial ?? string.Empty;
-            var deviceId = _adbSerialToDeviceId.TryGetValue(serial, out var mappedDeviceId) ? mappedDeviceId : serial;
-            entry.SourceDeviceId = deviceId;
-            var record = _systemLogStore.Append(entry);
-
-            if (!_systemLogStore.MatchesScope(record, query.DeviceId))
+            try
             {
-                continue;
+                await Task.Delay(SystemLogUiRefreshDebounceMs).ConfigureAwait(false);
+            }
+            catch
+            {
             }
 
-            scopeChanged = true;
-
-            if (_systemLogPaused)
+            if (IsDisposed || !IsHandleCreated)
             {
-                _systemPausedBacklog++;
-                continue;
+                return;
             }
 
-            if (_systemLogSnapshot.MatchesQuery(query.DeviceId, query.Keyword, query.Level, query.Tag) &&
-                _systemLogSnapshot.StoreStructureVersion == query.StoreStructureVersion)
+            BeginInvoke(new Action(() =>
             {
-                if (_systemLogSnapshot.FilterActive)
+                _systemUiRefreshScheduled = false;
+                if (IsDisposed || !IsSystemLogRuntimeReady())
                 {
-                    _systemLogSnapshot.Observe(record);
-                    if (MatchesIncomingSystemEntry(entry, query))
-                    {
-                        _systemLogSnapshot.Append(record);
-                        appendedVisibleRecords = true;
-                    }
+                    return;
                 }
-                else
+
+                var needRefreshSnapshot = _systemUiRefreshNeedsSnapshot;
+                _systemUiRefreshNeedsSnapshot = false;
+
+                if (_systemLogPaused)
                 {
-                    _systemLogSnapshot.Append(record);
-                    appendedVisibleRecords = true;
+                    UpdateSystemLogUiState();
+                    return;
                 }
-            }
-        }
 
-        if (_systemLogPaused)
-        {
-            UpdateSystemLogUiState();
-            return;
-        }
+                if (needRefreshSnapshot && _showingSystemLog)
+                {
+                    RequestSystemSnapshotRefresh(preferBackground: true);
+                    return;
+                }
 
-        if (appendedVisibleRecords)
-        {
-            ApplySystemSnapshot();
-            return;
-        }
-
-        if (scopeChanged)
-        {
-            RequestSystemSnapshotRefresh();
-        }
-        else
-        {
-            UpdateSystemLogUiState();
-        }
+                UpdateSystemLogUiState();
+            }));
+        });
     }
 
     private void OnSystemFilterChanged(object? sender, EventArgs e)

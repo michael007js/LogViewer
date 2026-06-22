@@ -9,4 +9,22 @@
     <AssemblyName>LogViewer</AssemblyName>
     <RootNamespace>LogViewer</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Runtime\WindowsTools\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>%(Filename)%(Extension)</TargetPath>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="obj\" />
+  </ItemGroup>
+
+  <Target Name="CopyBundledTools" AfterTargets="Build">
+    <MakeDir Directories="$(TargetDir)" />
+    <Copy SourceFiles="@(Content)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <Copy SourceFiles="@(Content)" DestinationFolder="$(IntermediateOutputPath)" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

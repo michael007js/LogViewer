@@ -1,8 +1,5 @@
 using System.Diagnostics;
-using System.IO.Compression;
-using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 using System.Threading;
 
 namespace LogViewer.Utils;
@@ -112,19 +109,8 @@ internal sealed class ScrcpySession : IDisposable
 
 internal sealed class ScrcpyManager
 {
-    private const string LatestReleaseApiUrl = "https://api.github.com/repos/Genymobile/scrcpy/releases/latest";
-    private static readonly HttpClient HttpClient = CreateHttpClient();
-    private readonly SemaphoreSlim _deployLock = new(1, 1);
     private string? _scrcpyPath;
-    private string? _manualScrcpyPath;
-    private bool _autoSearchDone;
-
-    public void SetManualPath(string? path)
-    {
-        _manualScrcpyPath = path?.Trim();
-        _scrcpyPath = null;
-        _autoSearchDone = false;
-    }
+    private static string BundledScrcpyPath => Path.Combine(AppContext.BaseDirectory, "scrcpy.exe");
 
     public string? GetScrcpyPath()
     {
@@ -135,92 +121,26 @@ internal sealed class ScrcpyManager
 
         _scrcpyPath = null;
 
-        if (!string.IsNullOrWhiteSpace(_manualScrcpyPath) && ValidateScrcpy(_manualScrcpyPath))
+        if (File.Exists(BundledScrcpyPath))
         {
-            _scrcpyPath = _manualScrcpyPath;
-            return _scrcpyPath;
-        }
-
-        if (!_autoSearchDone)
-        {
-            _autoSearchDone = true;
-            _scrcpyPath = GetSearchPaths().FirstOrDefault(ValidateScrcpy);
+            _scrcpyPath = BundledScrcpyPath;
         }
 
         return _scrcpyPath;
     }
 
-    public async Task<string?> EnsureScrcpyAvailableAsync(bool forceDeploy, IProgress<string>? progress, CancellationToken cancellationToken)
+    public Task<string?> EnsureScrcpyAvailableAsync(bool forceDeploy, IProgress<string>? progress, CancellationToken cancellationToken)
     {
-        if (!forceDeploy)
+        cancellationToken.ThrowIfCancellationRequested();
+        var existing = GetScrcpyPath();
+        if (!string.IsNullOrEmpty(existing))
         {
-            var existing = GetScrcpyPath();
-            if (!string.IsNullOrEmpty(existing))
-            {
-                return existing;
-            }
+            progress?.Report($"scrcpy 已就绪：{existing}");
+            return Task.FromResult<string?>(existing);
         }
 
-        await _deployLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (!forceDeploy)
-            {
-                var existing = GetScrcpyPath();
-                if (!string.IsNullOrEmpty(existing))
-                {
-                    return existing;
-                }
-            }
-
-            progress?.Report("正在检查 scrcpy 官方版本...");
-            var release = await GetLatestWindowsReleaseAsync(cancellationToken).ConfigureAwait(false);
-            var installDir = Path.Combine(GetManagedInstallRoot(), Path.GetFileNameWithoutExtension(release.AssetName));
-            var existingPath = FindScrcpyExecutable(installDir);
-            if (!forceDeploy && !string.IsNullOrEmpty(existingPath) && ValidateScrcpy(existingPath))
-            {
-                _scrcpyPath = existingPath;
-                _autoSearchDone = true;
-                progress?.Report($"scrcpy 已就绪：{release.TagName}");
-                return _scrcpyPath;
-            }
-
-            Directory.CreateDirectory(GetManagedInstallRoot());
-            var tempZipPath = Path.Combine(Path.GetTempPath(), $"logviewer-scrcpy-{Guid.NewGuid():N}.zip");
-
-            try
-            {
-                progress?.Report($"正在下载 scrcpy {release.TagName}...");
-                await DownloadFileAsync(release.DownloadUrl, tempZipPath, cancellationToken).ConfigureAwait(false);
-
-                progress?.Report("正在解压 scrcpy...");
-                if (Directory.Exists(installDir))
-                {
-                    Directory.Delete(installDir, recursive: true);
-                }
-
-                ZipFile.ExtractToDirectory(tempZipPath, installDir, overwriteFiles: true);
-            }
-            finally
-            {
-                try { File.Delete(tempZipPath); } catch { }
-            }
-
-            var exePath = FindScrcpyExecutable(installDir);
-            if (string.IsNullOrEmpty(exePath) || !ValidateScrcpy(exePath))
-            {
-                throw new InvalidOperationException("已下载 scrcpy，但未找到可用的 scrcpy.exe。");
-            }
-
-            _scrcpyPath = exePath;
-            _autoSearchDone = true;
-            progress?.Report($"scrcpy 已就绪：{release.TagName}");
-            return _scrcpyPath;
-        }
-        finally
-        {
-            _deployLock.Release();
-        }
+        progress?.Report($"未找到 scrcpy，请放到程序目录：{BundledScrcpyPath}");
+        return Task.FromResult<string?>(null);
     }
 
     public bool ValidateScrcpy(string path)
@@ -261,30 +181,7 @@ internal sealed class ScrcpyManager
 
     public List<string> GetSearchPaths()
     {
-        var paths = new List<string>();
-        var envPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-
-        foreach (var dir in envPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var candidate = Path.Combine(dir.Trim(), "scrcpy.exe");
-            if (File.Exists(candidate))
-            {
-                paths.Add(candidate);
-            }
-        }
-
-        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-
-        paths.Add(Path.Combine(programFiles, "scrcpy", "scrcpy.exe"));
-        paths.Add(Path.Combine(programFiles, "Genymobile", "scrcpy", "scrcpy.exe"));
-        paths.Add(Path.Combine(localAppData, "Programs", "scrcpy", "scrcpy.exe"));
-        paths.AddRange(GetManagedInstallCandidates());
-
-        return paths
-            .Where(File.Exists)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        return new List<string> { BundledScrcpyPath };
     }
 
     public async Task<ScrcpySession> StartSessionAsync(ScrcpyStartOptions options, CancellationToken cancellationToken)
@@ -361,102 +258,6 @@ internal sealed class ScrcpyManager
         throw new TimeoutException("Timed out waiting for scrcpy window.");
     }
 
-    private static HttpClient CreateHttpClient()
-    {
-        var client = new HttpClient
-        {
-            Timeout = TimeSpan.FromMinutes(5)
-        };
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("LogViewer", "1.0"));
-        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        return client;
-    }
-
-    private static async Task DownloadFileAsync(string downloadUrl, string destinationPath, CancellationToken cancellationToken)
-    {
-        using var response = await HttpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-
-        await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        await using var target = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
-        await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static async Task<ScrcpyReleaseAsset> GetLatestWindowsReleaseAsync(CancellationToken cancellationToken)
-    {
-        using var response = await HttpClient.GetAsync(LatestReleaseApiUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        var root = document.RootElement;
-        var tagName = root.GetProperty("tag_name").GetString();
-        if (string.IsNullOrWhiteSpace(tagName))
-        {
-            throw new InvalidOperationException("未从 GitHub release 中读取到版本号。");
-        }
-
-        var architectureToken = Environment.Is64BitOperatingSystem ? "win64" : "win32";
-        foreach (var asset in root.GetProperty("assets").EnumerateArray())
-        {
-            var assetName = asset.GetProperty("name").GetString();
-            if (string.IsNullOrWhiteSpace(assetName))
-            {
-                continue;
-            }
-
-            if (!assetName.StartsWith($"scrcpy-{architectureToken}-", StringComparison.OrdinalIgnoreCase) ||
-                !assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var downloadUrl = asset.GetProperty("browser_download_url").GetString();
-            if (string.IsNullOrWhiteSpace(downloadUrl))
-            {
-                continue;
-            }
-
-            return new ScrcpyReleaseAsset(tagName, assetName, downloadUrl);
-        }
-
-        throw new InvalidOperationException($"官方最新版本未找到 {architectureToken} Windows 发布包。");
-    }
-
-    private static string? FindScrcpyExecutable(string directory)
-    {
-        if (!Directory.Exists(directory))
-        {
-            return null;
-        }
-
-        return Directory
-            .EnumerateFiles(directory, "scrcpy.exe", SearchOption.AllDirectories)
-            .FirstOrDefault();
-    }
-
-    private static IEnumerable<string> GetManagedInstallCandidates()
-    {
-        var root = GetManagedInstallRoot();
-        if (!Directory.Exists(root))
-        {
-            yield break;
-        }
-
-        foreach (var path in Directory.EnumerateFiles(root, "scrcpy.exe", SearchOption.AllDirectories))
-        {
-            yield return path;
-        }
-    }
-
-    private static string GetManagedInstallRoot()
-    {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localAppData, "LogViewer", "Tools", "scrcpy");
-    }
-
-    private sealed record ScrcpyReleaseAsset(string TagName, string AssetName, string DownloadUrl);
 }
 
 internal static class EmbeddedWindowHost

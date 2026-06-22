@@ -1,5 +1,0 @@
-D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\publish\LogViewer.exe
-D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\publish\LogViewer.dll
-D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\publish\LogViewer.deps.json
-D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\publish\LogViewer.runtimeconfig.json
-D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\publish\LogViewer.pdb
