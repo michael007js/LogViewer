@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using LogViewer.Models;
+using LogViewer.Static;
 
 namespace LogViewer.UI;
 
@@ -21,7 +22,7 @@ public sealed class DevicePanel : UserControl
     private bool _mirrorRunning;
     private bool _mirrorReady;
     private bool _mirrorHostVisible;
-    private string _mirrorStatusText = "请选择具体设备以操控手机";
+    private string _mirrorStatusText = Language.DeviceSelectPrompt;
 
     public event EventHandler<string?>? DeviceSelected;
     public event EventHandler? RefreshAdbRequested;
@@ -76,7 +77,7 @@ public sealed class DevicePanel : UserControl
             DropDownStyle = ComboBoxStyle.DropDownList,
             Font = new Font("Consolas", 9f)
         };
-        selector.Items.Add("● All");
+        selector.Items.Add($"● {Language.All}");
         selector.SelectedIndex = 0;
 
         var mirror = new Panel
@@ -88,7 +89,7 @@ public sealed class DevicePanel : UserControl
         mirror.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "scrcpy host",
+            Text = Language.ScrcpyHost,
             ForeColor = Color.WhiteSmoke,
             TextAlign = ContentAlignment.MiddleCenter
         });
@@ -97,9 +98,9 @@ public sealed class DevicePanel : UserControl
         {
             Dock = DockStyle.Fill
         };
-        controls.Controls.Add(new Button { Text = "Start", AutoSize = true });
-        controls.Controls.Add(new Button { Text = "Rotate", AutoSize = true });
-        controls.Controls.Add(new Button { Text = "Shot", AutoSize = true });
+        controls.Controls.Add(new Button { Text = Language.Start, AutoSize = true });
+        controls.Controls.Add(new Button { Text = Language.Rotate, AutoSize = true });
+        controls.Controls.Add(new Button { Text = Language.Screenshot, AutoSize = true });
 
         layout.Controls.Add(selector, 0, 0);
         layout.Controls.Add(mirror, 0, 1);
@@ -128,7 +129,7 @@ public sealed class DevicePanel : UserControl
 
         _btnRefreshAdb = new Button
         {
-            Text = "Scan ADB",
+            Text = Language.ScanAdb,
             Dock = DockStyle.Top,
             Height = 26,
             FlatStyle = FlatStyle.Flat,
@@ -164,7 +165,7 @@ public sealed class DevicePanel : UserControl
             Text = _mirrorStatusText
         };
 
-        _btnMirrorToggle = CreateControlButton("Start");
+        _btnMirrorToggle = CreateControlButton(Language.Start);
         _btnMirrorToggle.Click += (_, _) =>
         {
             if (TryGetSelectedDeviceForAction(out var deviceId))
@@ -180,7 +181,7 @@ public sealed class DevicePanel : UserControl
             }
         };
 
-        _btnMirrorReconnect = CreateControlButton("Reconnect");
+        _btnMirrorReconnect = CreateControlButton(Language.Reconnect);
         _btnMirrorReconnect.Click += (_, _) =>
         {
             if (TryGetSelectedDeviceForAction(out var deviceId))
@@ -189,7 +190,7 @@ public sealed class DevicePanel : UserControl
             }
         };
 
-        _btnMirrorRotate = CreateControlButton("Rotate");
+        _btnMirrorRotate = CreateControlButton(Language.Rotate);
         _btnMirrorRotate.Click += (_, _) =>
         {
             if (TryGetSelectedDeviceForAction(out var deviceId))
@@ -198,7 +199,7 @@ public sealed class DevicePanel : UserControl
             }
         };
 
-        _btnMirrorScreenshot = CreateControlButton("Shot");
+        _btnMirrorScreenshot = CreateControlButton(Language.Screenshot);
         _btnMirrorScreenshot.Click += (_, _) =>
         {
             if (TryGetSelectedDeviceForAction(out var deviceId))
@@ -207,7 +208,7 @@ public sealed class DevicePanel : UserControl
             }
         };
 
-        _btnMirrorPopout = CreateControlButton("Popout");
+        _btnMirrorPopout = CreateControlButton(Language.Popout);
         _btnMirrorPopout.Click += (_, _) =>
         {
             if (TryGetSelectedDeviceForAction(out var deviceId))
@@ -431,7 +432,7 @@ public sealed class DevicePanel : UserControl
         _cmbDevices.BeginUpdate();
         _cmbDevices.SelectedIndexChanged -= OnDeviceSelected;
         _cmbDevices.Items.Clear();
-        _cmbDevices.Items.Add(new DeviceSelectorItem(null, "● All"));
+        _cmbDevices.Items.Add(new DeviceSelectorItem(null, $"● {Language.All}"));
 
         foreach (var kvp in _devices.OrderBy(static pair => pair.Value.Info.DisplayName, StringComparer.OrdinalIgnoreCase))
         {
@@ -511,7 +512,7 @@ public sealed class DevicePanel : UserControl
         _btnMirrorRotate.Enabled = hasAdb && _mirrorRunning;
         _btnMirrorScreenshot.Enabled = hasAdb;
         _btnMirrorPopout.Enabled = hasAdb;
-        _btnMirrorToggle.Text = _mirrorRunning ? "Stop" : "Start";
+        _btnMirrorToggle.Text = _mirrorRunning ? Language.Stop : Language.Start;
     }
 
     private void UpdateMirrorHostBounds()

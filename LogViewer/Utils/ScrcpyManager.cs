@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
+using LogViewer.Static;
 
 namespace LogViewer.Utils;
 
@@ -135,11 +136,11 @@ internal sealed class ScrcpyManager
         var existing = GetScrcpyPath();
         if (!string.IsNullOrEmpty(existing))
         {
-            progress?.Report($"scrcpy 已就绪：{existing}");
+            progress?.Report(Language.ScrcpyReady(existing));
             return Task.FromResult<string?>(existing);
         }
 
-        progress?.Report($"未找到 scrcpy，请放到程序目录：{BundledScrcpyPath}");
+        progress?.Report(Language.ScrcpyNotFound(BundledScrcpyPath));
         return Task.FromResult<string?>(null);
     }
 
@@ -210,8 +211,8 @@ internal sealed class ScrcpyManager
 
         if (options.AngleDegrees != 0)
         {
-            psi.ArgumentList.Add("--angle");
-            psi.ArgumentList.Add(options.AngleDegrees.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add("--rotation");
+            psi.ArgumentList.Add((options.AngleDegrees / 90).ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
         var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start scrcpy.");
