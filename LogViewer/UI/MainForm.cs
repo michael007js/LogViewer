@@ -888,25 +888,18 @@ public partial class MainForm : Form
 
     private void OnDeviceSelected(object? sender, string? deviceId)
     {
-        var previousDeviceId = _currentDeviceId;
         _currentDeviceId = deviceId;
-        if (!string.Equals(previousDeviceId, deviceId, StringComparison.Ordinal))
-        {
-            StopMirror(clearStatusOnly: true);
-        }
         RefreshNetworkFilter();
         RefreshSystemLogList();
         _selectedLogEntry = null;
         ShowLogDetail(null);
         _scrcpyRotationIndex = 0;
         RefreshMirrorPanelState();
-        if (!string.IsNullOrEmpty(deviceId) && _settings.AutoStartScrcpyForSelectedDevice)
+        if (!string.IsNullOrEmpty(deviceId) &&
+            _settings.AutoStartScrcpyForSelectedDevice &&
+            _scrcpySession?.IsRunning != true)
         {
             _ = StartMirrorForCurrentDeviceAsync(restart: true);
-        }
-        else if (string.IsNullOrEmpty(deviceId))
-        {
-            StopMirror(clearStatusOnly: true);
         }
     }
 

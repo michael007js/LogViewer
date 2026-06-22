@@ -1,0 +1,17 @@
+D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\LogViewer.exe
+D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\LogViewer.deps.json
+D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\LogViewer.runtimeconfig.json
+D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\LogViewer.dll
+D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\LogViewer.pdb
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\LogViewer.UI.MainForm.resources
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\LogViewer.csproj.GenerateResource.cache
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\LogViewer.GeneratedMSBuildEditorConfig.editorconfig
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\LogViewer.AssemblyInfoInputs.cache
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\LogViewer.AssemblyInfo.cs
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\LogViewer.csproj.CoreCompileInputs.cache
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\LogViewer.sourcelink.json
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\LogViewer.dll
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\refint\LogViewer.dll
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\LogViewer.pdb
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\LogViewer.genruntimeconfig.cache
+D:\youzyapp\LogViewer\LogViewer\obj\Release\net8.0-windows\ref\LogViewer.dll
