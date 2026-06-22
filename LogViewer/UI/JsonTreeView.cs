@@ -7,6 +7,7 @@ namespace LogViewer.UI;
 
 public class JsonTreeView : TreeView
 {
+    private const int TvsNotooltips = 0x80;
     private static readonly Color ColorKey = Color.FromArgb(0x56, 0x9C, 0xD6);
     private static readonly Color ColorString = Color.FromArgb(0xCE, 0x91, 0x78);
     private static readonly Color ColorNumber = Color.FromArgb(0xB5, 0xCE, 0xA8);
@@ -26,6 +27,7 @@ public class JsonTreeView : TreeView
     public JsonTreeView()
     {
         DrawMode = TreeViewDrawMode.OwnerDrawText;
+        ShowNodeToolTips = false;
         ShowLines = false;
         ShowPlusMinus = true;
         ShowRootLines = false;
@@ -40,6 +42,16 @@ public class JsonTreeView : TreeView
         if (!IsDesignTimeMode())
         {
             ContextMenuStrip = CreateContextMenu();
+        }
+    }
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.Style |= TvsNotooltips;
+            return cp;
         }
     }
 

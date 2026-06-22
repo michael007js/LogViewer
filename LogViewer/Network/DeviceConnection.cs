@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.IO.Compression;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -64,6 +65,7 @@ public class DeviceConnection
                         var entry = JsonSerializer.Deserialize<LogEntry>(jsonStr, JsonOptions);
                         if (entry != null)
                         {
+                            entry.Content = TryDecodeGzipContent(entry.Content);
                             LogReceived?.Invoke(this, entry);
                         }
                         break;
@@ -96,6 +98,32 @@ public class DeviceConnection
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static string? TryDecodeGzipContent(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return content;
+        }
+
+        try
+        {
+            var bytes = Convert.FromBase64String(content);
+            if (bytes.Length < 2 || bytes[0] != 0x1F || bytes[1] != 0x8B)
+            {
+                return content;
+            }
+
+            using var input = new MemoryStream(bytes);
+            using var gzip = new GZipStream(input, CompressionMode.Decompress);
+            using var reader = new StreamReader(gzip, Encoding.UTF8);
+            return reader.ReadToEnd();
+        }
+        catch
+        {
+            return content;
         }
     }
 

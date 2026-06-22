@@ -1,0 +1,2 @@
+D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\win-x64\publish\LogViewer.pdb
+D:\youzyapp\LogViewer\LogViewer\bin\Release\net8.0-windows\win-x64\publish\LogViewer.exe

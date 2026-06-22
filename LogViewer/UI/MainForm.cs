@@ -532,7 +532,7 @@ public partial class MainForm : Form
         e.Item = entry == null ? new ListViewItem() : CreateNetworkLogItem(entry);
     }
 
-    private static ListViewItem CreateNetworkLogItem(LogEntry entry)
+    private ListViewItem CreateNetworkLogItem(LogEntry entry)
     {
         var item = new ListViewItem(entry.Method ?? string.Empty);
         item.SubItems.Add(entry.UrlPath);
@@ -558,6 +558,7 @@ public partial class MainForm : Form
         _networkAutoScrollEnabled = false;
         UpdateLogCount();
     }
+
 
     private void RefreshNetworkLogList()
     {

@@ -201,6 +201,7 @@ public partial class MainForm
         _lstNetworkLogs.Location = new Point(0, 56);
         _lstNetworkLogs.MultiSelect = false;
         _lstNetworkLogs.Name = "_lstNetworkLogs";
+        _lstNetworkLogs.ShowItemToolTips = false;
         _lstNetworkLogs.Size = new Size(921, 515);
         _lstNetworkLogs.TabIndex = 0;
         _lstNetworkLogs.UseCompatibleStateImageBehavior = false;
@@ -298,6 +299,7 @@ public partial class MainForm
         _lstSystemLogs.Location = new Point(0, 52);
         _lstSystemLogs.MultiSelect = false;
         _lstSystemLogs.Name = "_lstSystemLogs";
+        _lstSystemLogs.ShowItemToolTips = false;
         _lstSystemLogs.Size = new Size(921, 519);
         _lstSystemLogs.TabIndex = 0;
         _lstSystemLogs.UseCompatibleStateImageBehavior = false;

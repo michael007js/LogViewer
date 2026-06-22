@@ -67,7 +67,7 @@ public partial class MainForm
         _systemContextSequenceId = 0;
     }
 
-    private static ListViewItem CreateSystemLogItem(SystemLogEntry entry)
+    private ListViewItem CreateSystemLogItem(SystemLogEntry entry)
     {
         var item = new ListViewItem(entry.Timestamp.ToString("HH:mm:ss.fff"));
         item.SubItems.Add(entry.LevelShort);
