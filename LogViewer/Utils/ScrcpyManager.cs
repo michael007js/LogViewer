@@ -53,6 +53,7 @@ internal sealed class ScrcpySession : IDisposable
     public bool IsRunning => !Process.HasExited;
 
     public event EventHandler? Exited;
+    public string LastErrorText { get; internal set; } = string.Empty;
 
     public void SyncEmbeddedBounds()
     {
@@ -216,25 +217,49 @@ internal sealed class ScrcpyManager
         }
 
         var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start scrcpy.");
-        _ = Task.Run(() => DrainAsync(process.StandardOutput), CancellationToken.None);
-        _ = Task.Run(() => DrainAsync(process.StandardError), CancellationToken.None);
+        var stdoutTask = ReadToEndSafeAsync(process.StandardOutput);
+        var stderrTask = ReadToEndSafeAsync(process.StandardError);
 
-        var windowHandle = await WaitForWindowAsync(process, cancellationToken).ConfigureAwait(false);
-        return new ScrcpySession(process, windowHandle, options);
-    }
-
-    private static async Task DrainAsync(StreamReader reader)
-    {
         try
         {
-            await reader.ReadToEndAsync().ConfigureAwait(false);
+            var windowHandle = await WaitForWindowAsync(process, stderrTask, cancellationToken).ConfigureAwait(false);
+            var session = new ScrcpySession(process, windowHandle, options)
+            {
+                LastErrorText = await stderrTask.ConfigureAwait(false)
+            };
+            _ = stdoutTask;
+            return session;
         }
         catch
         {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch
+            {
+            }
+
+            throw;
         }
     }
 
-    private static async Task<IntPtr> WaitForWindowAsync(Process process, CancellationToken cancellationToken)
+    private static async Task<string> ReadToEndSafeAsync(StreamReader reader)
+    {
+        try
+        {
+            return await reader.ReadToEndAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static async Task<IntPtr> WaitForWindowAsync(Process process, Task<string> stderrTask, CancellationToken cancellationToken)
     {
         try { process.WaitForInputIdle(5000); } catch { }
 
@@ -245,7 +270,10 @@ internal sealed class ScrcpyManager
 
             if (process.HasExited)
             {
-                throw new InvalidOperationException("scrcpy exited before creating a window.");
+                var errorText = (await stderrTask.ConfigureAwait(false)).Trim();
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(errorText)
+                    ? "scrcpy exited before creating a window."
+                    : $"scrcpy exited before creating a window. {errorText}");
             }
 
             if (process.MainWindowHandle != IntPtr.Zero)

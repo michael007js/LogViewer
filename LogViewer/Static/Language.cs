@@ -84,12 +84,6 @@ public static class Language
     public const string ScrcpyCheckingStatus = "scrcpy：校验中...";
     public const string AdbCheckingStatus = "ADB：校验中...";
     public const string AdbNotFoundStatus = "ADB：未找到";
-    public const string MirrorConnected = "镜像已连接：{0}";
-    public const string MirrorReady = "已就绪，可启动镜像：{0}";
-    public const string MirrorStarting = "正在启动镜像：{0}";
-    public const string MirrorStartFailed = "镜像启动失败：{0}";
-    public const string ScreenshotSaved = "截图已保存：{0}";
-    public const string ScreenshotFailed = "截图失败：{0}";
     public const string JsonDetailTitle = "{0} {1} {2} {3}ms";
 
     public static string DevicesCount(int count) => $"设备：{count}";
@@ -108,5 +102,11 @@ public static class Language
     public static string AdbReverseFailed(string output) => $"反向代理失败：\n{output}";
     public static string AdbReverseResult(string serial, bool ok, string output) => ok ? $"ADB 反向代理成功：{serial}" : $"执行失败：{output}";
     public static string ReverseAllDeviceResult(string deviceName, bool ok, string output) => $"{deviceName}: {(ok ? "成功" : output)}";
-    public static string CannotStartLogcat = "无法启动 Logcat：ADB 不可用。";
+    public static string CannotStartLogcat => "无法启动 Logcat：ADB 不可用。";
+    public static string MirrorConnected(string serial) => $"镜像已连接：{serial}";
+    public static string MirrorReady(string serial) => $"已就绪，可启动镜像：{serial}";
+    public static string MirrorStarting(string serial) => $"正在启动镜像：{serial}";
+    public static string MirrorStartFailed(string error) => $"镜像启动失败：{error}";
+    public static string ScreenshotSaved(string fileName) => $"截图已保存：{fileName}";
+    public static string ScreenshotFailed(string error) => $"截图失败：{error}";
 }
