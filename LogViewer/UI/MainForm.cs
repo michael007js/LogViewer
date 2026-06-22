@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using LogViewer.Models;
 using LogViewer.Network;
+using LogViewer.Static;
 using LogViewer.Utils;
 
 namespace LogViewer.UI;
@@ -115,6 +116,7 @@ public partial class MainForm : Form
         _settings = AppSettings.Load();
         _allLogs = new RingBuffer<LogEntry>(_settings.MaxLogEntriesAll);
         InitializeComponent();
+        ApplyLanguage();
 
         if (IsDesignTimeMode())
         {
@@ -136,6 +138,46 @@ public partial class MainForm : Form
 
         StartAdbScanLoop();
         AutoStartServer();
+    }
+
+    private void ApplyLanguage()
+    {
+        Text = Language.AppTitle;
+        _btnAdbReverse.Text = Language.AdbReverse;
+        _tabNetwork.Text = Language.NetworkLogs;
+        _tabSystem.Text = Language.SystemLogs;
+        _btnScrollToTop.Text = Language.ScrollToTop;
+        _btnScrollToBottom.Text = Language.ScrollToBottom;
+        _btnSystemScrollToTop.Text = Language.ScrollToTop;
+        _btnSystemScrollToBottom.Text = Language.ScrollToBottom;
+        _btnSystemPauseResume.Text = Language.Pause;
+        _txtNetworkKeyword.PlaceholderText = Language.KeywordPlaceholder;
+        _txtSystemKeyword.PlaceholderText = Language.KeywordPlaceholder;
+        _tabHeaders.Text = Language.Headers;
+        _tabRequestBody.Text = Language.RequestBody;
+        _tabResponseBody.Text = Language.ResponseBody;
+        _txtJsonSearch.PlaceholderText = Language.SearchJsonPlaceholder;
+        _btnExpandAll.Text = Language.Expand;
+        _btnCollapseAll.Text = Language.Collapse;
+        _btnCollapseTo2.Text = Language.CollapseLevel2;
+        _btnToggleView.Text = Language.Raw;
+        _btnClear.Text = Language.Clear;
+        _btnExportJson.Text = Language.ExportJson;
+        _btnExportTxt.Text = Language.ExportTxt;
+        _lblStatus.Text = $"\u25CF {Language.Running}";
+        _lblServerStatus.Text = Language.ServerStopped;
+        _lblDeviceCountStatus.Text = Language.DevicesCount(0);
+        _lblAdbStatus.Text = Language.AdbNotDetected;
+        _lblLogcatStatus.Text = Language.LogcatCount(0);
+
+        _cmbMethod.Items.Clear();
+        _cmbMethod.Items.AddRange([Language.All, "GET", "POST", "PUT", "DELETE", "PATCH"]);
+        _cmbStatusCode.Items.Clear();
+        _cmbStatusCode.Items.AddRange([Language.All, "2xx", "3xx", "4xx", "5xx", "0"]);
+        _cmbLogLevel.Items.Clear();
+        _cmbLogLevel.Items.AddRange([Language.All, "V", "D", "I", "W", "E", "F"]);
+        _cmbLogTag.Items.Clear();
+        _cmbLogTag.Items.Add(Language.All);
     }
 
     private void WireComponentEvents()
@@ -236,8 +278,8 @@ public partial class MainForm : Form
         Shown -= OnMissingAdbPromptShown;
 
         var result = MessageBox.Show(
-            "ADB was not found in the application directory.\n\nWould you like to set the ADB path manually?",
-            "ADB Not Found",
+            Language.MissingAdbMessage,
+            Language.MissingAdbTitle,
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question);
         if (result == DialogResult.Yes)
@@ -268,17 +310,17 @@ public partial class MainForm : Form
         var adbPath = _adbHelper.GetAdbPath();
         var scrcpyPath = _scrcpyManager.GetScrcpyPath();
         var adbText = adbPath != null
-            ? _adbValidated ? $"ADB: {Path.GetFileName(adbPath)}" : "ADB: Checking..."
-            : "ADB: Not found";
+            ? _adbValidated ? Language.AdbStatusReady(Path.GetFileName(adbPath)) : Language.AdbCheckingStatus
+            : Language.AdbNotFoundStatus;
         var scrcpyText = _scrcpyPreparing
-            ? "scrcpy: Deploying..."
+            ? Language.ScrcpyPreparing
             : scrcpyPath != null && _scrcpyValidated
-                ? $"scrcpy: {Path.GetFileName(scrcpyPath)}"
+                ? Language.ScrcpyStatusReady(Path.GetFileName(scrcpyPath))
                 : scrcpyPath != null
-                    ? "scrcpy: Checking..."
+                    ? Language.ScrcpyCheckingStatus
                     : !string.IsNullOrEmpty(_scrcpyDeployError)
-                    ? "scrcpy: Deploy failed"
-                    : "scrcpy: Not ready";
+                    ? Language.ScrcpyDeployFailed
+                    : Language.ScrcpyNotReady;
         _lblAdbStatus.Text = $"{adbText} | {scrcpyText}";
         _lblAdbStatus.ForeColor = adbPath == null
             ? Color.Red
@@ -350,7 +392,7 @@ public partial class MainForm : Form
     private void OnToggleDetailView(object? sender, EventArgs e)
     {
         _detailViewIsRaw = !_detailViewIsRaw;
-        _btnToggleView.Text = _detailViewIsRaw ? "Tree" : "Raw";
+        _btnToggleView.Text = _detailViewIsRaw ? Language.Tree : Language.Raw;
         _btnExpandAll.Enabled = !_detailViewIsRaw;
         _btnCollapseAll.Enabled = !_detailViewIsRaw;
         _btnCollapseTo2.Enabled = !_detailViewIsRaw;
@@ -1111,11 +1153,11 @@ public partial class MainForm : Form
             return false;
 
         var method = _cmbMethod.SelectedItem as string;
-        if (method != "All" && !string.IsNullOrEmpty(method) && !string.Equals(entry.Method, method, StringComparison.OrdinalIgnoreCase))
+        if (method != Language.All && !string.IsNullOrEmpty(method) && !string.Equals(entry.Method, method, StringComparison.OrdinalIgnoreCase))
             return false;
 
         var statusFilter = _cmbStatusCode.SelectedItem as string;
-        if (statusFilter != "All" && !string.IsNullOrEmpty(statusFilter))
+        if (statusFilter != Language.All && !string.IsNullOrEmpty(statusFilter))
         {
             if (statusFilter == "0" && entry.Code != 0) return false;
             else if (statusFilter != "0")

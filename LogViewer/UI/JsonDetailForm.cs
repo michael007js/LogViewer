@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using LogViewer.Models;
+using LogViewer.Static;
 using LogViewer.Utils;
 
 namespace LogViewer.UI;
@@ -120,7 +121,7 @@ public partial class JsonDetailForm : Form
         _requestIsRaw = !_requestIsRaw;
         _jsonRequest.Visible = !_requestIsRaw;
         _rawRequest.Visible = _requestIsRaw;
-        _btnToggleRequest.Text = _requestIsRaw ? "Tree" : "Raw";
+        _btnToggleRequest.Text = _requestIsRaw ? Language.Tree : Language.Raw;
         _btnExpandReq.Enabled = !_requestIsRaw;
         _btnCollapseReq.Enabled = !_requestIsRaw;
         _btnLvl2Req.Enabled = !_requestIsRaw;
@@ -133,7 +134,7 @@ public partial class JsonDetailForm : Form
         _responseIsRaw = !_responseIsRaw;
         _jsonResponse.Visible = !_responseIsRaw;
         _rawResponse.Visible = _responseIsRaw;
-        _btnToggleResponse.Text = _responseIsRaw ? "Tree" : "Raw";
+        _btnToggleResponse.Text = _responseIsRaw ? Language.Tree : Language.Raw;
         _btnExpandRes.Enabled = !_responseIsRaw;
         _btnCollapseRes.Enabled = !_responseIsRaw;
         _btnLvl2Res.Enabled = !_responseIsRaw;

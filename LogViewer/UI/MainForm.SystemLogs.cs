@@ -1,4 +1,5 @@
 using LogViewer.Models;
+using LogViewer.Static;
 using LogViewer.Utils;
 
 namespace LogViewer.UI;
@@ -46,10 +47,10 @@ public partial class MainForm
     private void ConfigureSystemLogList()
     {
         BufferedListViewHelper.EnableDoubleBuffer(_lstSystemLogs);
-        _lstSystemLogs.Columns.Add("Time", 90);
-        _lstSystemLogs.Columns.Add("Lvl", 35);
-        _lstSystemLogs.Columns.Add("Tag", 120);
-        _lstSystemLogs.Columns.Add("Message", 500);
+        _lstSystemLogs.Columns.Add(Language.TimeColumn, 90);
+        _lstSystemLogs.Columns.Add(Language.LevelColumn, 35);
+        _lstSystemLogs.Columns.Add(Language.TagColumn, 120);
+        _lstSystemLogs.Columns.Add(Language.MessageColumn, 500);
         _lstSystemLogs.RetrieveVirtualItem += OnSystemLogsRetrieveVirtualItem;
         _lstSystemLogs.CacheVirtualItems += OnSystemLogsCacheVirtualItems;
         _lstSystemLogs.SelectedIndexChanged += OnSystemLogSelectedIndexChanged;
@@ -463,7 +464,7 @@ public partial class MainForm
             return;
         }
 
-        var selected = _cmbLogTag.SelectedItem as string ?? "All";
+        var selected = _cmbLogTag.SelectedItem as string ?? Language.All;
         var ordered = _systemLogStore.GetOrderedTags(_systemLogSnapshot.DeviceId, _systemLogSnapshot.MaxSequenceInclusive);
         if (_cmbLogTag.Items.Count == ordered.Length &&
             ordered.SequenceEqual(_cmbLogTag.Items.Cast<string>(), StringComparer.OrdinalIgnoreCase))
@@ -474,7 +475,7 @@ public partial class MainForm
         _cmbLogTag.BeginUpdate();
         _cmbLogTag.Items.Clear();
         _cmbLogTag.Items.AddRange(ordered);
-        _cmbLogTag.SelectedItem = ordered.Contains(selected, StringComparer.OrdinalIgnoreCase) ? selected : "All";
+        _cmbLogTag.SelectedItem = ordered.Contains(selected, StringComparer.OrdinalIgnoreCase) ? selected : Language.All;
         _cmbLogTag.EndUpdate();
     }
 
@@ -558,11 +559,11 @@ public partial class MainForm
     private ContextMenuStrip CreateSystemLogMenu()
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Copy Message", null, async (s, e) =>
+        menu.Items.Add(Language.CopyMessage, null, async (s, e) =>
         {
             await CopySelectedSystemLogAsync(static entry => entry.Message).ConfigureAwait(false);
         });
-        menu.Items.Add("Copy Full Line", null, async (s, e) =>
+        menu.Items.Add(Language.CopyFullLine, null, async (s, e) =>
         {
             await CopySelectedSystemLogAsync(static entry => $"{entry.Timestamp:HH:mm:ss.fff} {entry.LevelShort} {entry.Tag} {entry.Message}")
                 .ConfigureAwait(false);
@@ -644,8 +645,8 @@ public partial class MainForm
 
     private void UpdateSystemLogUiState()
     {
-        _btnSystemPauseResume.Text = _systemLogPaused ? "Resume" : "Pause";
-        _lblSystemBacklog.Text = _systemPausedBacklog > 0 ? $"Buffered: {_systemPausedBacklog}" : string.Empty;
+        _btnSystemPauseResume.Text = _systemLogPaused ? Language.Resume : Language.Pause;
+        _lblSystemBacklog.Text = _systemPausedBacklog > 0 ? Language.BufferedCount(_systemPausedBacklog) : string.Empty;
         _lblSystemBacklog.Visible = _systemPausedBacklog > 0;
         _btnSystemPauseResume.BackColor = _systemLogPaused ? Color.LightGoldenrodYellow : DefaultBackColor;
         _btnSystemScrollToBottom.BackColor = _systemAutoScrollEnabled ? Color.LightSkyBlue : DefaultBackColor;
@@ -713,7 +714,7 @@ public partial class MainForm
 
     private static string? NormalizeSystemFilterValue(string? value)
     {
-        return string.IsNullOrWhiteSpace(value) || string.Equals(value, "All", StringComparison.OrdinalIgnoreCase)
+        return string.IsNullOrWhiteSpace(value) || string.Equals(value, Language.All, StringComparison.OrdinalIgnoreCase)
             ? null
             : value;
     }

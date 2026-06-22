@@ -1,4 +1,5 @@
 using LogViewer.Models;
+using LogViewer.Static;
 using LogViewer.Utils;
 
 namespace LogViewer.UI;
@@ -32,7 +33,7 @@ public class SettingsDialog : Form
 
     private void InitializeComponents()
     {
-        Text = "Settings";
+        Text = Language.SettingsTitle;
         Size = new Size(500, 560);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -53,37 +54,37 @@ public class SettingsDialog : Form
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
 
         var row = 0;
-        AddRow(panel, row++, "Server Port:", _nudPort = CreateNumeric(1024, 65535, _settings.ServerPort));
-        AddRow(panel, row++, "Max Logs Per Device:", _nudMaxPerDevice = CreateNumeric(100, 100000, _settings.MaxLogEntriesPerDevice));
-        AddRow(panel, row++, "Max Logs All Devices:", _nudMaxAll = CreateNumeric(100, 100000, _settings.MaxLogEntriesAll));
-        AddRow(panel, row++, "System Log Hot Cache:", _nudMaxSystemLog = CreateNumeric(100, 100000, _settings.MaxSystemLogEntries));
-        AddRow(panel, row++, "Android Send Queue*:", _nudAndroidQueue = CreateNumeric(100, 10000, _settings.AndroidQueueSize));
-        AddRow(panel, row++, "Body Truncate (KB)*:", _nudMaxBodySize = CreateNumeric(10, 1024, _settings.MaxBodySizeKb));
+        AddRow(panel, row++, "服务端口：", _nudPort = CreateNumeric(1024, 65535, _settings.ServerPort));
+        AddRow(panel, row++, "单设备最大日志：", _nudMaxPerDevice = CreateNumeric(100, 100000, _settings.MaxLogEntriesPerDevice));
+        AddRow(panel, row++, "全部设备最大日志：", _nudMaxAll = CreateNumeric(100, 100000, _settings.MaxLogEntriesAll));
+        AddRow(panel, row++, "系统日志热缓存：", _nudMaxSystemLog = CreateNumeric(100, 100000, _settings.MaxSystemLogEntries));
+        AddRow(panel, row++, "Android 发送队列*：", _nudAndroidQueue = CreateNumeric(100, 10000, _settings.AndroidQueueSize));
+        AddRow(panel, row++, "Body 截断(KB)*：", _nudMaxBodySize = CreateNumeric(10, 1024, _settings.MaxBodySizeKb));
 
-        _chkAutoAdb = new CheckBox { Text = "Auto ADB Reverse on start", Checked = _settings.AutoAdbReverse };
+        _chkAutoAdb = new CheckBox { Text = Language.AutoAdbReverse, Checked = _settings.AutoAdbReverse };
         panel.Controls.Add(_chkAutoAdb, 0, row);
         panel.SetColumnSpan(_chkAutoAdb, 3);
         row++;
 
-        _chkAutoLogcat = new CheckBox { Text = "Auto start Logcat on device connect", Checked = _settings.AutoStartLogcat };
+        _chkAutoLogcat = new CheckBox { Text = Language.AutoStartLogcat, Checked = _settings.AutoStartLogcat };
         panel.Controls.Add(_chkAutoLogcat, 0, row);
         panel.SetColumnSpan(_chkAutoLogcat, 3);
         row++;
 
-        _chkAutoStartScrcpy = new CheckBox { Text = "Auto start scrcpy when selecting a device", Checked = _settings.AutoStartScrcpyForSelectedDevice };
+        _chkAutoStartScrcpy = new CheckBox { Text = Language.AutoStartScrcpy, Checked = _settings.AutoStartScrcpyForSelectedDevice };
         panel.Controls.Add(_chkAutoStartScrcpy, 0, row);
         panel.SetColumnSpan(_chkAutoStartScrcpy, 3);
         row++;
 
-        _chkAutoFormatJson = new CheckBox { Text = "Auto format JSON with folding", Checked = _settings.AutoFormatJson };
+        _chkAutoFormatJson = new CheckBox { Text = Language.AutoFormatJson, Checked = _settings.AutoFormatJson };
         panel.Controls.Add(_chkAutoFormatJson, 0, row);
         panel.SetColumnSpan(_chkAutoFormatJson, 3);
         row++;
 
-        AddRow(panel, row++, "Font Size (pt):", _nudFontSize = CreateNumeric(8, 24, _settings.FontSize));
-        AddRow(panel, row++, "ADB Scan Interval (ms):", _nudAdbScanInterval = CreateNumeric(500, 30000, _settings.AdbScanIntervalMs));
+        AddRow(panel, row++, "字体大小(pt)：", _nudFontSize = CreateNumeric(8, 24, _settings.FontSize));
+        AddRow(panel, row++, "ADB 扫描间隔(ms)：", _nudAdbScanInterval = CreateNumeric(500, 30000, _settings.AdbScanIntervalMs));
 
-        panel.Controls.Add(new Label { Text = "Logcat Filter:", AutoSize = true }, 0, row);
+        panel.Controls.Add(new Label { Text = Language.LogcatFilter, AutoSize = true }, 0, row);
         _txtLogcatFilter = new TextBox { Text = _settings.LogcatFilter, Dock = DockStyle.Fill };
         panel.Controls.Add(_txtLogcatFilter, 1, row);
         panel.SetColumnSpan(_txtLogcatFilter, 2);
@@ -91,7 +92,7 @@ public class SettingsDialog : Form
 
         var noteLabel = new Label
         {
-            Text = "* Requires modifying AppConstant.java and\n  rebuilding the Android app to take effect.",
+            Text = Language.SettingsNote,
             ForeColor = Color.Gray,
             AutoSize = true
         };
@@ -101,7 +102,7 @@ public class SettingsDialog : Form
 
         var filterNote = new Label
         {
-            Text = "Logcat filter: empty=all, e.g. ActivityManager:I *:S",
+            Text = Language.LogcatFilterNote,
             ForeColor = Color.Gray,
             AutoSize = true
         };
@@ -118,8 +119,8 @@ public class SettingsDialog : Form
             Padding = new Padding(10)
         };
 
-        _btnCancel = new Button { Text = "Cancel", Size = new Size(90, 30), DialogResult = DialogResult.Cancel };
-        _btnOk = new Button { Text = "OK", Size = new Size(90, 30) };
+        _btnCancel = new Button { Text = Language.Cancel, Size = new Size(90, 30), DialogResult = DialogResult.Cancel };
+        _btnOk = new Button { Text = Language.Confirm, Size = new Size(90, 30) };
         _btnOk.Click += OnOkClick;
 
         btnPanel.Controls.Add(_btnCancel);

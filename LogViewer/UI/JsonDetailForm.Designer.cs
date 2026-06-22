@@ -1,3 +1,5 @@
+using LogViewer.Static;
+
 namespace LogViewer.UI;
 
 public partial class JsonDetailForm
@@ -41,7 +43,7 @@ public partial class JsonDetailForm
         _split.Panel2.SuspendLayout();
         _split.SuspendLayout();
 
-        Text = $"{_entry.Method ?? ""} {_entry.UrlPath} {_entry.Code} {_entry.Duration}ms";
+        Text = string.Format(Language.JsonDetailTitle, _entry.Method ?? string.Empty, _entry.UrlPath, _entry.Code, _entry.Duration);
         Size = new Size(1000, 600);
         MinimumSize = new Size(600, 400);
         StartPosition = FormStartPosition.CenterParent;
@@ -56,20 +58,20 @@ public partial class JsonDetailForm
         _requestContainer.Dock = DockStyle.Fill;
         _requestToolbar.Dock = DockStyle.Top;
         _requestToolbar.Height = 26;
-        _lblRequestTitle.Text = "Request Body";
+        _lblRequestTitle.Text = Language.RequestBody;
         _lblRequestTitle.Location = new Point(0, 4);
         _lblRequestTitle.AutoSize = true;
         _lblRequestTitle.Font = new Font("Consolas", 9F, FontStyle.Bold);
-        _btnToggleRequest.Text = "Raw";
+        _btnToggleRequest.Text = Language.Raw;
         _btnToggleRequest.SetBounds(100, 2, 42, 23);
-        _btnExpandReq.Text = "Expand";
+        _btnExpandReq.Text = Language.Expand;
         _btnExpandReq.SetBounds(148, 2, 50, 23);
-        _btnCollapseReq.Text = "Collapse";
+        _btnCollapseReq.Text = Language.Collapse;
         _btnCollapseReq.SetBounds(200, 2, 55, 23);
-        _btnLvl2Req.Text = "Lvl2";
+        _btnLvl2Req.Text = Language.CollapseLevel2;
         _btnLvl2Req.SetBounds(257, 2, 36, 23);
         _txtSearchReq.SetBounds(300, 3, 80, 23);
-        _txtSearchReq.PlaceholderText = "Search...";
+        _txtSearchReq.PlaceholderText = Language.SearchPlaceholder;
         _btnSearchReq.Text = "\u25B6";
         _btnSearchReq.SetBounds(382, 2, 22, 23);
         _requestToolbar.Controls.Add(_lblRequestTitle);
@@ -89,20 +91,20 @@ public partial class JsonDetailForm
         _responseContainer.Dock = DockStyle.Fill;
         _responseToolbar.Dock = DockStyle.Top;
         _responseToolbar.Height = 26;
-        _lblResponseTitle.Text = "Response Body";
+        _lblResponseTitle.Text = Language.ResponseBody;
         _lblResponseTitle.Location = new Point(0, 4);
         _lblResponseTitle.AutoSize = true;
         _lblResponseTitle.Font = new Font("Consolas", 9F, FontStyle.Bold);
-        _btnToggleResponse.Text = "Raw";
+        _btnToggleResponse.Text = Language.Raw;
         _btnToggleResponse.SetBounds(110, 2, 42, 23);
-        _btnExpandRes.Text = "Expand";
+        _btnExpandRes.Text = Language.Expand;
         _btnExpandRes.SetBounds(158, 2, 50, 23);
-        _btnCollapseRes.Text = "Collapse";
+        _btnCollapseRes.Text = Language.Collapse;
         _btnCollapseRes.SetBounds(210, 2, 55, 23);
-        _btnLvl2Res.Text = "Lvl2";
+        _btnLvl2Res.Text = Language.CollapseLevel2;
         _btnLvl2Res.SetBounds(267, 2, 36, 23);
         _txtSearchRes.SetBounds(310, 3, 80, 23);
-        _txtSearchRes.PlaceholderText = "Search...";
+        _txtSearchRes.PlaceholderText = Language.SearchPlaceholder;
         _btnSearchRes.Text = "\u25B6";
         _btnSearchRes.SetBounds(392, 2, 22, 23);
         _responseToolbar.Controls.Add(_lblResponseTitle);
