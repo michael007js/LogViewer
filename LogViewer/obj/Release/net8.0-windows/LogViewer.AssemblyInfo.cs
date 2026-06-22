@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LogViewer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8116a7adec2edfdd15c327a2ba7efb6682434feb")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2234e6397ee629eb6969dda2d34be451d8356739")]
 [assembly: System.Reflection.AssemblyProductAttribute("LogViewer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LogViewer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

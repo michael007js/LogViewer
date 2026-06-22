@@ -65,7 +65,7 @@ public class DeviceConnection
                         var entry = JsonSerializer.Deserialize<LogEntry>(jsonStr, JsonOptions);
                         if (entry != null)
                         {
-                            entry.Content = TryDecodeGzipContent(entry.Content);
+                            entry.Content = TryDecodeGzipJsonContent(entry.Content);
                             LogReceived?.Invoke(this, entry);
                         }
                         break;
@@ -124,6 +124,89 @@ public class DeviceConnection
         catch
         {
             return content;
+        }
+    }
+
+    private static string? TryDecodeGzipJsonContent(string? content)
+    {
+        var decoded = TryDecodeGzipContent(content);
+        if (string.IsNullOrWhiteSpace(decoded))
+        {
+            return decoded;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(decoded);
+            var changed = false;
+            var normalized = NormalizeJsonElement(doc.RootElement, ref changed);
+            return changed ? JsonSerializer.Serialize(normalized, JsonOptions) : decoded;
+        }
+        catch
+        {
+            return decoded;
+        }
+    }
+
+    private static object? NormalizeJsonElement(JsonElement element, ref bool changed)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.Object => NormalizeObject(element, ref changed),
+            JsonValueKind.Array => NormalizeArray(element, ref changed),
+            JsonValueKind.String => NormalizeString(element.GetString(), ref changed),
+            JsonValueKind.Number => JsonSerializer.Deserialize<object>(element.GetRawText(), JsonOptions),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            _ => element.GetRawText()
+        };
+    }
+
+    private static Dictionary<string, object?> NormalizeObject(JsonElement element, ref bool changed)
+    {
+        var result = new Dictionary<string, object?>();
+        foreach (var prop in element.EnumerateObject())
+        {
+            result[prop.Name] = NormalizeJsonElement(prop.Value, ref changed);
+        }
+
+        return result;
+    }
+
+    private static List<object?> NormalizeArray(JsonElement element, ref bool changed)
+    {
+        var result = new List<object?>();
+        foreach (var item in element.EnumerateArray())
+        {
+            result.Add(NormalizeJsonElement(item, ref changed));
+        }
+
+        return result;
+    }
+
+    private static object? NormalizeString(string? value, ref bool changed)
+    {
+        var decoded = TryDecodeGzipContent(value);
+        if (string.Equals(decoded, value, StringComparison.Ordinal))
+        {
+            return value;
+        }
+
+        changed = true;
+        if (string.IsNullOrWhiteSpace(decoded))
+        {
+            return decoded;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(decoded);
+            return NormalizeJsonElement(doc.RootElement, ref changed);
+        }
+        catch
+        {
+            return decoded;
         }
     }
 
