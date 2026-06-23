@@ -88,6 +88,12 @@ adb -s {serial} logcat -v threadtime {filter}
 | JsonTreeView | `UI/JsonTreeView.cs` | JSON 折叠 + 语法高亮 TreeView（OwnerDrawText） |
 | DevicePanel | `UI/DevicePanel.cs` | 左侧 ADB 设备操控面板（设备选择 + scrcpy 宿主 + 控制条） |
 | SettingsDialog | `UI/SettingsDialog.cs` | 设置对话框（ADB 路径检测 + scrcpy 自动部署/高级覆盖） |
+| Language | `Static/Language.cs` | UI 字符串常量（菜单/状态/按钮/错误提示） |
+| BufferedListView | `UI/BufferedListView.cs` | ListView 双缓冲/精确顶部索引/滚动恢复辅助 |
+| ClipboardTextHelper | `UI/ClipboardTextHelper.cs` | 剪贴板安全写入辅助 |
+| JsonTreeViewLoader | `UI/JsonTreeViewLoader.cs` | JSON→TreeNode 构建扩展方法 |
+| SystemLogSnapshot | `UI/SystemLogSnapshot.cs` | System Logs 当前 scope/filter 只读快照 |
+| SystemLogSessionStore | `Utils/SystemLogSessionStore.cs` | System Logs 会话级 jsonl 追加存储+索引+热缓存 |
 | AdbHelper | `Utils/AdbHelper.cs` | ADB 搜索/验证/设备列表/Reverse |
 | ScrcpyManager | `Utils/ScrcpyManager.cs` | scrcpy 搜索/启动/内嵌宿主/窗口生命周期管理 |
 | JsonFormatter | `Utils/JsonFormatter.cs` | JSON 格式化 + JSONPath |
@@ -141,15 +147,18 @@ Program.cs → ApplicationConfiguration.Initialize() → Application.Run(new Mai
 ```
 UI/ ──→ Network/ ──→ Models/
  │          │
- └──→ Utils/ ──→ Models/
+ ├──→ Utils/ ──→ Models/
+ └──→ Static/（零依赖）
 ```
 
 | 层 | 目录 | 职责 | 依赖 |
 |----|------|------|------|
 | 数据模型 | `Models/` | LogEntry/SystemLogEntry/DeviceInfo/AppSettings/RingBuffer | 无 |
 | 通信层 | `Network/` | TCP Server + 协议解析 + adb logcat | → Models |
-| 界面层 | `UI/` | 主窗口 + JSON 详情 + 设备面板 + 设置 | → Network, Utils, Models |
-| 工具层 | `Utils/` | ADB 操作 + scrcpy 宿主 + JSON 格式化 | → Models |
+| 界面层 | `UI/` | 主窗口 + JSON 详情 + 设备面板 + 设置 | → Network, Utils, Static, Models |
+| 工具层 | `Utils/` | ADB 操作 + scrcpy 宿主 + JSON 格式化 + 会话存储 | → Models |
+| 静态资源 | `Static/` | UI 字符串常量 | 无 |
+| 运行时工具 | `Runtime/WindowsTools/` | adb.exe + scrcpy.exe（CopyToOutputDirectory） | 无（非代码） |
 
 ## 11. 给 AI 的工作约束
 

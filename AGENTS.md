@@ -268,6 +268,8 @@ LogViewer/
 │   ├── JsonTreeView.cs                 JSON折叠+语法高亮TreeView
 │   ├── DevicePanel.cs                  设备列表+切换面板
 │   └── SettingsDialog.cs               设置对话框
+├── Static/                             静态资源层（零依赖，被UI引用）
+│   └── Language.cs                     UI字符串常量
 ├── Utils/                              工具类
 │   ├── AdbHelper.cs                    ADB搜索/验证/设备列表/Reverse
 │   └── JsonFormatter.cs                JSON格式化+JSONPath
@@ -281,7 +283,8 @@ LogViewer/
 ```
 UI ──► Network ──► Models
  │        │
- └──► Utils ──► Models
+ ├──► Utils ──► Models
+ └──► Static（零依赖）
 ```
 
-禁止：Network → UI，Utils → UI，Models → 任何层。
+禁止：Network → UI，Utils → UI，Models → 任何层，Static → 任何层。

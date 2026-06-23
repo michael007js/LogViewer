@@ -55,6 +55,11 @@
 | `BufferedListView.cs` | ListView 双缓冲/顶部锚点恢复辅助，供 networklogs/systemlogs 共用 |
 | `SettingsDialog.cs` | 设置对话框（ADB 路径检测 + scrcpy 自动部署/高级覆盖） |
 
+### 静态资源层 (Static/)
+| 文件 | 说明 |
+|------|------|
+| `Language.cs` | UI 字符串常量（菜单/状态/按钮/错误提示），零依赖，被 UI 引用 |
+
 ### 工具类 (Utils/)
 | 文件 | 说明 |
 |------|------|
@@ -134,6 +139,7 @@ if (BitConverter.IsLittleEndian) Array.Reverse(lengthBytes);
 | `Network/` 放通信层，零 UI 依赖 | Network 引用 UI 控件 |
 | `UI/` 放界面层 | 控件散落在项目根目录 |
 | `Utils/` 放工具类 | 工具类混入 Network/UI |
+| `Static/` 放静态资源（字符串常量等） | Static 混入 UI/Utils |
 | 命名空间 = `LogViewer.` + 目录路径 | 命名空间与目录不匹配 |
 | 依赖方向：UI → Network → Models；UI → Utils → Models | Network → UI / Utils → UI / Models → 任何层 |
 
