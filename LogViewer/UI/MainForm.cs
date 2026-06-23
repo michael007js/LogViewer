@@ -1632,18 +1632,23 @@ public partial class MainForm : Form
 
         try
         {
-            var contentAspectRatio = GetDeviceContentAspectRatio(serial);
-            var hostHandle = embedded ? _devicePanel.EnsureMirrorHostHandle() : IntPtr.Zero;
-            var session = await _scrcpyManager.StartSessionAsync(new ScrcpyStartOptions
-            {
-                ScrcpyPath = scrcpyPath,
-                DeviceSerial = serial,
-                WindowTitle = $"LogViewer.scrcpy.{serial}.{Guid.NewGuid():N}",
-                Mode = embedded ? ScrcpySessionMode.Embedded : ScrcpySessionMode.External,
-                HostHandle = hostHandle,
-                AngleDegrees = _scrcpyRotationIndex * 90,
-                ContentAspectRatio = contentAspectRatio
-            }, token).ConfigureAwait(false);
+             var contentAspectRatio = GetDeviceContentAspectRatio(serial);
+             var hostHandle = embedded ? _devicePanel.EnsureMirrorHostHandle() : IntPtr.Zero;
+             var windowBounds = embedded ? _devicePanel.GetMirrorDisplayBounds() : Rectangle.Empty;
+             var session = await _scrcpyManager.StartSessionAsync(new ScrcpyStartOptions
+             {
+                 ScrcpyPath = scrcpyPath,
+                 DeviceSerial = serial,
+                 WindowTitle = $"LogViewer.scrcpy.{serial}.{Guid.NewGuid():N}",
+                 Mode = embedded ? ScrcpySessionMode.Embedded : ScrcpySessionMode.External,
+                 HostHandle = hostHandle,
+                 AngleDegrees = _scrcpyRotationIndex * 90,
+                 ContentAspectRatio = contentAspectRatio,
+                 WindowX = windowBounds.X,
+                 WindowY = windowBounds.Y,
+                 WindowWidth = windowBounds.Width,
+                 WindowHeight = windowBounds.Height
+             }, token).ConfigureAwait(false);
 
             if (token.IsCancellationRequested || IsDisposed)
             {
@@ -1744,14 +1749,15 @@ public partial class MainForm : Form
 
     private void ApplyEmbeddedMirrorLayout()
     {
+        if (_scrcpySession?.IsRunning != true)
+            return;
+
         _devicePanel.SyncMirrorBounds();
         var bounds = _devicePanel.GetMirrorDisplayBounds();
         if (bounds.Width <= 0 || bounds.Height <= 0)
-        {
             return;
-        }
 
-        _scrcpySession?.ResizeEmbeddedBounds(bounds);
+        _scrcpySession.ResizeEmbeddedBounds(bounds);
     }
 
     private System.Windows.Forms.Timer CreateMirrorRestartTimer()

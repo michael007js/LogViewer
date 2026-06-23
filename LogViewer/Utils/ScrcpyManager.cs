@@ -21,6 +21,10 @@ internal sealed class ScrcpyStartOptions
     public IntPtr HostHandle { get; init; }
     public int AngleDegrees { get; init; }
     public double ContentAspectRatio { get; init; }
+    public int WindowX { get; init; }
+    public int WindowY { get; init; }
+    public int WindowWidth { get; init; }
+    public int WindowHeight { get; init; }
 }
 
 internal sealed class ScrcpySession : IDisposable
@@ -256,6 +260,19 @@ internal sealed class ScrcpyManager
         psi.ArgumentList.Add(options.WindowTitle);
         psi.ArgumentList.Add("--no-audio");
         psi.ArgumentList.Add("--no-clipboard-autosync");
+        psi.ArgumentList.Add("--window-borderless");
+
+        if (options.WindowWidth > 0 && options.WindowHeight > 0)
+        {
+            psi.ArgumentList.Add("--window-x");
+            psi.ArgumentList.Add(options.WindowX.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add("--window-y");
+            psi.ArgumentList.Add(options.WindowY.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add("--window-width");
+            psi.ArgumentList.Add(options.WindowWidth.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add("--window-height");
+            psi.ArgumentList.Add(options.WindowHeight.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
 
         if (options.AngleDegrees != 0)
         {
@@ -354,9 +371,7 @@ internal static class EmbeddedWindowHost
     public static void Attach(IntPtr windowHandle, IntPtr hostHandle)
     {
         if (windowHandle == IntPtr.Zero || hostHandle == IntPtr.Zero)
-        {
             return;
-        }
 
         SetParent(windowHandle, hostHandle);
 
@@ -377,11 +392,8 @@ internal static class EmbeddedWindowHost
 
         if (GetClientRect(hostHandle, out var rect))
         {
-            SetWindowPos(
-                windowHandle,
-                IntPtr.Zero,
-                0,
-                0,
+            SetWindowPos(windowHandle, IntPtr.Zero,
+                0, 0,
                 Math.Max(0, rect.Right - rect.Left),
                 Math.Max(0, rect.Bottom - rect.Top),
                 SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
@@ -392,15 +404,8 @@ internal static class EmbeddedWindowHost
 
     public static void ResizeToBounds(IntPtr windowHandle, Rectangle bounds)
     {
-        if (windowHandle == IntPtr.Zero)
-        {
+        if (windowHandle == IntPtr.Zero || bounds.Width <= 0 || bounds.Height <= 0)
             return;
-        }
-
-        if (bounds.Width <= 0 || bounds.Height <= 0)
-        {
-            return;
-        }
 
         MoveWindow(windowHandle, bounds.X, bounds.Y, bounds.Width, bounds.Height, true);
     }
@@ -408,9 +413,7 @@ internal static class EmbeddedWindowHost
     public static void RequestClose(IntPtr windowHandle)
     {
         if (windowHandle != IntPtr.Zero)
-        {
             PostMessage(windowHandle, WmClose, IntPtr.Zero, IntPtr.Zero);
-        }
     }
 
     public static bool TryGetClientSize(IntPtr hostHandle, out int width, out int height)
@@ -418,9 +421,7 @@ internal static class EmbeddedWindowHost
         width = 0;
         height = 0;
         if (hostHandle == IntPtr.Zero || !GetClientRect(hostHandle, out var rect))
-        {
             return false;
-        }
 
         width = Math.Max(0, rect.Right - rect.Left);
         height = Math.Max(0, rect.Bottom - rect.Top);
@@ -432,9 +433,7 @@ internal static class EmbeddedWindowHost
         width = 0;
         height = 0;
         if (windowHandle == IntPtr.Zero || !GetWindowRect(windowHandle, out var rect))
-        {
             return false;
-        }
 
         width = Math.Max(0, rect.Right - rect.Left);
         height = Math.Max(0, rect.Bottom - rect.Top);
