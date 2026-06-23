@@ -10,6 +10,7 @@ public sealed class DevicePanel : UserControl
     private ComboBox _cmbDevices = null!;
     private Button _btnRefreshAdb = null!;
     private Panel _mirrorHostPanel = null!;
+    private Panel _mirrorViewportPanel = null!;
     private Label _lblMirrorPlaceholder = null!;
     private Label _lblMirrorStatus = null!;
     private Button _btnMirrorToggle = null!;
@@ -22,6 +23,8 @@ public sealed class DevicePanel : UserControl
     private bool _mirrorRunning;
     private bool _mirrorReady;
     private bool _mirrorHostVisible;
+    private double _mirrorAspectRatio = 9d / 16d;
+    private Rectangle _mirrorDisplayBounds = Rectangle.Empty;
     private string _mirrorStatusText = Language.DeviceSelectPrompt;
 
     public event EventHandler<string?>? DeviceSelected;
@@ -32,6 +35,7 @@ public sealed class DevicePanel : UserControl
     public event EventHandler<string>? MirrorRotateRequested;
     public event EventHandler<string>? MirrorScreenshotRequested;
     public event EventHandler<string>? MirrorPopoutRequested;
+    public event EventHandler? MirrorLayoutChanged;
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -39,7 +43,21 @@ public sealed class DevicePanel : UserControl
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IntPtr MirrorHostHandle => _mirrorHostPanel?.IsHandleCreated == true ? _mirrorHostPanel.Handle : IntPtr.Zero;
+    public IntPtr MirrorHostHandle
+    {
+        get
+        {
+            if (_mirrorHostPanel?.IsHandleCreated == true)
+            {
+                return _mirrorHostPanel.Handle;
+            }
+            return IntPtr.Zero;
+        }
+    }
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Rectangle MirrorDisplayBounds => _mirrorDisplayBounds;
 
     public DevicePanel()
     {
@@ -144,6 +162,18 @@ public sealed class DevicePanel : UserControl
             BorderStyle = BorderStyle.FixedSingle,
             Margin = new Padding(0, 8, 0, 8)
         };
+        _mirrorHostPanel.Resize += (_, _) => UpdateMirrorHostBounds();
+        _mirrorHostPanel.SizeChanged += (_, _) => UpdateMirrorHostBounds();
+        _mirrorHostPanel.VisibleChanged += (_, _) => UpdateMirrorHostBounds();
+        _mirrorHostPanel.Layout += (_, _) => UpdateMirrorHostBounds();
+
+        _mirrorViewportPanel = new Panel
+        {
+            BackColor = Color.Black,
+            Visible = true
+        };
+        _mirrorViewportPanel.Visible = false;
+        _mirrorHostPanel.Controls.Add(_mirrorViewportPanel);
 
         _lblMirrorPlaceholder = new Label
         {
@@ -260,6 +290,7 @@ public sealed class DevicePanel : UserControl
         RefreshList();
         UpdateMirrorUiState();
         Resize += (_, _) => UpdateMirrorHostBounds();
+        Layout += (_, _) => UpdateMirrorHostBounds();
     }
 
     public void AddOrUpdateDevice(DeviceInfo info, int logCount)
@@ -401,9 +432,46 @@ public sealed class DevicePanel : UserControl
         UpdateMirrorUiState();
     }
 
+    public void SetMirrorAspectRatio(double aspectRatio)
+    {
+        if (double.IsNaN(aspectRatio) || double.IsInfinity(aspectRatio) || aspectRatio <= 0)
+        {
+            aspectRatio = 9d / 16d;
+        }
+
+        _mirrorAspectRatio = aspectRatio;
+        UpdateMirrorHostBounds();
+    }
+
     public void SyncMirrorBounds()
     {
         UpdateMirrorHostBounds();
+    }
+
+    public Rectangle GetMirrorDisplayBounds()
+    {
+        return _mirrorDisplayBounds;
+    }
+
+    public IntPtr EnsureMirrorHostHandle()
+    {
+        InitializeComponents();
+        UpdateMirrorHostBounds();
+
+        if (_mirrorHostPanel?.IsHandleCreated != true)
+        {
+            _mirrorHostPanel?.CreateControl();
+            _ = _mirrorHostPanel?.Handle;
+        }
+
+        if (_mirrorViewportPanel?.IsHandleCreated != true)
+        {
+            _mirrorViewportPanel.Visible = true;
+            _mirrorViewportPanel?.CreateControl();
+            _ = _mirrorViewportPanel?.Handle;
+        }
+
+        return MirrorHostHandle;
     }
 
     private Button CreateControlButton(string text)
@@ -504,8 +572,11 @@ public sealed class DevicePanel : UserControl
 
         _lblMirrorPlaceholder.Text = _mirrorStatusText;
         _lblMirrorPlaceholder.Visible = !_mirrorHostVisible;
-        _lblMirrorPlaceholder.BringToFront();
         _lblMirrorStatus.Text = _mirrorStatusText;
+        if (!_mirrorHostVisible)
+        {
+            _lblMirrorPlaceholder.BringToFront();
+        }
 
         _btnMirrorToggle.Enabled = hasAdb;
         _btnMirrorReconnect.Enabled = hasAdb && _mirrorRunning;
@@ -517,9 +588,46 @@ public sealed class DevicePanel : UserControl
 
     private void UpdateMirrorHostBounds()
     {
-        if (_mirrorHostPanel?.IsHandleCreated != true)
+        if (_mirrorHostPanel == null)
         {
             return;
+        }
+
+        var hostWidth = _mirrorHostPanel.ClientSize.Width;
+        var hostHeight = _mirrorHostPanel.ClientSize.Height;
+        if (hostWidth <= 0 || hostHeight <= 0)
+        {
+            if (_mirrorDisplayBounds != Rectangle.Empty)
+            {
+                _mirrorDisplayBounds = Rectangle.Empty;
+                MirrorLayoutChanged?.Invoke(this, EventArgs.Empty);
+            }
+            return;
+        }
+
+        var targetWidth = hostWidth;
+        var targetHeight = (int)Math.Round(targetWidth / _mirrorAspectRatio);
+        if (targetHeight > hostHeight)
+        {
+            targetHeight = hostHeight;
+            targetWidth = (int)Math.Round(targetHeight * _mirrorAspectRatio);
+        }
+
+        targetWidth = Math.Clamp(targetWidth, 1, hostWidth);
+        targetHeight = Math.Clamp(targetHeight, 1, hostHeight);
+
+        var offsetX = (hostWidth - targetWidth) / 2;
+        var offsetY = (hostHeight - targetHeight) / 2;
+        var nextBounds = new Rectangle(offsetX, offsetY, targetWidth, targetHeight);
+        if (_mirrorViewportPanel.Bounds != nextBounds)
+        {
+            _mirrorViewportPanel.Bounds = nextBounds;
+        }
+
+        if (_mirrorDisplayBounds != nextBounds)
+        {
+            _mirrorDisplayBounds = nextBounds;
+            MirrorLayoutChanged?.Invoke(this, EventArgs.Empty);
         }
 
         _mirrorHostPanel.Invalidate();

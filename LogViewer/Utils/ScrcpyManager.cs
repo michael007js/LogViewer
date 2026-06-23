@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading;
 using LogViewer.Static;
@@ -19,6 +20,7 @@ internal sealed class ScrcpyStartOptions
     public required ScrcpySessionMode Mode { get; init; }
     public IntPtr HostHandle { get; init; }
     public int AngleDegrees { get; init; }
+    public double ContentAspectRatio { get; init; }
 }
 
 internal sealed class ScrcpySession : IDisposable
@@ -40,7 +42,6 @@ internal sealed class ScrcpySession : IDisposable
         if (Mode == ScrcpySessionMode.Embedded)
         {
             EmbeddedWindowHost.Attach(WindowHandle, HostHandle);
-            SyncEmbeddedBounds();
         }
     }
 
@@ -55,14 +56,14 @@ internal sealed class ScrcpySession : IDisposable
     public event EventHandler? Exited;
     public string LastErrorText { get; internal set; } = string.Empty;
 
-    public void SyncEmbeddedBounds()
+    public void ResizeEmbeddedBounds(Rectangle bounds)
     {
         if (Mode != ScrcpySessionMode.Embedded || WindowHandle == IntPtr.Zero || HostHandle == IntPtr.Zero)
         {
             return;
         }
 
-        EmbeddedWindowHost.ResizeToHost(WindowHandle, HostHandle);
+        EmbeddedWindowHost.ResizeToBounds(WindowHandle, bounds);
     }
 
     public void Stop()
@@ -186,6 +187,50 @@ internal sealed class ScrcpyManager
         return new List<string> { BundledScrcpyPath };
     }
 
+    public void TerminateBundledProcesses(string? scrcpyPath)
+    {
+        if (string.IsNullOrWhiteSpace(scrcpyPath))
+        {
+            return;
+        }
+
+        foreach (var process in Process.GetProcessesByName("scrcpy"))
+        {
+            try
+            {
+                if (process.HasExited)
+                {
+                    continue;
+                }
+
+                string? processPath = null;
+                try
+                {
+                    processPath = process.MainModule?.FileName;
+                }
+                catch
+                {
+                }
+
+                if (!string.IsNullOrEmpty(processPath) &&
+                    !string.Equals(processPath, scrcpyPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(2000);
+            }
+            catch
+            {
+            }
+            finally
+            {
+                try { process.Dispose(); } catch { }
+            }
+        }
+    }
+
     public async Task<ScrcpySession> StartSessionAsync(ScrcpyStartOptions options, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -209,6 +254,8 @@ internal sealed class ScrcpyManager
         psi.ArgumentList.Add(options.DeviceSerial);
         psi.ArgumentList.Add("--window-title");
         psi.ArgumentList.Add(options.WindowTitle);
+        psi.ArgumentList.Add("--no-audio");
+        psi.ArgumentList.Add("--no-clipboard-autosync");
 
         if (options.AngleDegrees != 0)
         {
@@ -298,6 +345,9 @@ internal static class EmbeddedWindowHost
     private const int WsMinimize = 0x20000000;
     private const int WsMaximize = 0x01000000;
     private const int WsSysMenu = 0x00080000;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
+    private const uint SwpFrameChanged = 0x0020;
     private const uint SwShow = 5;
     private const uint WmClose = 0x0010;
 
@@ -325,22 +375,34 @@ internal static class EmbeddedWindowHost
             SetWindowLong(windowHandle, GwlStyle, style);
         }
 
+        if (GetClientRect(hostHandle, out var rect))
+        {
+            SetWindowPos(
+                windowHandle,
+                IntPtr.Zero,
+                0,
+                0,
+                Math.Max(0, rect.Right - rect.Left),
+                Math.Max(0, rect.Bottom - rect.Top),
+                SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
+        }
+
         ShowWindow(windowHandle, SwShow);
     }
 
-    public static void ResizeToHost(IntPtr windowHandle, IntPtr hostHandle)
+    public static void ResizeToBounds(IntPtr windowHandle, Rectangle bounds)
     {
-        if (windowHandle == IntPtr.Zero || hostHandle == IntPtr.Zero)
+        if (windowHandle == IntPtr.Zero)
         {
             return;
         }
 
-        if (!GetClientRect(hostHandle, out var rect))
+        if (bounds.Width <= 0 || bounds.Height <= 0)
         {
             return;
         }
 
-        MoveWindow(windowHandle, 0, 0, rect.Right - rect.Left, rect.Bottom - rect.Top, true);
+        MoveWindow(windowHandle, bounds.X, bounds.Y, bounds.Width, bounds.Height, true);
     }
 
     public static void RequestClose(IntPtr windowHandle)
@@ -349,6 +411,34 @@ internal static class EmbeddedWindowHost
         {
             PostMessage(windowHandle, WmClose, IntPtr.Zero, IntPtr.Zero);
         }
+    }
+
+    public static bool TryGetClientSize(IntPtr hostHandle, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (hostHandle == IntPtr.Zero || !GetClientRect(hostHandle, out var rect))
+        {
+            return false;
+        }
+
+        width = Math.Max(0, rect.Right - rect.Left);
+        height = Math.Max(0, rect.Bottom - rect.Top);
+        return width > 0 && height > 0;
+    }
+
+    public static bool TryGetWindowSize(IntPtr windowHandle, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (windowHandle == IntPtr.Zero || !GetWindowRect(windowHandle, out var rect))
+        {
+            return false;
+        }
+
+        width = Math.Max(0, rect.Right - rect.Left);
+        height = Math.Max(0, rect.Bottom - rect.Top);
+        return width > 0 && height > 0;
     }
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -369,11 +459,17 @@ internal static class EmbeddedWindowHost
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool MoveWindow(IntPtr hWnd, int x, int y, int nWidth, int nHeight, bool bRepaint);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, uint nCmdShow);
 
     [DllImport("user32.dll")]
     private static extern bool GetClientRect(IntPtr hWnd, out Rect lpRect);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, out Rect lpRect);
 
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);

@@ -35,6 +35,10 @@ public partial class MainForm : Form
     private string? _scrcpyDeployError;
     private bool _adbValidated;
     private bool _scrcpyValidated;
+    private string? _mirrorStartingSerial;
+    private System.Windows.Forms.Timer? _mirrorRestartTimer;
+    private bool _mirrorRestartPending;
+    private bool _mirrorRestartInProgress;
 
     private string? _currentDeviceId;
     private bool _showingSystemLog;
@@ -143,6 +147,8 @@ public partial class MainForm : Form
     private void ApplyLanguage()
     {
         Text = Language.AppTitle;
+        _toolsMenuItem.Text = Language.ToolsMenu;
+        _settingsMenuItem.Text = Language.SettingsMenu;
         _btnAdbReverse.Text = Language.AdbReverse;
         _tabNetwork.Text = Language.NetworkLogs;
         _tabSystem.Text = Language.SystemLogs;
@@ -266,11 +272,12 @@ public partial class MainForm : Form
         _outerSplit.SplitterMoved += (_, _) =>
         {
             RememberLeftPanelWidth();
-            SyncMirrorHostBounds();
+            ScheduleEmbeddedMirrorRestart();
         };
         Load += OnMainFormLoad;
         Shown += async (s, e) => await OnMainFormShownAsync();
-        Resize += (_, _) => SyncMirrorHostBounds();
+        Resize += (_, _) => ScheduleEmbeddedMirrorRestart();
+        ResizeEnd += (_, _) => ScheduleEmbeddedMirrorRestart();
     }
 
     private void OnMissingAdbPromptShown(object? sender, EventArgs e)
@@ -1350,6 +1357,8 @@ public partial class MainForm : Form
         StopMirror(clearStatusOnly: true);
         _scrcpyStartCts?.Cancel();
         _scrcpyStartCts?.Dispose();
+        _mirrorRestartTimer?.Stop();
+        _mirrorRestartTimer?.Dispose();
         foreach (var session in _externalScrcpySessions.ToArray())
         {
             session.Dispose();
@@ -1444,6 +1453,12 @@ public partial class MainForm : Form
             return;
         }
 
+        if (string.Equals(_mirrorStartingSerial, serial, StringComparison.Ordinal))
+        {
+            _devicePanel.SetMirrorStatus($"\u6B63\u5728\u542F\u52A8\u955C\u50CF\uFF1A{serial}", hostVisible: false, isRunning: false, isReady: false);
+            return;
+        }
+
         var scrcpyPath = _scrcpyManager.GetScrcpyPath();
         if (string.IsNullOrEmpty(scrcpyPath) || !_scrcpyValidated)
         {
@@ -1459,7 +1474,6 @@ public partial class MainForm : Form
         if (_scrcpySession?.IsRunning == true && string.Equals(_scrcpySession.DeviceSerial, serial, StringComparison.Ordinal))
         {
             _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true, isRunning: true, isReady: true);
-            SyncMirrorHostBounds();
             return;
         }
 
@@ -1597,6 +1611,8 @@ public partial class MainForm : Form
             return;
         }
 
+        _scrcpyManager.TerminateBundledProcesses(scrcpyPath);
+
         if (restartCurrent)
         {
             StopMirror(clearStatusOnly: true);
@@ -1609,19 +1625,24 @@ public partial class MainForm : Form
 
         if (embedded)
         {
+            _mirrorStartingSerial = serial;
+            _devicePanel.SetMirrorAspectRatio(GetDeviceContentAspectRatio(serial));
             _devicePanel.SetMirrorStatus($"\u6B63\u5728\u542F\u52A8\u955C\u50CF\uFF1A{serial}", hostVisible: false, isRunning: false, isReady: false);
         }
 
         try
         {
+            var contentAspectRatio = GetDeviceContentAspectRatio(serial);
+            var hostHandle = embedded ? _devicePanel.EnsureMirrorHostHandle() : IntPtr.Zero;
             var session = await _scrcpyManager.StartSessionAsync(new ScrcpyStartOptions
             {
                 ScrcpyPath = scrcpyPath,
                 DeviceSerial = serial,
                 WindowTitle = $"LogViewer.scrcpy.{serial}.{Guid.NewGuid():N}",
                 Mode = embedded ? ScrcpySessionMode.Embedded : ScrcpySessionMode.External,
-                HostHandle = embedded ? _devicePanel.MirrorHostHandle : IntPtr.Zero,
-                AngleDegrees = _scrcpyRotationIndex * 90
+                HostHandle = hostHandle,
+                AngleDegrees = _scrcpyRotationIndex * 90,
+                ContentAspectRatio = contentAspectRatio
             }, token).ConfigureAwait(false);
 
             if (token.IsCancellationRequested || IsDisposed)
@@ -1634,11 +1655,13 @@ public partial class MainForm : Form
             {
                 BeginInvoke(new Action(() =>
                 {
+                    _mirrorStartingSerial = null;
                     _scrcpySession?.Dispose();
                     _scrcpySession = session;
                     _scrcpySession.Exited += OnScrcpySessionExited;
+                    _devicePanel.SetMirrorAspectRatio(contentAspectRatio);
                     _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true, isRunning: true, isReady: true);
-                    SyncMirrorHostBounds();
+                    ApplyEmbeddedMirrorLayout();
                 }));
             }
             else
@@ -1662,6 +1685,7 @@ public partial class MainForm : Form
             {
                 BeginInvoke(new Action(() =>
                 {
+                    _mirrorStartingSerial = null;
                     _devicePanel.SetMirrorStatus($"\u955C\u50CF\u542F\u52A8\u5931\u8D25\uFF1A{ex.Message}", hostVisible: false, isRunning: false, isReady: false);
                 }));
             }
@@ -1677,6 +1701,7 @@ public partial class MainForm : Form
 
         BeginInvoke(new Action(() =>
         {
+            _mirrorStartingSerial = null;
             _scrcpySession?.Dispose();
             _scrcpySession = null;
             RefreshMirrorPanelState();
@@ -1686,6 +1711,8 @@ public partial class MainForm : Form
     private void StopMirror(bool clearStatusOnly)
     {
         _scrcpyStartCts?.Cancel();
+        _mirrorStartingSerial = null;
+        _mirrorRestartPending = false;
         _scrcpySession?.Dispose();
         _scrcpySession = null;
         if (clearStatusOnly)
@@ -1694,10 +1721,70 @@ public partial class MainForm : Form
         }
     }
 
-    private void SyncMirrorHostBounds()
+    private void ScheduleEmbeddedMirrorRestart()
+    {
+        if (IsDisposed || !IsHandleCreated)
+        {
+            return;
+        }
+
+        if (_scrcpySession?.IsRunning != true ||
+            string.IsNullOrEmpty(_currentDeviceId) ||
+            _mirrorStartingSerial != null ||
+            _mirrorRestartInProgress)
+        {
+            return;
+        }
+
+        _mirrorRestartPending = true;
+        _mirrorRestartTimer ??= CreateMirrorRestartTimer();
+        _mirrorRestartTimer.Stop();
+        _mirrorRestartTimer.Start();
+    }
+
+    private void ApplyEmbeddedMirrorLayout()
     {
         _devicePanel.SyncMirrorBounds();
-        _scrcpySession?.SyncEmbeddedBounds();
+        var bounds = _devicePanel.GetMirrorDisplayBounds();
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        _scrcpySession?.ResizeEmbeddedBounds(bounds);
+    }
+
+    private System.Windows.Forms.Timer CreateMirrorRestartTimer()
+    {
+        var timer = new System.Windows.Forms.Timer
+        {
+            Interval = 260
+        };
+        timer.Tick += async (_, _) =>
+        {
+            timer.Stop();
+            if (!_mirrorRestartPending ||
+                _mirrorRestartInProgress ||
+                _mirrorStartingSerial != null ||
+                IsDisposed ||
+                !IsHandleCreated ||
+                string.IsNullOrEmpty(_currentDeviceId))
+            {
+                return;
+            }
+
+            _mirrorRestartPending = false;
+            _mirrorRestartInProgress = true;
+            try
+            {
+                await StartMirrorForCurrentDeviceAsync(restart: true);
+            }
+            finally
+            {
+                _mirrorRestartInProgress = false;
+            }
+        };
+        return timer;
     }
 
     private void CaptureDeviceScreenshot(string deviceId)
@@ -1757,5 +1844,45 @@ public partial class MainForm : Form
         }
 
         return memory.ToArray();
+    }
+
+    private double GetDeviceContentAspectRatio(string serial)
+    {
+        var adbPath = _adbHelper.GetAdbPath();
+        if (string.IsNullOrEmpty(adbPath))
+        {
+            return 9d / 16d;
+        }
+
+        try
+        {
+            var output = System.Text.Encoding.UTF8.GetString(RunAdbBinary(adbPath, serial, "shell wm size"));
+            var match = System.Text.RegularExpressions.Regex.Match(output, @"(\d+)\s*x\s*(\d+)");
+            if (!match.Success)
+            {
+                return 9d / 16d;
+            }
+
+            var width = int.Parse(match.Groups[1].Value);
+            var height = int.Parse(match.Groups[2].Value);
+            if (width <= 0 || height <= 0)
+            {
+                return 9d / 16d;
+            }
+
+            var normalizedWidth = width;
+            var normalizedHeight = height;
+            if ((_scrcpyRotationIndex % 2) == 1)
+            {
+                normalizedWidth = height;
+                normalizedHeight = width;
+            }
+
+            return (double)normalizedWidth / normalizedHeight;
+        }
+        catch
+        {
+            return 9d / 16d;
+        }
     }
 }
