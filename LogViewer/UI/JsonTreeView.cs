@@ -5,6 +5,7 @@ using LogViewer.Utils;
 
 namespace LogViewer.UI;
 
+[ToolboxItem(true)]
 public class JsonTreeView : TreeView
 {
     private const int TvsNotooltips = 0x80;
@@ -26,7 +27,7 @@ public class JsonTreeView : TreeView
 
     public JsonTreeView()
     {
-        DrawMode = TreeViewDrawMode.OwnerDrawText;
+        base.DrawMode = TreeViewDrawMode.OwnerDrawText;
         ShowNodeToolTips = false;
         ShowLines = false;
         ShowPlusMinus = true;
@@ -43,6 +44,14 @@ public class JsonTreeView : TreeView
         {
             ContextMenuStrip = CreateContextMenu();
         }
+    }
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public new TreeViewDrawMode DrawMode
+    {
+        get => base.DrawMode;
+        set => base.DrawMode = value;
     }
 
     protected override CreateParams CreateParams
@@ -103,6 +112,12 @@ public class JsonTreeView : TreeView
 
     protected override void OnDrawNode(DrawTreeNodeEventArgs e)
     {
+        if (DesignMode)
+        {
+            e.DrawDefault = true;
+            return;
+        }
+
         if (e.Node == null) return;
 
         var bounds = e.Bounds;
