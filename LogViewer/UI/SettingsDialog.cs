@@ -1,153 +1,55 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using LogViewer.Models;
 using LogViewer.Static;
 using LogViewer.Utils;
 
 namespace LogViewer.UI;
 
-public class SettingsDialog : Form
+public partial class SettingsDialog : Form
 {
     private readonly AppSettings _settings;
 
-    private NumericUpDown _nudPort = null!;
-    private NumericUpDown _nudMaxPerDevice = null!;
-    private NumericUpDown _nudMaxAll = null!;
-    private NumericUpDown _nudMaxSystemLog = null!;
-    private NumericUpDown _nudAndroidQueue = null!;
-    private NumericUpDown _nudMaxBodySize = null!;
-    private CheckBox _chkAutoAdb = null!;
-    private CheckBox _chkAutoLogcat = null!;
-    private CheckBox _chkAutoFormatJson = null!;
-    private NumericUpDown _nudFontSize = null!;
-    private NumericUpDown _nudAdbScanInterval = null!;
-    private TextBox _txtLogcatFilter = null!;
-    private CheckBox _chkAutoStartScrcpy = null!;
-    private Button _btnOk = null!;
-    private Button _btnCancel = null!;
-
-    public SettingsDialog(AppSettings settings, AdbHelper adbHelper)
+    public SettingsDialog()
+        : this(new AppSettings(), null)
     {
-        _settings = settings;
-        InitializeComponents();
+    }
+
+    public SettingsDialog(AppSettings settings, AdbHelper? adbHelper)
+    {
+        _settings = settings ?? new AppSettings();
+        InitializeComponent();
+        ApplyLanguage();
+
+        if (IsDesignTimeMode())
+        {
+            LoadDesignValues();
+            return;
+        }
+
         LoadValues();
     }
 
-    private void InitializeComponents()
+    private void ApplyLanguage()
     {
         Text = Language.SettingsTitle;
-        Size = new Size(500, 560);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        StartPosition = FormStartPosition.CenterParent;
-        Font = new Font("Microsoft YaHei UI", 9f);
-
-        var panel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 16,
-            Padding = new Padding(15),
-            AutoSize = true
-        };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-
-        var row = 0;
-        AddRow(panel, row++, "服务端口：", _nudPort = CreateNumeric(1024, 65535, _settings.ServerPort));
-        AddRow(panel, row++, "单设备最大日志：", _nudMaxPerDevice = CreateNumeric(100, 100000, _settings.MaxLogEntriesPerDevice));
-        AddRow(panel, row++, "全部设备最大日志：", _nudMaxAll = CreateNumeric(100, 100000, _settings.MaxLogEntriesAll));
-        AddRow(panel, row++, "系统日志热缓存：", _nudMaxSystemLog = CreateNumeric(100, 100000, _settings.MaxSystemLogEntries));
-        AddRow(panel, row++, "Android 发送队列*：", _nudAndroidQueue = CreateNumeric(100, 10000, _settings.AndroidQueueSize));
-        AddRow(panel, row++, "Body 截断(KB)*：", _nudMaxBodySize = CreateNumeric(10, 1024, _settings.MaxBodySizeKb));
-
-        _chkAutoAdb = new CheckBox { Text = Language.AutoAdbReverse, Checked = _settings.AutoAdbReverse };
-        panel.Controls.Add(_chkAutoAdb, 0, row);
-        panel.SetColumnSpan(_chkAutoAdb, 3);
-        row++;
-
-        _chkAutoLogcat = new CheckBox { Text = Language.AutoStartLogcat, Checked = _settings.AutoStartLogcat };
-        panel.Controls.Add(_chkAutoLogcat, 0, row);
-        panel.SetColumnSpan(_chkAutoLogcat, 3);
-        row++;
-
-        _chkAutoStartScrcpy = new CheckBox { Text = Language.AutoStartScrcpy, Checked = _settings.AutoStartScrcpyForSelectedDevice };
-        panel.Controls.Add(_chkAutoStartScrcpy, 0, row);
-        panel.SetColumnSpan(_chkAutoStartScrcpy, 3);
-        row++;
-
-        _chkAutoFormatJson = new CheckBox { Text = Language.AutoFormatJson, Checked = _settings.AutoFormatJson };
-        panel.Controls.Add(_chkAutoFormatJson, 0, row);
-        panel.SetColumnSpan(_chkAutoFormatJson, 3);
-        row++;
-
-        AddRow(panel, row++, "字体大小(pt)：", _nudFontSize = CreateNumeric(8, 24, _settings.FontSize));
-        AddRow(panel, row++, "ADB 扫描间隔(ms)：", _nudAdbScanInterval = CreateNumeric(500, 30000, _settings.AdbScanIntervalMs));
-
-        panel.Controls.Add(new Label { Text = Language.LogcatFilter, AutoSize = true }, 0, row);
-        _txtLogcatFilter = new TextBox { Text = _settings.LogcatFilter, Dock = DockStyle.Fill };
-        panel.Controls.Add(_txtLogcatFilter, 1, row);
-        panel.SetColumnSpan(_txtLogcatFilter, 2);
-        row++;
-
-        var noteLabel = new Label
-        {
-            Text = Language.SettingsNote,
-            ForeColor = Color.Gray,
-            AutoSize = true
-        };
-        panel.Controls.Add(noteLabel, 0, row);
-        panel.SetColumnSpan(noteLabel, 3);
-        row++;
-
-        var filterNote = new Label
-        {
-            Text = Language.LogcatFilterNote,
-            ForeColor = Color.Gray,
-            AutoSize = true
-        };
-        panel.Controls.Add(filterNote, 0, row);
-        panel.SetColumnSpan(filterNote, 3);
-
-        Controls.Add(panel);
-
-        var btnPanel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Bottom,
-            FlowDirection = FlowDirection.RightToLeft,
-            Height = 45,
-            Padding = new Padding(10)
-        };
-
-        _btnCancel = new Button { Text = Language.Cancel, Size = new Size(90, 30), DialogResult = DialogResult.Cancel };
-        _btnOk = new Button { Text = Language.Confirm, Size = new Size(90, 30) };
-        _btnOk.Click += OnOkClick;
-
-        btnPanel.Controls.Add(_btnCancel);
-        btnPanel.Controls.Add(_btnOk);
-        Controls.Add(btnPanel);
-
-        AcceptButton = _btnOk;
-        CancelButton = _btnCancel;
-    }
-
-    private void AddRow(TableLayoutPanel panel, int row, string label, Control control)
-    {
-        panel.Controls.Add(new Label { Text = label, AutoSize = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, row);
-        control.Dock = DockStyle.Fill;
-        panel.Controls.Add(control, 1, row);
-        panel.SetColumnSpan(control, 2);
-    }
-
-    private static NumericUpDown CreateNumeric(int min, int max, int value)
-    {
-        return new NumericUpDown
-        {
-            Minimum = min,
-            Maximum = max,
-            Value = value,
-            Dock = DockStyle.Fill
-        };
+        _lblPort.Text = "服务端口：";
+        _lblMaxPerDevice.Text = "单设备最大日志：";
+        _lblMaxAll.Text = "全部设备最大日志：";
+        _lblMaxSystemLog.Text = "系统日志热缓存：";
+        _lblAndroidQueue.Text = "Android 发送队列：";
+        _lblMaxBodySize.Text = "Body 截断(KB)*：";
+        _chkAutoAdb.Text = Language.AutoAdbReverse;
+        _chkAutoLogcat.Text = Language.AutoStartLogcat;
+        _chkAutoStartScrcpy.Text = Language.AutoStartScrcpy;
+        _chkAutoFormatJson.Text = Language.AutoFormatJson;
+        _lblFontSize.Text = "字体大小(pt)：";
+        _lblAdbScanInterval.Text = "ADB 扫描间隔(ms)：";
+        _lblLogcatFilter.Text = Language.LogcatFilter;
+        _lblSettingsNote.Text = Language.SettingsNote;
+        _lblLogcatFilterNote.Text = Language.LogcatFilterNote;
+        _btnOk.Text = Language.Confirm;
+        _btnCancel.Text = Language.Cancel;
     }
 
     private void LoadValues()
@@ -160,11 +62,37 @@ public class SettingsDialog : Form
         _nudMaxBodySize.Value = _settings.MaxBodySizeKb;
         _chkAutoAdb.Checked = _settings.AutoAdbReverse;
         _chkAutoLogcat.Checked = _settings.AutoStartLogcat;
+        _chkAutoStartScrcpy.Checked = _settings.AutoStartScrcpyForSelectedDevice;
         _chkAutoFormatJson.Checked = _settings.AutoFormatJson;
         _nudFontSize.Value = _settings.FontSize;
         _nudAdbScanInterval.Value = _settings.AdbScanIntervalMs;
         _txtLogcatFilter.Text = _settings.LogcatFilter;
-        _chkAutoStartScrcpy.Checked = _settings.AutoStartScrcpyForSelectedDevice;
+    }
+
+    private void LoadDesignValues()
+    {
+        LoadValues();
+        _txtLogcatFilter.Text = "*:I";
+    }
+
+    private static bool IsDesignTimeMode()
+    {
+        if (LicenseManager.UsageMode == LicenseUsageMode.Designtime)
+        {
+            return true;
+        }
+
+        var processName = Process.GetCurrentProcess().ProcessName;
+        if (processName.Contains("devenv", StringComparison.OrdinalIgnoreCase) ||
+            processName.Contains("rider", StringComparison.OrdinalIgnoreCase) ||
+            processName.Contains("resharper", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return AppDomain.CurrentDomain.FriendlyName.Contains(
+            "JetBrains.ReSharper.Features.WinForms.Designer.External",
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private void OnOkClick(object? sender, EventArgs e)
@@ -177,11 +105,11 @@ public class SettingsDialog : Form
         _settings.MaxBodySizeKb = (int)_nudMaxBodySize.Value;
         _settings.AutoAdbReverse = _chkAutoAdb.Checked;
         _settings.AutoStartLogcat = _chkAutoLogcat.Checked;
+        _settings.AutoStartScrcpyForSelectedDevice = _chkAutoStartScrcpy.Checked;
         _settings.AutoFormatJson = _chkAutoFormatJson.Checked;
         _settings.FontSize = (int)_nudFontSize.Value;
         _settings.AdbScanIntervalMs = (int)_nudAdbScanInterval.Value;
         _settings.LogcatFilter = _txtLogcatFilter.Text;
-        _settings.AutoStartScrcpyForSelectedDevice = _chkAutoStartScrcpy.Checked;
         _settings.Save();
         DialogResult = DialogResult.OK;
         Close();

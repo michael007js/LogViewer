@@ -64,7 +64,8 @@ LogViewer/                            ← 项目根目录
 │   ├── JsonTreeViewLoader.cs               ← JSON→TreeNode构建扩展方法（LoadJson/LoadPlainText/Search/Collapse）
 │   ├── DevicePanel.cs                      ← 左侧ADB设备操控面板（设备选择+scrcpy宿主+控制条）
 │   ├── SystemLogSnapshot.cs                ← System Logs 当前 scope/filter 只读快照
-│   ├── SettingsDialog.cs                   ← 设置对话框（ADB路径检测 + scrcpy自动部署/高级覆盖）
+│   ├── SettingsDialog.cs                   ← 设置对话框手写逻辑（设计期保护 + 值加载/保存）
+│   ├── SettingsDialog.Designer.cs          ← 设置对话框设计器控件树（Rider/WinForms Designer 可视化调整）
 │   └── MainForm.resx                       ← 主窗口资源文件
 │
 ├── Static/                                  ← 静态资源层（1 .cs，零依赖）
