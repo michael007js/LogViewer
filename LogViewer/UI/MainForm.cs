@@ -8,41 +8,77 @@ using LogViewer.Utils;
 
 namespace LogViewer.UI;
 
+/// <summary>
+/// 主窗口，负责日志列表展示、详情查看、设备管理和设置配置。
+/// 支持网络日志和系统日志两种类型，通过 TabControl 切换显示。
+/// </summary>
 public partial class MainForm : Form
 {
+    /// <summary>TCP 服务器实例，用于接收 Android 设备的网络日志。</summary>
     private readonly LogServer _server = new();
+    /// <summary>ADB 辅助类，用于设备检测、验证和端口映射。</summary>
     private readonly AdbHelper _adbHelper = new();
+    /// <summary>scrcpy 管理器，用于投屏功能。</summary>
     private readonly ScrcpyManager _scrcpyManager = new();
+    /// <summary>每台设备的 logcat 读取器，key 为 deviceId。</summary>
     private readonly Dictionary<string, LogcatReader> _logcatReaders = new();
+    /// <summary>应用设置实例。</summary>
     private AppSettings _settings;
+    /// <summary>ADB 设备扫描的取消令牌源。</summary>
     private CancellationTokenSource? _adbScanCts;
+    /// <summary>scrcpy 启动的取消令牌源。</summary>
     private CancellationTokenSource? _scrcpyStartCts;
 
+    /// <summary>每台设备的网络日志缓冲区，key 为 deviceId。</summary>
     private readonly Dictionary<string, RingBuffer<LogEntry>> _deviceLogs = new();
+    /// <summary>所有设备合并的网络日志缓冲区。</summary>
     private readonly RingBuffer<LogEntry> _allLogs;
+    /// <summary>ADB 序列号到 deviceId 的映射表。</summary>
     private readonly Dictionary<string, string> _adbSerialToDeviceId = new();
+    /// <summary>待处理的系统日志队列（线程安全）。</summary>
     private readonly Queue<SystemLogEntry> _pendingSystemLogs = new();
+    /// <summary>待处理系统日志队列的锁对象。</summary>
     private readonly object _pendingSystemLogsLock = new();
+    /// <summary>系统日志刷新是否已调度。</summary>
     private bool _systemLogFlushScheduled;
+    /// <summary>网络日志刷新是否已调度。</summary>
     private bool _networkRefreshScheduled;
+    /// <summary>网络日志刷新是否需要全量过滤。</summary>
     private bool _networkRefreshNeedsFullFilter;
+    /// <summary>当前 scrcpy 会话。</summary>
     private ScrcpySession? _scrcpySession;
+    /// <summary>外部启动的 scrcpy 会话列表。</summary>
     private readonly List<ScrcpySession> _externalScrcpySessions = new();
+    /// <summary>scrcpy 旋转角度索引。</summary>
     private int _scrcpyRotationIndex;
+    /// <summary>scrcpy 是否正在准备中。</summary>
     private bool _scrcpyPreparing;
+    /// <summary>scrcpy 部署状态信息。</summary>
     private string? _scrcpyDeployStatus;
+    /// <summary>scrcpy 部署错误信息。</summary>
     private string? _scrcpyDeployError;
+    /// <summary>ADB 是否已验证可用。</summary>
     private bool _adbValidated;
+    /// <summary>scrcpy 是否已验证可用。</summary>
     private bool _scrcpyValidated;
+    /// <summary>正在启动镜像的设备序列号。</summary>
     private string? _mirrorStartingSerial;
+    /// <summary>镜像重启定时器。</summary>
     private System.Windows.Forms.Timer? _mirrorRestartTimer;
+    /// <summary>是否有待处理的镜像重启。</summary>
     private bool _mirrorRestartPending;
+    /// <summary>镜像是否正在重启中。</summary>
     private bool _mirrorRestartInProgress;
 
+    /// <summary>当前选中的设备 deviceId。</summary>
     private string? _currentDeviceId;
+    /// <summary>当前是否显示系统日志（true=系统日志，false=网络日志）。</summary>
     private bool _showingSystemLog;
+    /// <summary>网络日志过滤后的索引列表。</summary>
     private List<int> _filteredNetworkIndices = new();
+    /// <summary>网络日志自动滚动是否启用。</summary>
     private bool _networkAutoScrollEnabled = true;
+    /// <summary>系统日志自动滚动是否启用。</summary>
     private bool _systemAutoScrollEnabled = true;
 
     private System.Windows.Forms.SplitContainer _outerSplit;
@@ -117,6 +153,9 @@ public partial class MainForm : Form
 
     private LogEntry? _selectedLogEntry;
 
+    /// <summary>
+    /// 初始化主窗口，加载设置并配置组件。
+    /// </summary>
     public MainForm()
     {
         _settings = AppSettings.Load();
@@ -147,6 +186,9 @@ public partial class MainForm : Form
         AutoStartServer();
     }
 
+    /// <summary>
+    /// 应用界面语言，从 Language 类加载所有 UI 文本。
+    /// </summary>
     private void ApplyLanguage()
     {
         Text = Language.AppTitle;
@@ -189,6 +231,9 @@ public partial class MainForm : Form
         _cmbLogTag.Items.Add(Language.All);
     }
 
+    /// <summary>
+    /// 连接所有组件事件，绑定 UI 交互逻辑。
+    /// </summary>
     private void WireComponentEvents()
     {
         InitializeSystemLogRuntime();
@@ -365,6 +410,9 @@ public partial class MainForm : Form
         }));
     }
 
+    /// <summary>
+    /// 应用设置到 UI 组件，包括字体大小和过滤器默认值。
+    /// </summary>
     private void ApplySettings()
     {
         var font = new Font("Consolas", _settings.FontSize);
@@ -381,6 +429,9 @@ public partial class MainForm : Form
         RefreshMirrorPanelState();
     }
 
+    /// <summary>
+    /// 获取当前选中的 JSON 树视图控件。
+    /// </summary>
     private JsonTreeView? GetActiveJsonView()
     {
         if (_tabDetail.SelectedTab == _tabHeaders) return _jsonHeadersView;
@@ -389,6 +440,9 @@ public partial class MainForm : Form
         return null;
     }
 
+    /// <summary>
+    /// 获取当前选中的原始文本视图控件。
+    /// </summary>
     private TextBox? GetActiveRawView()
     {
         if (_tabDetail.SelectedTab == _tabHeaders) return _rawHeaders;
@@ -397,6 +451,9 @@ public partial class MainForm : Form
         return null;
     }
 
+    /// <summary>
+    /// 切换详情视图模式（原始文本/JSON 树）。
+    /// </summary>
     private void OnToggleDetailView(object? sender, EventArgs e)
     {
         _detailViewIsRaw = !_detailViewIsRaw;
@@ -409,6 +466,9 @@ public partial class MainForm : Form
         SyncDetailViewVisibility();
     }
 
+    /// <summary>
+    /// 同步详情视图的可见性，根据当前模式显示对应的控件。
+    /// </summary>
     private void SyncDetailViewVisibility()
     {
         if (_jsonHeadersView != null) _jsonHeadersView.Visible = !_detailViewIsRaw;
@@ -419,6 +479,9 @@ public partial class MainForm : Form
         _rawResponseBody.Visible = _detailViewIsRaw;
     }
 
+    /// <summary>
+    /// 初始化运行时的 JSON 树视图控件。
+    /// </summary>
     private void InitializeJsonTreeViewsRuntime()
     {
         _jsonHeadersView = CreateRuntimeJsonTreeView(_jsonHeaders, nameof(_jsonHeadersView));
@@ -426,6 +489,9 @@ public partial class MainForm : Form
         _jsonResponseBodyView = CreateRuntimeJsonTreeView(_jsonResponseBody, nameof(_jsonResponseBodyView));
     }
 
+    /// <summary>
+    /// 创建运行时的 JSON 树视图控件并添加到宿主面板。
+    /// </summary>
     private static JsonTreeView CreateRuntimeJsonTreeView(Control host, string name)
     {
         var view = new JsonTreeView
@@ -439,6 +505,9 @@ public partial class MainForm : Form
         return view;
     }
 
+    /// <summary>
+    /// 获取当前设备的日志缓冲区，如果未选中设备则返回合并缓冲区。
+    /// </summary>
     private RingBuffer<LogEntry> GetCurrentLogBuffer()
     {
         if (_currentDeviceId == null) return _allLogs;
@@ -447,6 +516,9 @@ public partial class MainForm : Form
 
     #region Server Events
 
+    /// <summary>
+    /// 处理设备连接事件，创建设备日志缓冲区并启动 logcat。
+    /// </summary>
     private void OnDeviceConnected(object? sender, DeviceInfo info)
     {
         this.BeginInvoke(new Action(() =>
@@ -473,6 +545,9 @@ public partial class MainForm : Form
         }));
     }
 
+    /// <summary>
+    /// 尝试匹配设备的 ADB 序列号，通过设备型号在 ADB 设备列表中查找。
+    /// </summary>
     private void TryMatchAdbSerial(DeviceInfo info)
     {
         if (!_adbHelper.IsAdbAvailable()) return;
@@ -599,6 +674,9 @@ public partial class MainForm : Form
 
     #region Network Log List
 
+    /// <summary>
+    /// 配置网络日志列表视图，设置列和虚拟模式。
+    /// </summary>
     private void ConfigureLogLists()
     {
         BufferedListViewHelper.EnableDoubleBuffer(_lstNetworkLogs);
@@ -611,6 +689,9 @@ public partial class MainForm : Form
         _lstNetworkLogs.RetrieveVirtualItem += OnNetworkLogsRetrieveVirtualItem;
     }
 
+    /// <summary>
+    /// 根据视图索引获取网络日志条目。
+    /// </summary>
     private LogEntry? GetNetworkLogEntryByViewIndex(int index)
     {
         if (index < 0 || index >= _filteredNetworkIndices.Count) return null;
@@ -619,12 +700,18 @@ public partial class MainForm : Form
         return buf.Get(_filteredNetworkIndices[index]);
     }
 
+    /// <summary>
+    /// 虚拟模式下获取列表项的事件处理。
+    /// </summary>
     private void OnNetworkLogsRetrieveVirtualItem(object? sender, RetrieveVirtualItemEventArgs e)
     {
         var entry = GetNetworkLogEntryByViewIndex(e.ItemIndex);
         e.Item = entry == null ? new ListViewItem() : CreateNetworkLogItem(entry);
     }
 
+    /// <summary>
+    /// 创建网络日志列表项，设置列值和颜色。
+    /// </summary>
     private ListViewItem CreateNetworkLogItem(LogEntry entry)
     {
         var item = new ListViewItem(entry.Method ?? string.Empty);
@@ -789,6 +876,9 @@ public partial class MainForm : Form
 
     #region Toolbar Actions
 
+    /// <summary>
+    /// 自动启动 TCP 服务器，监听指定端口。
+    /// </summary>
     private void AutoStartServer()
     {
         var port = _settings.ServerPort;
@@ -865,11 +955,17 @@ public partial class MainForm : Form
 
     #region Device Panel Events
 
+    /// <summary>
+    /// 处理刷新 ADB 设备请求。
+    /// </summary>
     private void OnRefreshAdbDevices(object? sender, EventArgs e)
     {
         RequestAdbScan();
     }
 
+    /// <summary>
+    /// 请求扫描 ADB 设备列表。
+    /// </summary>
     private void RequestAdbScan()
     {
         if (!_adbHelper.IsAdbAvailable()) return;
@@ -881,6 +977,9 @@ public partial class MainForm : Form
         });
     }
 
+    /// <summary>
+    /// 预加载 ADB 设备列表，尝试多次扫描直到发现设备。
+    /// </summary>
     private async Task PrimeAdbDeviceListAsync()
     {
         if (!_adbHelper.IsAdbAvailable())
@@ -1069,6 +1168,9 @@ public partial class MainForm : Form
 
     #region Logcat
 
+    /// <summary>
+    /// 启动指定设备的 logcat 日志读取。
+    /// </summary>
     private void StartLogcat(string adbPath, string serial, string deviceId, string filter)
     {
         if (_logcatReaders.ContainsKey(deviceId)) return;
@@ -1090,11 +1192,17 @@ public partial class MainForm : Form
 
     #region Filter
 
+    /// <summary>
+    /// 网络日志过滤器变化事件处理。
+    /// </summary>
     private void OnNetworkFilterChanged(object? sender, EventArgs e)
     {
         RefreshNetworkFilter();
     }
 
+    /// <summary>
+    /// 刷新网络日志过滤，根据关键字、方法和状态码筛选日志。
+    /// </summary>
     private void RefreshNetworkFilter()
     {
         var buf = GetCurrentLogBuffer();
@@ -1203,6 +1311,9 @@ public partial class MainForm : Form
 
     #region Scroll & Count
 
+    /// <summary>
+    /// 判断列表视图是否在底部位置。
+    /// </summary>
     private static bool IsAtBottom(ListView lv)
     {
         if (lv.VirtualListSize == 0) return true;
@@ -1211,6 +1322,9 @@ public partial class MainForm : Form
         return topIndex + visibleCount >= lv.VirtualListSize;
     }
 
+    /// <summary>
+    /// 滚动列表视图到底部。
+    /// </summary>
     private static void ScrollToBottom(ListView lv)
     {
         if (lv.VirtualListSize > 0)
@@ -1219,6 +1333,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// 滚动列表视图到顶部。
+    /// </summary>
     private static void ScrollToTop(ListView lv)
     {
         if (lv.VirtualListSize > 0)
@@ -1227,6 +1344,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// 刷新网络日志可见行，优化性能只重绘可见区域。
+    /// </summary>
     private void RefreshNetworkVisibleRows()
     {
         if (_lstNetworkLogs.VirtualListSize <= 0)
@@ -1246,6 +1366,9 @@ public partial class MainForm : Form
         try { _lstNetworkLogs.RedrawItems(topIndex, bottomIndex, false); } catch { _lstNetworkLogs.Invalidate(); }
     }
 
+    /// <summary>
+    /// 更新日志计数显示，包括总数、过滤数和容量百分比。
+    /// </summary>
     private void UpdateLogCount()
     {
         var buf = GetCurrentLogBuffer();
@@ -1262,11 +1385,17 @@ public partial class MainForm : Form
         _btnSystemScrollToBottom.BackColor = _systemAutoScrollEnabled ? Color.LightSkyBlue : DefaultBackColor;
     }
 
+    /// <summary>
+    /// 更新设备数量状态显示。
+    /// </summary>
     private void UpdateDeviceCountStatus()
     {
         _lblDeviceCountStatus.Text = $"Devices: {_deviceLogs.Count}";
     }
 
+    /// <summary>
+    /// 更新 logcat 运行状态显示。
+    /// </summary>
     private void UpdateLogcatStatus()
     {
         var running = _logcatReaders.Values.Count(r => r.IsRunning);
@@ -1277,6 +1406,9 @@ public partial class MainForm : Form
 
     #region Bottom Bar Actions
 
+    /// <summary>
+    /// 清除当前设备或所有设备的日志。
+    /// </summary>
     private void OnClear(object? sender, EventArgs e)
     {
         if (_currentDeviceId != null)
@@ -1343,6 +1475,9 @@ public partial class MainForm : Form
 
     #region Settings
 
+    /// <summary>
+    /// 打开设置对话框，应用新的设置。
+    /// </summary>
     private void OnSettingsClick(object? sender, EventArgs e)
     {
         using var dlg = new SettingsDialog(_settings, _adbHelper);
@@ -1372,6 +1507,9 @@ public partial class MainForm : Form
 
     #endregion
 
+    /// <summary>
+    /// 窗口关闭前清理所有资源。
+    /// </summary>
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         StopAdbScanLoop();

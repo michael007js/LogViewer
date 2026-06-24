@@ -4,9 +4,14 @@ using LogViewer.Utils;
 
 namespace LogViewer.UI;
 
+/// <summary>
+/// MainForm 的系统日志部分，包含系统日志的显示、过滤和管理逻辑。
+/// </summary>
 public partial class MainForm
 {
+    /// <summary>系统日志批量刷新大小。</summary>
     private const int SystemLogFlushBatchSize = 200;
+    /// <summary>系统日志 UI 刷新防抖间隔（毫秒）。</summary>
     private const int SystemLogUiRefreshDebounceMs = 80;
 
     private readonly record struct SystemLogQuery(
@@ -38,12 +43,18 @@ public partial class MainForm
     private bool _systemUiRefreshScheduled;
     private bool _systemUiRefreshNeedsSnapshot;
 
+    /// <summary>
+    /// 初始化系统日志运行时，创建会话存储。
+    /// </summary>
     private void InitializeSystemLogRuntime()
     {
         _systemLogStore = new SystemLogSessionStore(_settings.MaxSystemLogEntries);
         _systemFreezeSequenceId = _systemLogStore.LastSequenceId;
     }
 
+    /// <summary>
+    /// 配置系统日志列表视图，设置列和虚拟模式。
+    /// </summary>
     private void ConfigureSystemLogList()
     {
         BufferedListViewHelper.EnableDoubleBuffer(_lstSystemLogs);

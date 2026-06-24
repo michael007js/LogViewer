@@ -6,43 +6,79 @@ using LogViewer.Utils;
 
 namespace LogViewer.UI;
 
+/// <summary>
+/// JSON 详情窗口，双击网络日志时弹出，显示请求和响应的 JSON 内容。
+/// 支持 JSON 树视图和原始文本视图切换，以及搜索高亮功能。
+/// </summary>
 public partial class JsonDetailForm : Form
 {
+    /// <summary>当前显示的日志条目。</summary>
     private readonly LogEntry _entry;
+    /// <summary>字体设置。</summary>
     private readonly Font _font;
 
+    /// <summary>左右分栏容器。</summary>
     private SplitContainer _split = null!;
+    /// <summary>请求 JSON 树视图。</summary>
     private JsonTreeView _jsonRequest = null!;
+    /// <summary>响应 JSON 树视图。</summary>
     private JsonTreeView _jsonResponse = null!;
+    /// <summary>请求原始文本框。</summary>
     private TextBox _rawRequest = null!;
+    /// <summary>响应原始文本框。</summary>
     private TextBox _rawResponse = null!;
 
+    /// <summary>切换请求视图模式的按钮。</summary>
     private Button _btnToggleRequest = null!;
+    /// <summary>切换响应视图模式的按钮。</summary>
     private Button _btnToggleResponse = null!;
+    /// <summary>展开请求 JSON 树的按钮。</summary>
     private Button _btnExpandReq = null!;
+    /// <summary>折叠请求 JSON 树的按钮。</summary>
     private Button _btnCollapseReq = null!;
+    /// <summary>折叠请求 JSON 树到第2级的按钮。</summary>
     private Button _btnLvl2Req = null!;
+    /// <summary>请求搜索框。</summary>
     private TextBox _txtSearchReq = null!;
+    /// <summary>请求搜索按钮。</summary>
     private Button _btnSearchReq = null!;
 
+    /// <summary>展开响应 JSON 树的按钮。</summary>
     private Button _btnExpandRes = null!;
+    /// <summary>折叠响应 JSON 树的按钮。</summary>
     private Button _btnCollapseRes = null!;
+    /// <summary>折叠响应 JSON 树到第2级的按钮。</summary>
     private Button _btnLvl2Res = null!;
+    /// <summary>响应搜索框。</summary>
     private TextBox _txtSearchRes = null!;
+    /// <summary>响应搜索按钮。</summary>
     private Button _btnSearchRes = null!;
 
+    /// <summary>请求视图是否为原始文本模式。</summary>
     private bool _requestIsRaw;
+    /// <summary>响应视图是否为原始文本模式。</summary>
     private bool _responseIsRaw;
 
+    /// <summary>
+    /// 设计器模式构造函数。
+    /// </summary>
     public JsonDetailForm() : this(new LogEntry(), SystemFonts.DefaultFont, true)
     {
     }
 
+    /// <summary>
+    /// 初始化 JSON 详情窗口。
+    /// </summary>
+    /// <param name="entry">要显示的日志条目。</param>
+    /// <param name="font">字体设置。</param>
     public JsonDetailForm(LogEntry entry, Font font)
         : this(entry, font, false)
     {
     }
 
+    /// <summary>
+    /// 私有构造函数，处理初始化逻辑。
+    /// </summary>
     private JsonDetailForm(LogEntry entry, Font font, bool designMode)
     {
         _entry = entry;
@@ -60,6 +96,9 @@ public partial class JsonDetailForm : Form
         }
     }
 
+    /// <summary>
+    /// 连接组件事件。
+    /// </summary>
     private void WireComponentEvents()
     {
         _btnToggleRequest.Click += (s, e) => ToggleRequestView();
@@ -75,6 +114,9 @@ public partial class JsonDetailForm : Form
         Shown += (s, e) => BeginInvoke(new Action(ApplyInitialSplitterLayout));
     }
 
+    /// <summary>
+    /// 应用初始分栏布局，设置左右面板比例为 4:6。
+    /// </summary>
     private void ApplyInitialSplitterLayout()
     {
         int total = _split.ClientSize.Width - _split.SplitterWidth;

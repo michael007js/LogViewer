@@ -2,19 +2,34 @@ using System.Diagnostics;
 
 namespace LogViewer.Utils;
 
+/// <summary>
+/// ADB 设备信息模型，包含序列号、状态和型号。
+/// </summary>
 public class AdbDevice
 {
+    /// <summary>设备序列号。</summary>
     public string Serial { get; set; } = "";
+    /// <summary>设备状态（如 "device"、"offline"）。</summary>
     public string State { get; set; } = "";
+    /// <summary>设备型号名称。</summary>
     public string Model { get; set; } = "";
+    /// <summary>设备显示名称，格式为 "型号 (序列号)" 或仅序列号。</summary>
     public string DisplayName => string.IsNullOrEmpty(Model) ? Serial : $"{Model} ({Serial})";
 }
 
+/// <summary>
+/// ADB 辅助类，提供 ADB 命令执行、设备检测和端口映射功能。
+/// </summary>
 public class AdbHelper
 {
     private string? _adbPath;
+    /// <summary>程序目录下捆绑的 adb.exe 路径。</summary>
     private static string BundledAdbPath => Path.Combine(AppContext.BaseDirectory, "adb.exe");
 
+    /// <summary>
+    /// 获取 ADB 可执行文件路径，优先使用缓存路径，其次检查程序目录。
+    /// </summary>
+    /// <returns>ADB 路径，如果未找到则返回 null。</returns>
     public string? GetAdbPath()
     {
         if (_adbPath != null && File.Exists(_adbPath)) return _adbPath;
@@ -29,8 +44,16 @@ public class AdbHelper
         return null;
     }
 
+    /// <summary>
+    /// 检查 ADB 是否可用。
+    /// </summary>
     public bool IsAdbAvailable() => GetAdbPath() != null;
 
+    /// <summary>
+    /// 验证指定路径的 ADB 可执行文件是否有效。
+    /// </summary>
+    /// <param name="path">ADB 可执行文件路径。</param>
+    /// <returns>验证是否通过。</returns>
     public bool ValidateAdb(string path)
     {
         if (!File.Exists(path)) return false;
@@ -52,11 +75,18 @@ public class AdbHelper
         catch { return false; }
     }
 
+    /// <summary>
+    /// 获取 ADB 搜索路径列表。
+    /// </summary>
     public List<string> GetSearchPaths()
     {
         return new List<string> { BundledAdbPath };
     }
 
+    /// <summary>
+    /// 获取已连接的 ADB 设备列表。
+    /// </summary>
+    /// <returns>设备列表，如果 ADB 不可用则返回空列表。</returns>
     public List<AdbDevice> GetDevices()
     {
         var adbPath = GetAdbPath();
@@ -114,6 +144,9 @@ public class AdbHelper
         catch { return new(); }
     }
 
+    /// <summary>
+    /// 获取设备型号，如果已有型号则直接返回，否则通过 adb 命令查询。
+    /// </summary>
     private string GetDeviceModel(string adbPath, string serial, string existingModel)
     {
         if (!string.IsNullOrEmpty(existingModel)) return existingModel;
@@ -136,6 +169,9 @@ public class AdbHelper
         catch { return existingModel; }
     }
 
+    /// <summary>
+    /// 确保 ADB 服务器已启动。
+    /// </summary>
     public void EnsureServerStarted()
     {
         var adbPath = GetAdbPath();
@@ -143,6 +179,9 @@ public class AdbHelper
         EnsureServerStarted(adbPath);
     }
 
+    /// <summary>
+    /// 确保 ADB 服务器已启动（内部方法）。
+    /// </summary>
     private void EnsureServerStarted(string adbPath)
     {
         try
@@ -162,21 +201,37 @@ public class AdbHelper
         catch { }
     }
 
+    /// <summary>
+    /// 执行 ADB reverse 端口映射，将 PC 端口映射到 Android 设备。
+    /// </summary>
+    /// <param name="adbPath">ADB 可执行文件路径。</param>
+    /// <param name="device">目标设备。</param>
+    /// <param name="port">要映射的端口号。</param>
+    /// <returns>执行结果和输出。</returns>
     public (bool success, string output) ReversePort(string adbPath, AdbDevice device, int port)
     {
         return RunAdbCommand(adbPath, $"-s {device.Serial} reverse tcp:{port} tcp:{port}");
     }
 
+    /// <summary>
+    /// 移除指定设备的 ADB reverse 端口映射。
+    /// </summary>
     public (bool success, string output) RemoveReverse(string adbPath, AdbDevice device, int port)
     {
         return RunAdbCommand(adbPath, $"-s {device.Serial} reverse --remove tcp:{port}");
     }
 
+    /// <summary>
+    /// 移除指定设备的所有 ADB reverse 端口映射。
+    /// </summary>
     public (bool success, string output) RemoveAllReverses(string adbPath, AdbDevice device)
     {
         return RunAdbCommand(adbPath, $"-s {device.Serial} reverse --remove-all");
     }
 
+    /// <summary>
+    /// 执行 ADB 命令并返回结果。
+    /// </summary>
     private (bool success, string output) RunAdbCommand(string adbPath, string args)
     {
         try
