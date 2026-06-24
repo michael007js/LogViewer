@@ -10,7 +10,6 @@ namespace LogViewer.UI;
 
 public partial class MainForm : Form
 {
-    private const int DefaultLeftPanelWidth = 340;
     private readonly LogServer _server = new();
     private readonly AdbHelper _adbHelper = new();
     private readonly ScrcpyManager _scrcpyManager = new();
@@ -51,70 +50,70 @@ public partial class MainForm : Form
     private LogViewer.UI.DevicePanel _devicePanel;
 
     private System.Windows.Forms.TabControl _tabLogType;
-    private TabPage _tabNetwork = null!;
-    private TabPage _tabSystem = null!;
+    private System.Windows.Forms.TabPage _tabNetwork;
+    private System.Windows.Forms.TabPage _tabSystem;
 
     private System.Windows.Forms.Panel _pnlNetworkFilter;
     private System.Windows.Forms.TextBox _txtNetworkKeyword;
-    private ComboBox _cmbMethod = null!;
-    private ComboBox _cmbStatusCode = null!;
-    private Button _btnScrollToTop = null!;
-    private Button _btnScrollToBottom = null!;
+    private System.Windows.Forms.ComboBox _cmbMethod;
+    private System.Windows.Forms.ComboBox _cmbStatusCode;
+    private System.Windows.Forms.Button _btnScrollToTop;
+    private System.Windows.Forms.Button _btnScrollToBottom;
     private System.Windows.Forms.Label _lblLogCount;
 
-    private ListView _lstNetworkLogs = null!;
+    private System.Windows.Forms.ListView _lstNetworkLogs;
     private System.Windows.Forms.ListView _lstSystemLogs;
 
-    private Panel _pnlSystemFilter = null!;
-    private Panel _systemActionBar = null!;
-    private TextBox _txtSystemKeyword = null!;
-    private ComboBox _cmbLogLevel = null!;
-    private ComboBox _cmbLogTag = null!;
-    private Button _btnSystemScrollToTop = null!;
-    private Button _btnSystemScrollToBottom = null!;
-    private Button _btnSystemPauseResume = null!;
-    private System.Windows.Forms.Label _lblSystemBacklog = null!;
+    private System.Windows.Forms.Panel _pnlSystemFilter;
+    private System.Windows.Forms.Panel _systemActionBar;
+    private System.Windows.Forms.TextBox _txtSystemKeyword;
+    private System.Windows.Forms.ComboBox _cmbLogLevel;
+    private System.Windows.Forms.ComboBox _cmbLogTag;
+    private System.Windows.Forms.Button _btnSystemScrollToTop;
+    private System.Windows.Forms.Button _btnSystemScrollToBottom;
+    private System.Windows.Forms.Button _btnSystemPauseResume;
+    private System.Windows.Forms.Label _lblSystemBacklog;
 
     private System.Windows.Forms.TabControl _tabDetail;
-    private TabPage _tabHeaders = null!;
-    private TabPage _tabRequestBody = null!;
-    private TabPage _tabResponseBody = null!;
+    private System.Windows.Forms.TabPage _tabHeaders;
+    private System.Windows.Forms.TabPage _tabRequestBody;
+    private System.Windows.Forms.TabPage _tabResponseBody;
 
     private System.Windows.Forms.Panel _jsonHeaders;
-    private Panel _jsonRequestBody = null!;
-    private Panel _jsonResponseBody = null!;
+    private System.Windows.Forms.Panel _jsonRequestBody;
+    private System.Windows.Forms.Panel _jsonResponseBody;
     private JsonTreeView? _jsonHeadersView;
     private JsonTreeView? _jsonRequestBodyView;
     private JsonTreeView? _jsonResponseBodyView;
 
-    private TextBox _rawHeaders = null!;
-    private TextBox _rawRequestBody = null!;
-    private TextBox _rawResponseBody = null!;
+    private System.Windows.Forms.TextBox _rawHeaders;
+    private System.Windows.Forms.TextBox _rawRequestBody;
+    private System.Windows.Forms.TextBox _rawResponseBody;
 
     private System.Windows.Forms.Panel _pnlJsonToolbar;
-    private TextBox _txtJsonSearch = null!;
-    private Button _btnJsonSearch = null!;
-    private Button _btnExpandAll = null!;
-    private Button _btnCollapseAll = null!;
-    private Button _btnCollapseTo2 = null!;
-    private Button _btnToggleView = null!;
+    private System.Windows.Forms.TextBox _txtJsonSearch;
+    private System.Windows.Forms.Button _btnJsonSearch;
+    private System.Windows.Forms.Button _btnExpandAll;
+    private System.Windows.Forms.Button _btnCollapseAll;
+    private System.Windows.Forms.Button _btnCollapseTo2;
+    private System.Windows.Forms.Button _btnToggleView;
     private bool _detailViewIsRaw;
 
-    private ToolStrip _toolStrip = null!;
-    private ToolStripDropDownButton _btnAdbReverse = null!;
-    private ToolStripLabel _lblStatus = null!;
+    private System.Windows.Forms.ToolStrip _toolStrip;
+    private System.Windows.Forms.ToolStripDropDownButton _btnAdbReverse;
+    private System.Windows.Forms.ToolStripLabel _lblStatus;
 
-    private MenuStrip _menuStrip = null!;
-    private StatusStrip _statusStrip = null!;
-    private ToolStripStatusLabel _lblServerStatus = null!;
-    private ToolStripStatusLabel _lblDeviceCountStatus = null!;
-    private ToolStripStatusLabel _lblAdbStatus = null!;
-    private ToolStripStatusLabel _lblLogcatStatus = null!;
+    private System.Windows.Forms.MenuStrip _menuStrip;
+    private System.Windows.Forms.StatusStrip _statusStrip;
+    private System.Windows.Forms.ToolStripStatusLabel _lblServerStatus;
+    private System.Windows.Forms.ToolStripStatusLabel _lblDeviceCountStatus;
+    private System.Windows.Forms.ToolStripStatusLabel _lblAdbStatus;
+    private System.Windows.Forms.ToolStripStatusLabel _lblLogcatStatus;
 
     private System.Windows.Forms.FlowLayoutPanel _pnlBottomBar;
-    private Button _btnClear = null!;
-    private Button _btnExportJson = null!;
-    private Button _btnExportTxt = null!;
+    private System.Windows.Forms.Button _btnClear;
+    private System.Windows.Forms.Button _btnExportJson;
+    private System.Windows.Forms.Button _btnExportTxt;
 
     private LogEntry? _selectedLogEntry;
 
@@ -275,7 +274,6 @@ public partial class MainForm : Form
         _btnExportTxt.Click += OnExportTxt;
         _outerSplit.SplitterMoved += (_, _) =>
         {
-            RememberLeftPanelWidth();
             ScheduleEmbeddedMirrorRestart();
         };
         Load += OnMainFormLoad;
@@ -375,7 +373,6 @@ public partial class MainForm : Form
         _jsonHeadersView?.SetFont(font);
         _jsonRequestBodyView?.SetFont(font);
         _jsonResponseBodyView?.SetFont(font);
-        ApplyLeftPanelWidthSetting();
         if (_cmbMethod.SelectedIndex < 0 && _cmbMethod.Items.Count > 0) _cmbMethod.SelectedIndex = 0;
         if (_cmbStatusCode.SelectedIndex < 0 && _cmbStatusCode.Items.Count > 0) _cmbStatusCode.SelectedIndex = 0;
         if (_cmbLogLevel.SelectedIndex < 0 && _cmbLogLevel.Items.Count > 0) _cmbLogLevel.SelectedIndex = 0;
@@ -1422,31 +1419,7 @@ public partial class MainForm : Form
 
     private void OnMainFormLoad(object? sender, EventArgs e)
     {
-        ApplyLeftPanelWidthSetting();
         RefreshMirrorPanelState();
-    }
-
-    private void ApplyLeftPanelWidthSetting()
-    {
-        if (!IsHandleCreated && !Visible)
-        {
-            return;
-        }
-
-        var targetWidth = Math.Clamp(_settings.LastLeftPanelWidth > 0 ? _settings.LastLeftPanelWidth : DefaultLeftPanelWidth, 220, 460);
-        var maxWidth = Math.Max(_outerSplit.Panel1MinSize, ClientSize.Width - _innerSplit.Panel1MinSize - 120);
-        _outerSplit.SplitterDistance = Math.Min(targetWidth, Math.Max(_outerSplit.Panel1MinSize, maxWidth));
-    }
-
-    private void RememberLeftPanelWidth()
-    {
-        if (_outerSplit.SplitterDistance <= 0)
-        {
-            return;
-        }
-
-        _settings.LastLeftPanelWidth = _outerSplit.SplitterDistance;
-        _settings.Save();
     }
 
     private void RefreshMirrorPanelState()
