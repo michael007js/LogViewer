@@ -449,6 +449,8 @@ internal sealed class ScrcpyManager
         {
             var windowHandle = await WaitForWindowAsync(process, stderrTask, cancellationToken, options.WindowTitle).ConfigureAwait(false);
             var session = new ScrcpySession(process, windowHandle, options);
+            _ = stdoutTask;
+            _ = stderrTask;
             return session;
         }
         // 启动失败时清理进程，防止僵尸进程

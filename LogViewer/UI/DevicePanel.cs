@@ -161,7 +161,6 @@ public sealed partial class DevicePanel : UserControl
     /// <summary>投屏启动/停止按钮点击事件处理器。</summary>
     private void OnMirrorToggleClick(object? sender, EventArgs e)
     {
-        File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] MirrorToggle: selectedDevice={_selectedDeviceId}, mirrorRunning={_mirrorRunning}, sender={sender?.GetType().Name}\r\n");
         if (TryGetSelectedDeviceForAction(out var deviceId))
         {
             if (_mirrorRunning)
@@ -478,6 +477,11 @@ public sealed partial class DevicePanel : UserControl
         return _mirrorDisplayBounds;
     }
 
+    public Size GetMirrorHostClientSize()
+    {
+        return _mirrorHostPanel.ClientSize;
+    }
+
     /// <summary>
     /// 确保 scrcpy 投屏宿主面板和视口面板的窗口句柄已创建，返回宿主句柄。
     /// </summary>
@@ -747,17 +751,5 @@ public sealed partial class DevicePanel : UserControl
 /// </summary>
 internal sealed class MirrorHostPanel : Panel
 {
-    private const int WmEraseBkgnd = 0x0014;
-
     public bool MirrorActive { get; set; }
-
-    protected override void WndProc(ref Message m)
-    {
-        if (m.Msg == WmEraseBkgnd && MirrorActive)
-        {
-            m.Result = IntPtr.Zero;
-            return;
-        }
-        base.WndProc(ref m);
-    }
 }

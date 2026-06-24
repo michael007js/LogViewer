@@ -261,11 +261,9 @@ public partial class MainForm
     /// <param name="restartCurrent">是否先停止当前会话再启动。</param>
     private async Task StartMirrorSessionAsync(bool embedded, bool restartCurrent)
     {
-        var logPath = @"C:\_worklog\mirror_debug.log";
         var deviceId = _currentDeviceId;
         if (string.IsNullOrEmpty(deviceId))
         {
-            File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] StartMirrorSession SKIP: no deviceId\r\n");
             RefreshMirrorPanelState();
             return;
         }
@@ -273,17 +271,13 @@ public partial class MainForm
         var serial = ResolveAdbSerial(deviceId);
         if (string.IsNullOrEmpty(serial))
         {
-            File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] StartMirrorSession SKIP: no serial for {deviceId}\r\n");
             RefreshMirrorPanelState();
             return;
         }
 
-        File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] StartMirrorSession: serial={serial}, embedded={embedded}\r\n");
-
         var scrcpyPath = await EnsureScrcpyReadyAsync(forceDeploy: false, reportToMirrorPanel: true);
         if (string.IsNullOrEmpty(scrcpyPath))
         {
-            File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] StartMirrorSession SKIP: no scrcpyPath\r\n");
             RefreshMirrorPanelState();
             return;
         }
@@ -312,8 +306,12 @@ public partial class MainForm
         {
             var contentAspectRatio = GetDeviceContentAspectRatio(serial);
             var hostHandle = embedded ? _devicePanel.EnsureMirrorHostHandle() : IntPtr.Zero;
-            var windowBounds = embedded ? _devicePanel.GetMirrorDisplayBounds() : Rectangle.Empty;
-            File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] Starting scrcpy: hostHandle={hostHandle}, bounds={windowBounds}\r\n");
+            var windowBounds = Rectangle.Empty;
+            if (embedded)
+            {
+                var hostSize = _devicePanel.GetMirrorHostClientSize();
+                windowBounds = new Rectangle(0, 0, hostSize.Width, hostSize.Height);
+            }
             var session = await _scrcpyManager.StartSessionAsync(new ScrcpyStartOptions
             {
                 ScrcpyPath = scrcpyPath,
@@ -346,7 +344,7 @@ public partial class MainForm
                     _devicePanel.SetMirrorAspectRatio(contentAspectRatio);
                     _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true,
                         isRunning: true, isReady: true);
-                    File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] Mirror STARTED OK, session.IsRunning={_scrcpySession.IsRunning}, handle={_scrcpySession.WindowHandle}\r\n");
+                    File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] Mirror STARTED OK, handle={_scrcpySession.WindowHandle}\r\n");
                     ApplyEmbeddedMirrorLayout();
                 }));
             }
@@ -367,7 +365,6 @@ public partial class MainForm
         }
         catch (Exception ex)
         {
-            File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] Mirror START FAILED: {ex.Message}\r\n");
             if (!IsDisposed)
             {
                 BeginInvoke(new Action(() =>
@@ -421,10 +418,8 @@ public partial class MainForm
     /// </summary>
     private void ScheduleEmbeddedMirrorRestart()
     {
-        var logPath = @"C:\_worklog\mirror_debug.log";
         if (IsDisposed || !IsHandleCreated)
         {
-            File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] ScheduleRestart SKIP: disposed\r\n");
             return;
         }
 
@@ -433,11 +428,9 @@ public partial class MainForm
             _mirrorStartingSerial != null ||
             _mirrorRestartInProgress)
         {
-            File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] ScheduleRestart SKIP: running={_scrcpySession?.IsRunning} device={_currentDeviceId} starting={_mirrorStartingSerial} inProgress={_mirrorRestartInProgress}\r\n");
             return;
         }
 
-        File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] ScheduleRestart SCHEDULING\r\n");
         _mirrorRestartPending = true;
         _mirrorRestartTimer ??= CreateMirrorRestartTimer();
         _mirrorRestartTimer.Stop();
