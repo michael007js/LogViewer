@@ -314,6 +314,7 @@ public partial class MainForm : Form
         _devicePanel.MirrorRotateRequested += OnMirrorRotateRequested;
         _devicePanel.MirrorScreenshotRequested += OnMirrorScreenshotRequested;
         _devicePanel.MirrorPopoutRequested += OnMirrorPopoutRequested;
+        _devicePanel.MirrorLayoutChanged += OnMirrorLayoutChanged;
         _tabLogType.SelectedIndexChanged += (s, e) =>
         {
             _showingSystemLog = _tabLogType.SelectedIndex == 1;

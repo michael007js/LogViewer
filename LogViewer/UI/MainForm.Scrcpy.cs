@@ -445,6 +445,14 @@ public partial class MainForm
     }
 
     /// <summary>
+    /// DevicePanel 投屏布局变更事件处理器，当面板尺寸变化时重新调整 scrcpy 窗口位置和大小。
+    /// </summary>
+    private void OnMirrorLayoutChanged(object? sender, EventArgs e)
+    {
+        ApplyEmbeddedMirrorLayout();
+    }
+
+    /// <summary>
     /// 创建镜像重启防抖定时器，间隔 260ms，到期后执行镜像重启。
     /// </summary>
     /// <returns>配置好的定时器。</returns>
