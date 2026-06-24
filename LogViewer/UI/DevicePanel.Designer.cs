@@ -34,7 +34,7 @@ partial class DevicePanel
         _cmbDevices = new System.Windows.Forms.ComboBox();
         _btnRefreshAdb = new System.Windows.Forms.Button();
         _mirrorHostPanel = new System.Windows.Forms.Panel();
-        _mirrorViewportPanel = new System.Windows.Forms.Panel();
+
         _lblMirrorPlaceholder = new System.Windows.Forms.Label();
         _lblMirrorStatus = new System.Windows.Forms.Label();
         _buttonBar = new System.Windows.Forms.TableLayoutPanel();
@@ -94,7 +94,7 @@ partial class DevicePanel
         // 
         _mirrorHostPanel.BackColor = System.Drawing.Color.Black;
         _mirrorHostPanel.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-        _mirrorHostPanel.Controls.Add(_mirrorViewportPanel);
+
         _mirrorHostPanel.Controls.Add(_lblMirrorPlaceholder);
         _mirrorHostPanel.Dock = System.Windows.Forms.DockStyle.Fill;
         _mirrorHostPanel.Location = new System.Drawing.Point(0, 66);
@@ -102,15 +102,7 @@ partial class DevicePanel
         _mirrorHostPanel.Name = "_mirrorHostPanel";
         _mirrorHostPanel.Size = new System.Drawing.Size(134, 155);
         _mirrorHostPanel.TabIndex = 2;
-        // 
-        // _mirrorViewportPanel
-        // 
-        _mirrorViewportPanel.BackColor = System.Drawing.Color.Black;
-        _mirrorViewportPanel.Location = new System.Drawing.Point(0, 0);
-        _mirrorViewportPanel.Name = "_mirrorViewportPanel";
-        _mirrorViewportPanel.Size = new System.Drawing.Size(200, 100);
-        _mirrorViewportPanel.TabIndex = 0;
-        _mirrorViewportPanel.Visible = false;
+
         // 
         // _lblMirrorPlaceholder
         // 
@@ -237,7 +229,7 @@ partial class DevicePanel
     private ComboBox _cmbDevices;
     private Button _btnRefreshAdb;
     private System.Windows.Forms.Panel _mirrorHostPanel;
-    private Panel _mirrorViewportPanel;
+
     private System.Windows.Forms.Label _lblMirrorPlaceholder;
     private System.Windows.Forms.Label _lblMirrorStatus;
     private Button _btnMirrorToggle;

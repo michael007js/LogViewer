@@ -222,7 +222,6 @@ public sealed partial class DevicePanel : UserControl
         _mirrorHostVisible = false;
         _mirrorRunning = false;
         _mirrorReady = true;
-        _mirrorViewportPanel.Visible = false;
         _btnRefreshAdb.Enabled = false;
         _btnMirrorToggle.Enabled = false;
         _btnMirrorReconnect.Enabled = false;
@@ -474,13 +473,6 @@ public sealed partial class DevicePanel : UserControl
             _ = _mirrorHostPanel?.Handle;
         }
 
-        if (_mirrorViewportPanel?.IsHandleCreated != true)
-        {
-            _mirrorViewportPanel.Visible = true;
-            _mirrorViewportPanel?.CreateControl();
-            _ = _mirrorViewportPanel?.Handle;
-        }
-
         return MirrorHostHandle;
     }
 
@@ -654,11 +646,6 @@ public sealed partial class DevicePanel : UserControl
         var offsetX = (hostWidth - targetWidth) / 2;
         var offsetY = (hostHeight - targetHeight) / 2;
         var nextBounds = new Rectangle(offsetX, offsetY, targetWidth, targetHeight);
-        if (_mirrorViewportPanel.Bounds != nextBounds)
-        {
-            _mirrorViewportPanel.Bounds = nextBounds;
-        }
-
         if (_mirrorDisplayBounds != nextBounds)
         {
             _mirrorDisplayBounds = nextBounds;
