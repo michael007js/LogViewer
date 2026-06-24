@@ -1,6 +1,7 @@
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 using LogViewer.Models;
 
 namespace LogViewer.Network;
@@ -17,11 +18,13 @@ public partial class LogcatReader
 
     /// <summary>目标设备的 ADB 序列号。</summary>
     public string? DeviceSerial { get; private set; }
+
     /// <summary>logcat 进程是否正在运行。</summary>
     public bool IsRunning => _process != null && !_process.HasExited;
 
     /// <summary>系统日志接收事件，每解析一行有效日志时触发。</summary>
     public event EventHandler<SystemLogEntry>? SystemLogReceived;
+
     /// <summary>进程退出事件，当 adb logcat 进程退出时触发。</summary>
     public event EventHandler<(string serial, bool success)>? ProcessExited;
 
@@ -52,7 +55,7 @@ public partial class LogcatReader
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true,
-                StandardOutputEncoding = System.Text.Encoding.UTF8
+                StandardOutputEncoding = Encoding.UTF8
             },
             EnableRaisingEvents = true
         };
@@ -81,7 +84,10 @@ public partial class LogcatReader
                 _process.WaitForExit(500);
             }
         }
-        catch { }
+        catch
+        {
+        }
+
         Cleanup();
     }
 
@@ -110,8 +116,12 @@ public partial class LogcatReader
                 }
             }
         }
-        catch (OperationCanceledException) { }
-        catch { }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+        }
     }
 
     /// <summary>
@@ -166,9 +176,23 @@ public partial class LogcatReader
     /// </summary>
     private void Cleanup()
     {
-        try { _process?.Dispose(); } catch { }
+        try
+        {
+            _process?.Dispose();
+        }
+        catch
+        {
+        }
+
         _process = null;
-        try { _cts?.Dispose(); } catch { }
+        try
+        {
+            _cts?.Dispose();
+        }
+        catch
+        {
+        }
+
         _cts = null;
         _readTask = null;
     }
@@ -177,6 +201,7 @@ public partial class LogcatReader
     /// 预编译的 logcat threadtime 格式正则表达式。
     /// 格式：MM-DD HH:mm:ss.fff PID TID LEVEL TAG: MESSAGE
     /// </summary>
-    [GeneratedRegex(@"^(?<date>\d{2}-\d{2})\s+(?<time>\d{2}:\d{2}:\d{2}\.\d+)\s+(?<pid>\d+)\s+(?<tid>\d+)\s+(?<level>[VDIWEF])\s+(?<tag>[^\s:]+)\s*:\s*(?<msg>.*)$")]
+    [GeneratedRegex(
+        @"^(?<date>\d{2}-\d{2})\s+(?<time>\d{2}:\d{2}:\d{2}\.\d+)\s+(?<pid>\d+)\s+(?<tid>\d+)\s+(?<level>[VDIWEF])\s+(?<tag>[^\s:]+)\s*:\s*(?<msg>.*)$")]
     private static partial Regex LogcatRegex();
 }

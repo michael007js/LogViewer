@@ -1,5 +1,5 @@
+using System.Net;
 using System.Net.Sockets;
-using System.Text.Json;
 using LogViewer.Models;
 
 namespace LogViewer.Network;
@@ -17,10 +17,13 @@ public class LogServer
 
     /// <summary>设备连接事件，当新设备注册时触发。</summary>
     public event EventHandler<DeviceInfo>? DeviceConnected;
+
     /// <summary>设备断开事件，当设备连接断开时触发，参数为 deviceId。</summary>
     public event EventHandler<string>? DeviceDisconnected;
+
     /// <summary>日志接收事件，当设备发送网络日志时触发，参数为 (deviceId, LogEntry)。</summary>
     public event EventHandler<(string deviceId, LogEntry entry)>? LogReceived;
+
     /// <summary>当前所有活跃设备连接的只读字典。</summary>
     public IReadOnlyDictionary<string, DeviceConnection> Connections => _connections;
 
@@ -32,7 +35,7 @@ public class LogServer
     {
         if (_listener != null) return;
         _cts = new CancellationTokenSource();
-        _listener = new TcpListener(System.Net.IPAddress.Any, port);
+        _listener = new TcpListener(IPAddress.Any, port);
         _listener.Start();
         _acceptTask = AcceptLoopAsync(_cts.Token);
     }
@@ -49,8 +52,16 @@ public class LogServer
         {
             conn.Disconnect();
         }
+
         _connections.Clear();
-        try { _acceptTask?.Wait(500); } catch { }
+        try
+        {
+            _acceptTask?.Wait(500);
+        }
+        catch
+        {
+        }
+
         _cts?.Dispose();
         _cts = null;
     }
@@ -72,8 +83,13 @@ public class LogServer
 
                 _ = connection.StartReceivingAsync();
             }
-            catch (OperationCanceledException) { break; }
-            catch (Exception) { }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception)
+            {
+            }
         }
     }
 
@@ -94,6 +110,7 @@ public class LogServer
             existing.Disconnect();
             _connections.Remove(deviceId);
         }
+
         _connections[deviceId] = conn;
         conn.DeviceId = deviceId;
         DeviceConnected?.Invoke(this, info);
@@ -121,6 +138,7 @@ public class LogServer
             _connections.Remove(deviceId);
             DeviceDisconnected?.Invoke(this, deviceId);
         }
+
         conn.Registered -= OnDeviceRegistered;
         conn.LogReceived -= OnLogReceived;
         conn.Disconnected -= OnDeviceDisconnected;
@@ -137,6 +155,7 @@ public class LogServer
         {
             return conn.DeviceInfo;
         }
+
         return null;
     }
 }

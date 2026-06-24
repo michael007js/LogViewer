@@ -1,5 +1,8 @@
-using System.Text.Json;
+using System.Diagnostics;
+using System.Text;
+using System.Text.RegularExpressions;
 using LogViewer.Utils;
+using Timer = System.Windows.Forms.Timer;
 
 namespace LogViewer.UI;
 
@@ -10,27 +13,40 @@ public partial class MainForm
 {
     /// <summary>当前 scrcpy 会话。</summary>
     private ScrcpySession? _scrcpySession;
+
     /// <summary>外部启动的 scrcpy 会话列表。</summary>
     private readonly List<ScrcpySession> _externalScrcpySessions = new();
+
     /// <summary>scrcpy 旋转角度索引。</summary>
     private int _scrcpyRotationIndex;
+
     /// <summary>scrcpy 是否正在准备中。</summary>
     private bool _scrcpyPreparing;
+
     /// <summary>scrcpy 部署状态信息。</summary>
     private string? _scrcpyDeployStatus;
+
     /// <summary>scrcpy 部署错误信息。</summary>
     private string? _scrcpyDeployError;
+
     /// <summary>scrcpy 是否已验证可用。</summary>
     private bool _scrcpyValidated;
+
     /// <summary>正在启动镜像的设备序列号。</summary>
     private string? _mirrorStartingSerial;
+
     /// <summary>镜像重启定时器。</summary>
-    private System.Windows.Forms.Timer? _mirrorRestartTimer;
+    private Timer? _mirrorRestartTimer;
+
     /// <summary>是否有待处理的镜像重启。</summary>
     private bool _mirrorRestartPending;
+
     /// <summary>镜像是否正在重启中。</summary>
     private bool _mirrorRestartInProgress;
 
+    /// <summary>
+    /// 刷新镜像面板状态，根据当前设备、scrcpy 部署进度和会话状态更新面板显示。
+    /// </summary>
     private void RefreshMirrorPanelState()
     {
         if (IsDesignTimeMode())
@@ -42,26 +58,31 @@ public partial class MainForm
 
         if (string.IsNullOrEmpty(_currentDeviceId))
         {
-            _devicePanel.SetMirrorStatus("\u8BF7\u9009\u62E9\u5177\u4F53\u8BBE\u5907\u4EE5\u64CD\u63A7\u624B\u673A", hostVisible: false, isRunning: false, isReady: false);
+            _devicePanel.SetMirrorStatus("\u8BF7\u9009\u62E9\u5177\u4F53\u8BBE\u5907\u4EE5\u64CD\u63A7\u624B\u673A",
+                hostVisible: false, isRunning: false, isReady: false);
             return;
         }
 
         var serial = ResolveAdbSerial(_currentDeviceId);
         if (string.IsNullOrEmpty(serial))
         {
-            _devicePanel.SetMirrorStatus("\u5F53\u524D\u8BBE\u5907\u672A\u5339\u914D ADB serial\uFF0C\u65E0\u6CD5\u542F\u52A8\u624B\u673A\u955C\u50CF", hostVisible: false, isRunning: false, isReady: false);
+            _devicePanel.SetMirrorStatus(
+                "\u5F53\u524D\u8BBE\u5907\u672A\u5339\u914D ADB serial\uFF0C\u65E0\u6CD5\u542F\u52A8\u624B\u673A\u955C\u50CF",
+                hostVisible: false, isRunning: false, isReady: false);
             return;
         }
 
         if (_scrcpyPreparing)
         {
-            _devicePanel.SetMirrorStatus(_scrcpyDeployStatus ?? "\u6B63\u5728\u90E8\u7F72 scrcpy...", hostVisible: false, isRunning: false, isReady: false);
+            _devicePanel.SetMirrorStatus(_scrcpyDeployStatus ?? "\u6B63\u5728\u90E8\u7F72 scrcpy...",
+                hostVisible: false, isRunning: false, isReady: false);
             return;
         }
 
         if (string.Equals(_mirrorStartingSerial, serial, StringComparison.Ordinal))
         {
-            _devicePanel.SetMirrorStatus($"\u6B63\u5728\u542F\u52A8\u955C\u50CF\uFF1A{serial}", hostVisible: false, isRunning: false, isReady: false);
+            _devicePanel.SetMirrorStatus($"\u6B63\u5728\u542F\u52A8\u955C\u50CF\uFF1A{serial}", hostVisible: false,
+                isRunning: false, isReady: false);
             return;
         }
 
@@ -77,15 +98,24 @@ public partial class MainForm
             return;
         }
 
-        if (_scrcpySession?.IsRunning == true && string.Equals(_scrcpySession.DeviceSerial, serial, StringComparison.Ordinal))
+        if (_scrcpySession?.IsRunning == true &&
+            string.Equals(_scrcpySession.DeviceSerial, serial, StringComparison.Ordinal))
         {
-            _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true, isRunning: true, isReady: true);
+            _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true,
+                isRunning: true, isReady: true);
             return;
         }
 
-        _devicePanel.SetMirrorStatus($"\u5DF2\u5C31\u7EEA\uFF0C\u53EF\u542F\u52A8\u955C\u50CF\uFF1A{serial}", hostVisible: false, isRunning: false, isReady: false);
+        _devicePanel.SetMirrorStatus($"\u5DF2\u5C31\u7EEA\uFF0C\u53EF\u542F\u52A8\u955C\u50CF\uFF1A{serial}",
+            hostVisible: false, isRunning: false, isReady: false);
     }
 
+    /// <summary>
+    /// 确保 scrcpy 可用，必要时执行自动部署。
+    /// </summary>
+    /// <param name="forceDeploy">是否强制重新部署。</param>
+    /// <param name="reportToMirrorPanel">是否将进度报告到镜像面板。</param>
+    /// <returns>scrcpy 可执行文件路径；部署失败返回 null。</returns>
     private async Task<string?> EnsureScrcpyReadyAsync(bool forceDeploy, bool reportToMirrorPanel)
     {
         try
@@ -140,12 +170,20 @@ public partial class MainForm
         }
     }
 
+    /// <summary>
+    /// 根据 deviceId 解析对应的 ADB serial 号。
+    /// </summary>
+    /// <param name="deviceId">设备标识符。</param>
+    /// <returns>ADB serial 号；无法解析时返回 null。</returns>
     private string? ResolveAdbSerial(string deviceId)
     {
         var info = _server.GetDeviceInfo(deviceId);
         return info?.AdbSerial ?? _devicePanel.GetAdbSerialForKey(deviceId);
     }
 
+    /// <summary>
+    /// 镜像启动请求事件处理，为当前设备启动内嵌镜像。
+    /// </summary>
     private async void OnMirrorStartRequested(object? sender, string deviceId)
     {
         if (!string.Equals(deviceId, _currentDeviceId, StringComparison.Ordinal))
@@ -156,33 +194,52 @@ public partial class MainForm
         await StartMirrorForCurrentDeviceAsync(restart: true);
     }
 
+    /// <summary>
+    /// 镜像停止请求事件处理，停止当前镜像并刷新面板状态。
+    /// </summary>
     private void OnMirrorStopRequested(object? sender, string deviceId)
     {
         StopMirror(clearStatusOnly: false);
         RefreshMirrorPanelState();
     }
 
+    /// <summary>
+    /// 镜像重连请求事件处理，重新启动当前设备的内嵌镜像。
+    /// </summary>
     private async void OnMirrorReconnectRequested(object? sender, string deviceId)
     {
         await StartMirrorForCurrentDeviceAsync(restart: true);
     }
 
+    /// <summary>
+    /// 镜像旋转请求事件处理，切换旋转角度并重启镜像。
+    /// </summary>
     private async void OnMirrorRotateRequested(object? sender, string deviceId)
     {
         _scrcpyRotationIndex = (_scrcpyRotationIndex + 1) % 4;
         await StartMirrorForCurrentDeviceAsync(restart: true);
     }
 
+    /// <summary>
+    /// 镜像弹出请求事件处理，以外部窗口模式启动镜像。
+    /// </summary>
     private async void OnMirrorPopoutRequested(object? sender, string deviceId)
     {
         await StartMirrorSessionAsync(embedded: false, restartCurrent: false);
     }
 
+    /// <summary>
+    /// 截图请求事件处理，对指定设备执行 adb 截图并保存。
+    /// </summary>
     private void OnMirrorScreenshotRequested(object? sender, string deviceId)
     {
         CaptureDeviceScreenshot(deviceId);
     }
 
+    /// <summary>
+    /// 为当前设备启动内嵌镜像，先停止旧会话再起新会话。
+    /// </summary>
+    /// <param name="restart">是否先停止当前镜像再重启。</param>
     private async Task StartMirrorForCurrentDeviceAsync(bool restart)
     {
         if (string.IsNullOrEmpty(_currentDeviceId))
@@ -194,6 +251,11 @@ public partial class MainForm
         await StartMirrorSessionAsync(embedded: true, restartCurrent: restart);
     }
 
+    /// <summary>
+    /// 启动 scrcpy 镜像会话，支持内嵌或外部窗口模式。内嵌模式绑定 DevicePanel 宿主，外部模式独立窗口。
+    /// </summary>
+    /// <param name="embedded">是否内嵌模式。</param>
+    /// <param name="restartCurrent">是否先停止当前会话再启动。</param>
     private async Task StartMirrorSessionAsync(bool embedded, bool restartCurrent)
     {
         var deviceId = _currentDeviceId;
@@ -233,28 +295,29 @@ public partial class MainForm
         {
             _mirrorStartingSerial = serial;
             _devicePanel.SetMirrorAspectRatio(GetDeviceContentAspectRatio(serial));
-            _devicePanel.SetMirrorStatus($"\u6B63\u5728\u542F\u52A8\u955C\u50CF\uFF1A{serial}", hostVisible: false, isRunning: false, isReady: false);
+            _devicePanel.SetMirrorStatus($"\u6B63\u5728\u542F\u52A8\u955C\u50CF\uFF1A{serial}", hostVisible: false,
+                isRunning: false, isReady: false);
         }
 
         try
         {
-             var contentAspectRatio = GetDeviceContentAspectRatio(serial);
-             var hostHandle = embedded ? _devicePanel.EnsureMirrorHostHandle() : IntPtr.Zero;
-             var windowBounds = embedded ? _devicePanel.GetMirrorDisplayBounds() : Rectangle.Empty;
-             var session = await _scrcpyManager.StartSessionAsync(new ScrcpyStartOptions
-             {
-                 ScrcpyPath = scrcpyPath,
-                 DeviceSerial = serial,
-                 WindowTitle = $"LogViewer.scrcpy.{serial}.{Guid.NewGuid():N}",
-                 Mode = embedded ? ScrcpySessionMode.Embedded : ScrcpySessionMode.External,
-                 HostHandle = hostHandle,
-                 AngleDegrees = _scrcpyRotationIndex * 90,
-                 ContentAspectRatio = contentAspectRatio,
-                 WindowX = windowBounds.X,
-                 WindowY = windowBounds.Y,
-                 WindowWidth = windowBounds.Width,
-                 WindowHeight = windowBounds.Height
-             }, token).ConfigureAwait(false);
+            var contentAspectRatio = GetDeviceContentAspectRatio(serial);
+            var hostHandle = embedded ? _devicePanel.EnsureMirrorHostHandle() : IntPtr.Zero;
+            var windowBounds = embedded ? _devicePanel.GetMirrorDisplayBounds() : Rectangle.Empty;
+            var session = await _scrcpyManager.StartSessionAsync(new ScrcpyStartOptions
+            {
+                ScrcpyPath = scrcpyPath,
+                DeviceSerial = serial,
+                WindowTitle = $"LogViewer.scrcpy.{serial}.{Guid.NewGuid():N}",
+                Mode = embedded ? ScrcpySessionMode.Embedded : ScrcpySessionMode.External,
+                HostHandle = hostHandle,
+                AngleDegrees = _scrcpyRotationIndex * 90,
+                ContentAspectRatio = contentAspectRatio,
+                WindowX = windowBounds.X,
+                WindowY = windowBounds.Y,
+                WindowWidth = windowBounds.Width,
+                WindowHeight = windowBounds.Height
+            }, token).ConfigureAwait(false);
 
             if (token.IsCancellationRequested || IsDisposed)
             {
@@ -271,7 +334,8 @@ public partial class MainForm
                     _scrcpySession = session;
                     _scrcpySession.Exited += OnScrcpySessionExited;
                     _devicePanel.SetMirrorAspectRatio(contentAspectRatio);
-                    _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true, isRunning: true, isReady: true);
+                    _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true,
+                        isRunning: true, isReady: true);
                     ApplyEmbeddedMirrorLayout();
                 }));
             }
@@ -297,12 +361,16 @@ public partial class MainForm
                 BeginInvoke(new Action(() =>
                 {
                     _mirrorStartingSerial = null;
-                    _devicePanel.SetMirrorStatus($"\u955C\u50CF\u542F\u52A8\u5931\u8D25\uFF1A{ex.Message}", hostVisible: false, isRunning: false, isReady: false);
+                    _devicePanel.SetMirrorStatus($"\u955C\u50CF\u542F\u52A8\u5931\u8D25\uFF1A{ex.Message}",
+                        hostVisible: false, isRunning: false, isReady: false);
                 }));
             }
         }
     }
 
+    /// <summary>
+    /// scrcpy 会话退出事件处理，清理会话并刷新面板状态。通过 BeginInvoke 确保 UI 线程操作。
+    /// </summary>
     private void OnScrcpySessionExited(object? sender, EventArgs e)
     {
         if (IsDisposed || !IsHandleCreated)
@@ -319,6 +387,10 @@ public partial class MainForm
         }));
     }
 
+    /// <summary>
+    /// 停止当前内嵌镜像，取消启动令牌并释放会话资源。
+    /// </summary>
+    /// <param name="clearStatusOnly">是否仅清理宿主状态而不更新面板。</param>
     private void StopMirror(bool clearStatusOnly)
     {
         _scrcpyStartCts?.Cancel();
@@ -332,6 +404,9 @@ public partial class MainForm
         }
     }
 
+    /// <summary>
+    /// 调度内嵌镜像重启，通过防抖定时器避免频繁重启。
+    /// </summary>
     private void ScheduleEmbeddedMirrorRestart()
     {
         if (IsDisposed || !IsHandleCreated)
@@ -353,6 +428,9 @@ public partial class MainForm
         _mirrorRestartTimer.Start();
     }
 
+    /// <summary>
+    /// 应用内嵌镜像布局，同步 DevicePanel 边界并调整 scrcpy 窗口尺寸。
+    /// </summary>
     private void ApplyEmbeddedMirrorLayout()
     {
         if (_scrcpySession?.IsRunning != true)
@@ -366,9 +444,13 @@ public partial class MainForm
         _scrcpySession.ResizeEmbeddedBounds(bounds);
     }
 
-    private System.Windows.Forms.Timer CreateMirrorRestartTimer()
+    /// <summary>
+    /// 创建镜像重启防抖定时器，间隔 260ms，到期后执行镜像重启。
+    /// </summary>
+    /// <returns>配置好的定时器。</returns>
+    private Timer CreateMirrorRestartTimer()
     {
-        var timer = new System.Windows.Forms.Timer
+        var timer = new Timer
         {
             Interval = 260
         };
@@ -399,6 +481,10 @@ public partial class MainForm
         return timer;
     }
 
+    /// <summary>
+    /// 通过 adb exec-out screencap 对指定设备截图并保存为 PNG 文件。
+    /// </summary>
+    /// <param name="deviceId">设备标识符。</param>
     private void CaptureDeviceScreenshot(string deviceId)
     {
         var adbPath = _adbHelper.GetAdbPath();
@@ -424,18 +510,29 @@ public partial class MainForm
         {
             var bytes = RunAdbBinary(adbPath, serial, "exec-out screencap -p");
             File.WriteAllBytes(dialog.FileName, bytes);
-            _devicePanel.SetMirrorStatus($"\u622A\u56FE\u5DF2\u4FDD\u5B58\uFF1A{Path.GetFileName(dialog.FileName)}", hostVisible: _scrcpySession?.IsRunning == true, isRunning: _scrcpySession?.IsRunning == true, isReady: _scrcpySession != null);
+            _devicePanel.SetMirrorStatus($"\u622A\u56FE\u5DF2\u4FDD\u5B58\uFF1A{Path.GetFileName(dialog.FileName)}",
+                hostVisible: _scrcpySession?.IsRunning == true, isRunning: _scrcpySession?.IsRunning == true,
+                isReady: _scrcpySession != null);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"\u622A\u56FE\u5931\u8D25\uFF1A{ex.Message}", "Screenshot", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show($"\u622A\u56FE\u5931\u8D25\uFF1A{ex.Message}", "Screenshot", MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             RefreshMirrorPanelState();
         }
     }
 
+    /// <summary>
+    /// 执行 adb 二进制命令并返回标准输出字节数据。
+    /// </summary>
+    /// <param name="adbPath">adb 可执行文件路径。</param>
+    /// <param name="serial">设备 ADB serial 号。</param>
+    /// <param name="arguments">adb 子命令参数。</param>
+    /// <returns>标准输出的原始字节数据。</returns>
+    /// <exception cref="InvalidOperationException">adb 启动失败或执行出错。</exception>
     private static byte[] RunAdbBinary(string adbPath, string serial, string arguments)
     {
-        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        using var process = Process.Start(new ProcessStartInfo
         {
             FileName = adbPath,
             Arguments = $"-s {serial} {arguments}",
@@ -452,12 +549,19 @@ public partial class MainForm
 
         if (process.ExitCode != 0)
         {
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? "adb screenshot failed." : error.Trim());
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(error)
+                ? "adb screenshot failed."
+                : error.Trim());
         }
 
         return memory.ToArray();
     }
 
+    /// <summary>
+    /// 通过 adb shell wm size 获取设备屏幕分辨率，并根据当前旋转索引计算内容宽高比。
+    /// </summary>
+    /// <param name="serial">设备 ADB serial 号。</param>
+    /// <returns>内容宽高比；获取失败时返回 9:16 默认值。</returns>
     private double GetDeviceContentAspectRatio(string serial)
     {
         var adbPath = _adbHelper.GetAdbPath();
@@ -468,8 +572,8 @@ public partial class MainForm
 
         try
         {
-            var output = System.Text.Encoding.UTF8.GetString(RunAdbBinary(adbPath, serial, "shell wm size"));
-            var match = System.Text.RegularExpressions.Regex.Match(output, @"(\d+)\s*x\s*(\d+)");
+            var output = Encoding.UTF8.GetString(RunAdbBinary(adbPath, serial, "shell wm size"));
+            var match = Regex.Match(output, @"(\d+)\s*x\s*(\d+)");
             if (!match.Success)
             {
                 return 9d / 16d;

@@ -9,10 +9,13 @@ public class AdbDevice
 {
     /// <summary>设备序列号。</summary>
     public string Serial { get; set; } = "";
+
     /// <summary>设备状态（如 "device"、"offline"）。</summary>
     public string State { get; set; } = "";
+
     /// <summary>设备型号名称。</summary>
     public string Model { get; set; } = "";
+
     /// <summary>设备显示名称，格式为 "型号 (序列号)" 或仅序列号。</summary>
     public string DisplayName => string.IsNullOrEmpty(Model) ? Serial : $"{Model} ({Serial})";
 }
@@ -23,6 +26,7 @@ public class AdbDevice
 public class AdbHelper
 {
     private string? _adbPath;
+
     /// <summary>程序目录下捆绑的 adb.exe 路径。</summary>
     private static string BundledAdbPath => Path.Combine(AppContext.BaseDirectory, "adb.exe");
 
@@ -72,7 +76,10 @@ public class AdbHelper
             proc.WaitForExit(3000);
             return proc.ExitCode == 0;
         }
-        catch { return false; }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -141,7 +148,10 @@ public class AdbHelper
 
             return devices;
         }
-        catch { return new(); }
+        catch
+        {
+            return new();
+        }
     }
 
     /// <summary>
@@ -166,7 +176,10 @@ public class AdbHelper
             proc.WaitForExit(3000);
             return string.IsNullOrEmpty(result) ? existingModel : result;
         }
-        catch { return existingModel; }
+        catch
+        {
+            return existingModel;
+        }
     }
 
     /// <summary>
@@ -198,7 +211,9 @@ public class AdbHelper
             using var proc = Process.Start(psi);
             proc?.WaitForExit(5000);
         }
-        catch { }
+        catch
+        {
+        }
     }
 
     /// <summary>

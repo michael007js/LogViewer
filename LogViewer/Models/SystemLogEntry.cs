@@ -1,4 +1,3 @@
-using System.Drawing;
 using System.Text.Json.Serialization;
 
 namespace LogViewer.Models;
@@ -12,22 +11,31 @@ public class SystemLogEntry
 {
     /// <summary>日志到达的全局序号，由接收端递增赋值，用于保证显示顺序。</summary>
     public long SequenceId { get; set; }
+
     /// <summary>日志产生时间（设备本地时间）。</summary>
     public DateTime Timestamp { get; set; }
+
     /// <summary>产生日志的进程 ID。</summary>
     public int ProcessId { get; set; }
+
     /// <summary>产生日志的线程 ID。</summary>
     public int ThreadId { get; set; }
+
     /// <summary>产生日志的包名（Android 应用标识）。</summary>
     public string? PackageName { get; set; }
+
     /// <summary>日志级别：V(Verbose)/D(Debug)/I(Info)/W(Warn)/E(Error)/F(Fatal)。</summary>
     public string? Level { get; set; }
+
     /// <summary>日志标签，标识日志来源模块。</summary>
     public string? Tag { get; set; }
+
     /// <summary>日志消息正文。</summary>
     public string? Message { get; set; }
+
     /// <summary>来源设备的 adb 序列号。</summary>
     public string? SourceDeviceSerial { get; set; }
+
     /// <summary>来源设备的唯一标识（由 PC 端生成）。</summary>
     public string? SourceDeviceId { get; set; }
 

@@ -1,36 +1,102 @@
 using System.Diagnostics;
-using System.Drawing;
+using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Threading;
 using LogViewer.Static;
 
 namespace LogViewer.Utils;
 
+/// <summary>
+/// scrcpy 会话的显示模式
+/// </summary>
 internal enum ScrcpySessionMode
 {
+    /// <summary>
+    /// 嵌入模式：scrcpy 窗口作为子控件嵌入到宿主窗口内
+    /// </summary>
     Embedded,
+
+    /// <summary>
+    /// 外部模式：scrcpy 以独立窗口运行
+    /// </summary>
     External
 }
 
+/// <summary>
+/// 启动 scrcpy 会话所需的配置选项
+/// </summary>
 internal sealed class ScrcpyStartOptions
 {
+    /// <summary>
+    /// scrcpy 可执行文件的完整路径
+    /// </summary>
     public required string ScrcpyPath { get; init; }
+
+    /// <summary>
+    /// 目标设备的 ADB 序列号
+    /// </summary>
     public required string DeviceSerial { get; init; }
+
+    /// <summary>
+    /// scrcpy 窗口标题
+    /// </summary>
     public required string WindowTitle { get; init; }
+
+    /// <summary>
+    /// 会话显示模式（嵌入或外部）
+    /// </summary>
     public required ScrcpySessionMode Mode { get; init; }
+
+    /// <summary>
+    /// 嵌入模式下宿主控件的窗口句柄；外部模式下为 <see cref="IntPtr.Zero"/>
+    /// </summary>
     public IntPtr HostHandle { get; init; }
+
+    /// <summary>
+    /// 屏幕旋转角度（0/90/180/270），0 表示不旋转
+    /// </summary>
     public int AngleDegrees { get; init; }
+
+    /// <summary>
+    /// 内容宽高比，用于计算嵌入窗口的缩放布局
+    /// </summary>
     public double ContentAspectRatio { get; init; }
+
+    /// <summary>
+    /// 外部模式下窗口左上角 X 坐标
+    /// </summary>
     public int WindowX { get; init; }
+
+    /// <summary>
+    /// 外部模式下窗口左上角 Y 坐标
+    /// </summary>
     public int WindowY { get; init; }
+
+    /// <summary>
+    /// 外部模式下窗口宽度
+    /// </summary>
     public int WindowWidth { get; init; }
+
+    /// <summary>
+    /// 外部模式下窗口高度
+    /// </summary>
     public int WindowHeight { get; init; }
 }
 
+/// <summary>
+/// 表示一个正在运行的 scrcpy 实例，管理其生命周期和窗口嵌入
+/// </summary>
+/// <remarks>实现 <see cref="IDisposable"/>，释放时会优雅关闭 scrcpy 进程</remarks>
 internal sealed class ScrcpySession : IDisposable
 {
+    // 标识是否已调用过 Stop/Dispose，防止重复终止
     private bool _disposed;
 
+    /// <summary>
+    /// 初始化 scrcpy 会话实例
+    /// </summary>
+    /// <param name="process">scrcpy 进程对象</param>
+    /// <param name="windowHandle">scrcpy 创建的窗口句柄</param>
+    /// <param name="options">启动时使用的配置选项</param>
     internal ScrcpySession(Process process, IntPtr windowHandle, ScrcpyStartOptions options)
     {
         Process = process;
@@ -40,26 +106,67 @@ internal sealed class ScrcpySession : IDisposable
         HostHandle = options.HostHandle;
         AngleDegrees = options.AngleDegrees;
 
+        // 订阅进程退出事件，转发为 Exited 事件
         Process.EnableRaisingEvents = true;
         Process.Exited += (_, _) => Exited?.Invoke(this, EventArgs.Empty);
 
+        // 嵌入模式：将 scrcpy 窗口附着到宿主控件
         if (Mode == ScrcpySessionMode.Embedded)
         {
             EmbeddedWindowHost.Attach(WindowHandle, HostHandle);
         }
     }
 
+    /// <summary>
+    /// scrcpy 进程对象
+    /// </summary>
     public Process Process { get; }
+
+    /// <summary>
+    /// scrcpy 创建的窗口句柄
+    /// </summary>
     public IntPtr WindowHandle { get; }
+
+    /// <summary>
+    /// 目标设备的 ADB 序列号
+    /// </summary>
     public string DeviceSerial { get; }
+
+    /// <summary>
+    /// 会话显示模式
+    /// </summary>
     public ScrcpySessionMode Mode { get; }
+
+    /// <summary>
+    /// 嵌入模式下的宿主窗口句柄
+    /// </summary>
     public IntPtr HostHandle { get; }
+
+    /// <summary>
+    /// 屏幕旋转角度
+    /// </summary>
     public int AngleDegrees { get; }
+
+    /// <summary>
+    /// 进程是否仍在运行
+    /// </summary>
     public bool IsRunning => !Process.HasExited;
 
+    /// <summary>
+    /// scrcpy 进程退出时触发
+    /// </summary>
     public event EventHandler? Exited;
+
+    /// <summary>
+    /// 最近一次错误文本（来自 stderr 输出）
+    /// </summary>
     public string LastErrorText { get; internal set; } = string.Empty;
 
+    /// <summary>
+    /// 调整嵌入窗口的大小和位置以匹配指定边界
+    /// </summary>
+    /// <param name="bounds">目标边界矩形</param>
+    /// <remarks>仅在嵌入模式且句柄有效时执行操作</remarks>
     public void ResizeEmbeddedBounds(Rectangle bounds)
     {
         if (Mode != ScrcpySessionMode.Embedded || WindowHandle == IntPtr.Zero || HostHandle == IntPtr.Zero)
@@ -70,6 +177,9 @@ internal sealed class ScrcpySession : IDisposable
         EmbeddedWindowHost.ResizeToBounds(WindowHandle, bounds);
     }
 
+    /// <summary>
+    /// 停止 scrcpy 会话：先尝试优雅关闭窗口，超时后强制终止进程树
+    /// </summary>
     public void Stop()
     {
         if (_disposed)
@@ -83,15 +193,18 @@ internal sealed class ScrcpySession : IDisposable
         {
             if (!Process.HasExited)
             {
+        // 优先发送 WM_CLOSE 请求优雅关闭
                 if (WindowHandle != IntPtr.Zero)
                 {
                     EmbeddedWindowHost.RequestClose(WindowHandle);
                 }
                 else
                 {
+                // 优雅关闭失败则发送关闭主窗口命令
                     try { Process.CloseMainWindow(); } catch { }
                 }
 
+                // 等待1.5秒，超时则强制终止进程树
                 if (!Process.WaitForExit(1500))
                 {
                     try { Process.Kill(entireProcessTree: true); } catch { }
@@ -108,17 +221,32 @@ internal sealed class ScrcpySession : IDisposable
         }
     }
 
+    /// <summary>
+    /// 释放资源，等效于调用 <see cref="Stop"/>
+    /// </summary>
     public void Dispose()
     {
         Stop();
     }
 }
 
+/// <summary>
+/// scrcpy 生命周期管理器：查找/验证可执行文件、启动会话、终止进程
+/// </summary>
 internal sealed class ScrcpyManager
 {
+    // 缓存已找到的 scrcpy 路径，避免重复磁盘检测
     private string? _scrcpyPath;
+
+    /// <summary>
+    /// 随应用分发的 scrcpy 可执行文件路径（位于应用根目录下的 scrcpy.exe）
+    /// </summary>
     private static string BundledScrcpyPath => Path.Combine(AppContext.BaseDirectory, "scrcpy.exe");
 
+    /// <summary>
+    /// 获取 scrcpy 可执行文件路径，优先返回缓存路径，其次查找随应用分发的版本
+    /// </summary>
+    /// <returns>scrcpy 路径；未找到时返回 <c>null</c></returns>
     public string? GetScrcpyPath()
     {
         if (!string.IsNullOrEmpty(_scrcpyPath) && File.Exists(_scrcpyPath))
@@ -126,8 +254,10 @@ internal sealed class ScrcpyManager
             return _scrcpyPath;
         }
 
+        // 缓存失效，重置为 null 以便重新查找
         _scrcpyPath = null;
 
+        // 检查随应用分发的 scrcpy
         if (File.Exists(BundledScrcpyPath))
         {
             _scrcpyPath = BundledScrcpyPath;
@@ -136,6 +266,13 @@ internal sealed class ScrcpyManager
         return _scrcpyPath;
     }
 
+    /// <summary>
+    /// 确保 scrcpy 可用，检查现有路径或随应用分发的版本
+    /// </summary>
+    /// <param name="forceDeploy">是否强制重新部署（当前未实现部署逻辑）</param>
+    /// <param name="progress">进度报告器，用于向 UI 反馈状态</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>scrcpy 路径；未找到时返回 <c>null</c></returns>
     public Task<string?> EnsureScrcpyAvailableAsync(bool forceDeploy, IProgress<string>? progress, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -150,6 +287,11 @@ internal sealed class ScrcpyManager
         return Task.FromResult<string?>(null);
     }
 
+    /// <summary>
+    /// 验证指定路径的 scrcpy 是否可用（执行 <c>--version</c> 检查退出码）
+    /// </summary>
+    /// <param name="path">待验证的 scrcpy 可执行文件路径</param>
+    /// <returns>可用返回 <c>true</c>；否则 <c>false</c></returns>
     public bool ValidateScrcpy(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
@@ -186,11 +328,20 @@ internal sealed class ScrcpyManager
         }
     }
 
+    /// <summary>
+    /// 获取 scrcpy 搜索路径列表（当前仅包含随应用分发的路径）
+    /// </summary>
+    /// <returns>搜索路径列表</returns>
     public List<string> GetSearchPaths()
     {
         return new List<string> { BundledScrcpyPath };
     }
 
+    /// <summary>
+    /// 终止所有与指定路径匹配的 scrcpy 进程（含进程树）
+    /// </summary>
+    /// <param name="scrcpyPath">scrcpy 可执行文件路径；为 <c>null</c> 时不执行任何操作</param>
+    /// <remarks>仅终止路径匹配的进程，其他 scrcpy 进程不受影响</remarks>
     public void TerminateBundledProcesses(string? scrcpyPath)
     {
         if (string.IsNullOrWhiteSpace(scrcpyPath))
@@ -235,6 +386,15 @@ internal sealed class ScrcpyManager
         }
     }
 
+    /// <summary>
+    /// 异步启动 scrcpy 会话，构建命令行参数并等待窗口创建完成
+    /// </summary>
+    /// <param name="options">启动配置选项</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>已启动的 <see cref="ScrcpySession"/> 实例</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> 为 <c>null</c></exception>
+    /// <exception cref="InvalidOperationException">嵌入模式下宿主句柄未就绪，或 scrcpy 启动失败</exception>
+    /// <exception cref="TimeoutException">等待 scrcpy 窗口超时</exception>
     public async Task<ScrcpySession> StartSessionAsync(ScrcpyStartOptions options, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -265,19 +425,20 @@ internal sealed class ScrcpyManager
         if (options.WindowWidth > 0 && options.WindowHeight > 0)
         {
             psi.ArgumentList.Add("--window-x");
-            psi.ArgumentList.Add(options.WindowX.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add(options.WindowX.ToString(CultureInfo.InvariantCulture));
             psi.ArgumentList.Add("--window-y");
-            psi.ArgumentList.Add(options.WindowY.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add(options.WindowY.ToString(CultureInfo.InvariantCulture));
             psi.ArgumentList.Add("--window-width");
-            psi.ArgumentList.Add(options.WindowWidth.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add(options.WindowWidth.ToString(CultureInfo.InvariantCulture));
             psi.ArgumentList.Add("--window-height");
-            psi.ArgumentList.Add(options.WindowHeight.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add(options.WindowHeight.ToString(CultureInfo.InvariantCulture));
         }
 
         if (options.AngleDegrees != 0)
         {
+            // scrcpy --rotation 参数接受 0/1/2/3（对应 0°/90°/180°/270°）
             psi.ArgumentList.Add("--rotation");
-            psi.ArgumentList.Add((options.AngleDegrees / 90).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            psi.ArgumentList.Add((options.AngleDegrees / 90).ToString(CultureInfo.InvariantCulture));
         }
 
         var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start scrcpy.");
@@ -291,9 +452,11 @@ internal sealed class ScrcpyManager
             {
                 LastErrorText = await stderrTask.ConfigureAwait(false)
             };
-            _ = stdoutTask;
+        // stdout 仅消费防止管道阻塞，无需等待结果
+        _ = stdoutTask;
             return session;
         }
+        // 启动失败时清理进程，防止僵尸进程
         catch
         {
             try
@@ -311,6 +474,11 @@ internal sealed class ScrcpyManager
         }
     }
 
+    /// <summary>
+    /// 安全地异步读取流到末尾，异常时返回空字符串
+    /// </summary>
+    /// <param name="reader">要读取的流读取器</param>
+    /// <returns>流内容字符串；异常时返回 <see cref="string.Empty"/></returns>
     private static async Task<string> ReadToEndSafeAsync(StreamReader reader)
     {
         try
@@ -323,10 +491,21 @@ internal sealed class ScrcpyManager
         }
     }
 
+    /// <summary>
+    /// 等待 scrcpy 进程创建窗口句柄，超时或进程提前退出时抛出异常
+    /// </summary>
+    /// <param name="process">scrcpy 进程对象</param>
+    /// <param name="stderrTask">stderr 读取任务，用于在进程异常退出时提取错误信息</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>scrcpy 窗口句柄</returns>
+    /// <exception cref="InvalidOperationException">scrcpy 在创建窗口前退出</exception>
+    /// <exception cref="TimeoutException">等待窗口超时（约8秒）</exception>
     private static async Task<IntPtr> WaitForWindowAsync(Process process, Task<string> stderrTask, CancellationToken cancellationToken)
     {
+        // 等待进程完成初始化，5秒超时
         try { process.WaitForInputIdle(5000); } catch { }
 
+        // 最多轮询80次（约8秒），等待 scrcpy 创建窗口
         for (var attempt = 0; attempt < 80; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -353,21 +532,45 @@ internal sealed class ScrcpyManager
 
 }
 
+/// <summary>
+/// Win32 API 互操作工具类，用于将外部窗口嵌入为子控件并管理其位置和大小
+/// </summary>
+/// <remarks>
+/// 通过 Win32 <c>SetParent</c> + 窗口样式修改实现嵌入，仅适用于 Windows 平台。
+/// 64 位进程使用 <c>GetWindowLongPtr</c>，32 位进程使用 <c>GetWindowLong</c>。
+/// </remarks>
 internal static class EmbeddedWindowHost
 {
+    // GWL_STYLE：窗口样式偏移量
     private const int GwlStyle = -16;
+    // WS_CHILD：子窗口样式
     private const int WsChild = 0x40000000;
+    // WS_CAPTION：标题栏样式
     private const int WsCaption = 0x00C00000;
+    // WS_THICKFRAME：可调大小边框
     private const int WsThickFrame = 0x00040000;
+    // WS_MINIMIZE：最小化样式
     private const int WsMinimize = 0x20000000;
+    // WS_MAXIMIZE：最大化样式
     private const int WsMaximize = 0x01000000;
+    // WS_SYSMENU：系统菜单样式
     private const int WsSysMenu = 0x00080000;
+    // SWP_NOZORDER：不改变 Z 序
     private const uint SwpNoZOrder = 0x0004;
+    // SWP_NOACTIVATE：不激活窗口
     private const uint SwpNoActivate = 0x0010;
+    // SWP_FRAMECHANGED：重新应用窗口样式
     private const uint SwpFrameChanged = 0x0020;
+    // SW_SHOW：显示窗口
     private const uint SwShow = 5;
+    // WM_CLOSE：关闭消息
     private const uint WmClose = 0x0010;
 
+    /// <summary>
+    /// 将外部窗口嵌入到宿主控件中，移除标题栏/边框并设置为子窗口样式
+    /// </summary>
+    /// <param name="windowHandle">要嵌入的外部窗口句柄</param>
+    /// <param name="hostHandle">宿主控件窗口句柄</param>
     public static void Attach(IntPtr windowHandle, IntPtr hostHandle)
     {
         if (windowHandle == IntPtr.Zero || hostHandle == IntPtr.Zero)
@@ -402,6 +605,11 @@ internal static class EmbeddedWindowHost
         ShowWindow(windowHandle, SwShow);
     }
 
+    /// <summary>
+    /// 将嵌入的窗口移动并调整到指定边界
+    /// </summary>
+    /// <param name="windowHandle">嵌入窗口句柄</param>
+    /// <param name="bounds">目标边界矩形</param>
     public static void ResizeToBounds(IntPtr windowHandle, Rectangle bounds)
     {
         if (windowHandle == IntPtr.Zero || bounds.Width <= 0 || bounds.Height <= 0)
@@ -410,12 +618,23 @@ internal static class EmbeddedWindowHost
         MoveWindow(windowHandle, bounds.X, bounds.Y, bounds.Width, bounds.Height, true);
     }
 
+    /// <summary>
+    /// 向指定窗口发送 WM_CLOSE 消息，请求优雅关闭
+    /// </summary>
+    /// <param name="windowHandle">目标窗口句柄</param>
     public static void RequestClose(IntPtr windowHandle)
     {
         if (windowHandle != IntPtr.Zero)
             PostMessage(windowHandle, WmClose, IntPtr.Zero, IntPtr.Zero);
     }
 
+    /// <summary>
+    /// 获取宿主窗口的客户区尺寸
+    /// </summary>
+    /// <param name="hostHandle">宿主窗口句柄</param>
+    /// <param name="width">输出宽度</param>
+    /// <param name="height">输出高度</param>
+    /// <returns>成功获取且尺寸有效返回 <c>true</c>；否则 <c>false</c></returns>
     public static bool TryGetClientSize(IntPtr hostHandle, out int width, out int height)
     {
         width = 0;
@@ -428,6 +647,13 @@ internal static class EmbeddedWindowHost
         return width > 0 && height > 0;
     }
 
+    /// <summary>
+    /// 获取窗口的整体尺寸（含边框）
+    /// </summary>
+    /// <param name="windowHandle">窗口句柄</param>
+    /// <param name="width">输出宽度</param>
+    /// <param name="height">输出高度</param>
+    /// <returns>成功获取且尺寸有效返回 <c>true</c>；否则 <c>false</c></returns>
     public static bool TryGetWindowSize(IntPtr windowHandle, out int width, out int height)
     {
         width = 0;
@@ -440,39 +666,53 @@ internal static class EmbeddedWindowHost
         return width > 0 && height > 0;
     }
 
+    /// <summary>设置窗口的父窗口</summary>
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
 
+    /// <summary>获取窗口样式（32位进程）</summary>
     [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
     private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
+    /// <summary>设置窗口样式（32位进程）</summary>
     [DllImport("user32.dll", EntryPoint = "SetWindowLong")]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
+    /// <summary>获取窗口样式（64位进程）</summary>
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
     private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
+    /// <summary>设置窗口样式（64位进程）</summary>
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")]
     private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
 
+    /// <summary>移动并调整窗口位置和大小</summary>
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool MoveWindow(IntPtr hWnd, int x, int y, int nWidth, int nHeight, bool bRepaint);
 
+    /// <summary>设置窗口位置、大小和Z序</summary>
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
+    /// <summary>设置窗口的显示状态</summary>
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, uint nCmdShow);
 
+    /// <summary>获取窗口客户区矩形</summary>
     [DllImport("user32.dll")]
     private static extern bool GetClientRect(IntPtr hWnd, out Rect lpRect);
 
+    /// <summary>获取窗口整体矩形（含边框）</summary>
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hWnd, out Rect lpRect);
 
+    /// <summary>向窗口发送消息（异步）</summary>
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+    /// <summary>
+    /// Win32 RECT 结构体，表示矩形区域
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct Rect
     {

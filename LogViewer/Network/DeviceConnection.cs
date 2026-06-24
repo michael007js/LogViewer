@@ -20,15 +20,19 @@ public class DeviceConnection
 
     /// <summary>设备唯一标识，由 LogServer 在设备注册时分配。</summary>
     public string? DeviceId { get; set; }
+
     /// <summary>设备注册信息，包含型号、版本等元数据。</summary>
     public DeviceInfo? DeviceInfo { get; private set; }
+
     /// <summary>远程端点地址，格式如 "192.168.1.100:12345"。</summary>
     public string RemoteEndpoint => _tcpClient.Client.RemoteEndPoint?.ToString() ?? "";
 
     /// <summary>设备注册事件，当收到 0x01 消息时触发。</summary>
     public event EventHandler<DeviceInfo>? Registered;
+
     /// <summary>日志接收事件，当收到 0x02 消息时触发。</summary>
     public event EventHandler<LogEntry>? LogReceived;
+
     /// <summary>连接断开事件，当 TCP 连接关闭或异常时触发。</summary>
     public event EventHandler? Disconnected;
 
@@ -88,6 +92,7 @@ public class DeviceConnection
                         {
                             Registered?.Invoke(this, DeviceInfo);
                         }
+
                         break;
                     case 0x02: // 网络日志消息
                         var entry = JsonSerializer.Deserialize<LogEntry>(jsonStr, JsonOptions);
@@ -97,11 +102,14 @@ public class DeviceConnection
                             entry.Content = TryDecodeGzipJsonContent(entry.Content);
                             LogReceived?.Invoke(this, entry);
                         }
+
                         break;
                 }
             }
         }
-        catch { }
+        catch
+        {
+        }
         finally
         {
             Disconnected?.Invoke(this, EventArgs.Empty);
@@ -126,6 +134,7 @@ public class DeviceConnection
                 if (read == 0) return null;
                 offset += read;
             }
+
             var result = new byte[count];
             Array.Copy(buffer, result, count);
             return result;
@@ -277,7 +286,20 @@ public class DeviceConnection
     /// </summary>
     public void Disconnect()
     {
-        try { _stream.Close(); } catch { }
-        try { _tcpClient.Close(); } catch { }
+        try
+        {
+            _stream.Close();
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            _tcpClient.Close();
+        }
+        catch
+        {
+        }
     }
 }

@@ -14,48 +14,64 @@ public partial class JsonDetailForm : Form
 {
     /// <summary>当前显示的日志条目。</summary>
     private readonly LogEntry _entry;
+
     /// <summary>字体设置。</summary>
     private readonly Font _font;
 
     /// <summary>左右分栏容器。</summary>
     private SplitContainer _split = null!;
+
     /// <summary>请求 JSON 树视图。</summary>
     private JsonTreeView _jsonRequest = null!;
+
     /// <summary>响应 JSON 树视图。</summary>
     private JsonTreeView _jsonResponse = null!;
+
     /// <summary>请求原始文本框。</summary>
     private TextBox _rawRequest = null!;
+
     /// <summary>响应原始文本框。</summary>
     private TextBox _rawResponse = null!;
 
     /// <summary>切换请求视图模式的按钮。</summary>
     private Button _btnToggleRequest = null!;
+
     /// <summary>切换响应视图模式的按钮。</summary>
     private Button _btnToggleResponse = null!;
+
     /// <summary>展开请求 JSON 树的按钮。</summary>
     private Button _btnExpandReq = null!;
+
     /// <summary>折叠请求 JSON 树的按钮。</summary>
     private Button _btnCollapseReq = null!;
+
     /// <summary>折叠请求 JSON 树到第2级的按钮。</summary>
     private Button _btnLvl2Req = null!;
+
     /// <summary>请求搜索框。</summary>
     private TextBox _txtSearchReq = null!;
+
     /// <summary>请求搜索按钮。</summary>
     private Button _btnSearchReq = null!;
 
     /// <summary>展开响应 JSON 树的按钮。</summary>
     private Button _btnExpandRes = null!;
+
     /// <summary>折叠响应 JSON 树的按钮。</summary>
     private Button _btnCollapseRes = null!;
+
     /// <summary>折叠响应 JSON 树到第2级的按钮。</summary>
     private Button _btnLvl2Res = null!;
+
     /// <summary>响应搜索框。</summary>
     private TextBox _txtSearchRes = null!;
+
     /// <summary>响应搜索按钮。</summary>
     private Button _btnSearchRes = null!;
 
     /// <summary>请求视图是否为原始文本模式。</summary>
     private bool _requestIsRaw;
+
     /// <summary>响应视图是否为原始文本模式。</summary>
     private bool _responseIsRaw;
 
@@ -133,6 +149,11 @@ public partial class JsonDetailForm : Form
         _split.SplitterDistance = distance;
     }
 
+    /// <summary>
+    /// 检测当前是否处于 IDE 设计器模式，防止设计器中触发运行时逻辑导致崩溃。
+    /// 同时检查进程名和命令行参数以覆盖 Visual Studio / Rider / JetBrains 设计器场景。
+    /// </summary>
+    /// <returns>处于设计器模式返回 true。</returns>
     private static bool IsDesignTimeMode()
     {
         if (LicenseManager.UsageMode == LicenseUsageMode.Designtime)
@@ -146,10 +167,15 @@ public partial class JsonDetailForm : Form
                processName.Contains("DesignToolsServer", StringComparison.OrdinalIgnoreCase) ||
                processName.Contains("rider", StringComparison.OrdinalIgnoreCase) ||
                processName.Contains("jetbrains", StringComparison.OrdinalIgnoreCase) ||
-               commandLine.Contains("JetBrains.ReSharper.Features.WinForms.Designer.External.Core", StringComparison.OrdinalIgnoreCase) ||
+               commandLine.Contains("JetBrains.ReSharper.Features.WinForms.Designer.External.Core",
+                   StringComparison.OrdinalIgnoreCase) ||
                commandLine.Contains("WinFormsDesigner", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// 加载日志数据到请求和响应的 JSON 树视图及原始文本框。
+    /// 对 JSON 内容尝试格式化，格式化失败则显示原始文本。
+    /// </summary>
     private void LoadData()
     {
         _jsonRequest.DisplayJson(_entry.Send ?? "");
@@ -158,6 +184,10 @@ public partial class JsonDetailForm : Form
         _rawResponse.Text = JsonFormatter.FormatJson(_entry.Content) ?? _entry.Content ?? "";
     }
 
+    /// <summary>
+    /// 切换请求视图模式：JSON 树视图 ↔ 原始文本。
+    /// 切换时同步启用/禁用树操作按钮和搜索控件。
+    /// </summary>
     private void ToggleRequestView()
     {
         _requestIsRaw = !_requestIsRaw;
@@ -171,6 +201,10 @@ public partial class JsonDetailForm : Form
         _btnSearchReq.Enabled = !_requestIsRaw;
     }
 
+    /// <summary>
+    /// 切换响应视图模式：JSON 树视图 ↔ 原始文本。
+    /// 切换时同步启用/禁用树操作按钮和搜索控件。
+    /// </summary>
     private void ToggleResponseView()
     {
         _responseIsRaw = !_responseIsRaw;
@@ -184,6 +218,12 @@ public partial class JsonDetailForm : Form
         _btnSearchRes.Enabled = !_responseIsRaw;
     }
 
+    /// <summary>
+    /// 处理快捷键：Ctrl+W 关闭窗口。
+    /// </summary>
+    /// <param name="msg">Windows 消息。</param>
+    /// <param name="keyData">按键组合。</param>
+    /// <returns>已处理返回 true；否则调用基类处理。</returns>
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (keyData == (Keys.Control | Keys.W))
@@ -191,9 +231,14 @@ public partial class JsonDetailForm : Form
             Close();
             return true;
         }
+
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
+    /// <summary>
+    /// 释放资源，清理自定义字体实例。
+    /// </summary>
+    /// <param name="disposing">是否释放托管资源。</param>
     protected override void Dispose(bool disposing)
     {
         if (disposing) _font?.Dispose();

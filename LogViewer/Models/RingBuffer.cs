@@ -10,10 +10,13 @@ public class RingBuffer<T>
 {
     /// <summary>内部数组，实际存储数据。</summary>
     private T[] _buffer;
+
     /// <summary>下一个写入位置的索引。</summary>
     private int _head;
+
     /// <summary>最早有效数据的索引（队列头）。</summary>
     private int _tail;
+
     /// <summary>当前有效元素数量。</summary>
     private int _count;
 
@@ -44,6 +47,7 @@ public class RingBuffer<T>
         {
             _count++;
         }
+
         _buffer[_head] = item;
         _head = (_head + 1) % _buffer.Length;
     }
@@ -60,6 +64,7 @@ public class RingBuffer<T>
 
     /// <summary>当前有效元素数量。</summary>
     public int Count => _count;
+
     /// <summary>缓冲区最大容量。</summary>
     public int Capacity => _buffer.Length;
 
@@ -70,6 +75,7 @@ public class RingBuffer<T>
         {
             Array.Clear(_buffer, 0, _buffer.Length);
         }
+
         _head = 0;
         _tail = 0;
         _count = 0;
@@ -88,6 +94,7 @@ public class RingBuffer<T>
         {
             newBuffer[i] = _buffer[(_tail + i) % _buffer.Length];
         }
+
         _buffer = newBuffer;
         _tail = 0;
         _head = copyCount;

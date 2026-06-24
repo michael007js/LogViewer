@@ -12,10 +12,13 @@ public partial class MainForm
 {
     /// <summary>网络日志刷新是否已调度。</summary>
     private bool _networkRefreshScheduled;
+
     /// <summary>网络日志刷新是否需要全量过滤。</summary>
     private bool _networkRefreshNeedsFullFilter;
+
     /// <summary>网络日志过滤后的索引列表。</summary>
     private List<int> _filteredNetworkIndices = new();
+
     /// <summary>网络日志自动滚动是否启用。</summary>
     private bool _networkAutoScrollEnabled = true;
 
@@ -69,6 +72,9 @@ public partial class MainForm
         return item;
     }
 
+    /// <summary>
+    /// 网络日志列表鼠标抬起事件处理，右键时显示上下文菜单。
+    /// </summary>
     private void OnNetworkLogMouseUp(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Right) return;
@@ -78,12 +84,18 @@ public partial class MainForm
         ShowNetworkLogMenu(_lstNetworkLogs.PointToScreen(e.Location));
     }
 
+    /// <summary>
+    /// 网络日志列表鼠标滚轮事件处理，禁用自动滚动。
+    /// </summary>
     private void OnNetworkLogsMouseWheel(object? sender, MouseEventArgs e)
     {
         _networkAutoScrollEnabled = false;
         UpdateLogCount();
     }
 
+    /// <summary>
+    /// 刷新网络日志列表视图，根据自动滚动状态决定滚动到尾部或恢复锚点位置。
+    /// </summary>
     private void RefreshNetworkLogList()
     {
         var anchorIndex = _networkAutoScrollEnabled ? -1 : BufferedListViewHelper.GetTopIndexExact(_lstNetworkLogs);
@@ -98,9 +110,13 @@ public partial class MainForm
             RefreshNetworkVisibleRows();
             return;
         }
+
         _lstNetworkLogs.Invalidate();
     }
 
+    /// <summary>
+    /// 网络日志选中项变化事件处理，更新预览面板显示。
+    /// </summary>
     private void OnNetworkLogSelected(object? sender, EventArgs e)
     {
         var entry = GetSelectedNetworkEntry();
@@ -109,6 +125,9 @@ public partial class MainForm
         ShowLogDetail(entry);
     }
 
+    /// <summary>
+    /// 网络日志双击事件处理，弹出 JSON 详情窗口。
+    /// </summary>
     private void OnNetworkLogDoubleClick(object? sender, EventArgs e)
     {
         var entry = GetSelectedNetworkEntry();
@@ -118,6 +137,10 @@ public partial class MainForm
         }
     }
 
+    /// <summary>
+    /// 创建网络日志右键上下文菜单，包含复制和查看详情选项。
+    /// </summary>
+    /// <returns>配置好的上下文菜单。</returns>
     private ContextMenuStrip CreateNetworkLogMenu()
     {
         var menu = new ContextMenuStrip();
@@ -161,11 +184,21 @@ public partial class MainForm
         return menu;
     }
 
+    /// <summary>
+    /// 在指定屏幕位置显示网络日志上下文菜单。
+    /// </summary>
+    /// <param name="screenLocation">屏幕坐标位置。</param>
     private void ShowNetworkLogMenu(Point screenLocation)
     {
         _lstNetworkLogs.ContextMenuStrip?.Show(screenLocation);
     }
 
+    /// <summary>
+    /// 格式化 URL 与请求/响应体的组合文本，JSON 自动格式化。
+    /// </summary>
+    /// <param name="url">请求 URL。</param>
+    /// <param name="body">请求或响应体内容。</param>
+    /// <returns>格式化后的文本。</returns>
     private static string FormatUrlWithBody(string? url, string? body)
     {
         var formattedBody = JsonFormatter.FormatJson(body) ?? body ?? "";
@@ -174,6 +207,10 @@ public partial class MainForm
             : $"{url ?? ""}{Environment.NewLine}{formattedBody}";
     }
 
+    /// <summary>
+    /// 获取当前选中的网络日志条目。
+    /// </summary>
+    /// <returns>选中的日志条目，无选中时返回 null。</returns>
     private LogEntry? GetSelectedNetworkEntry()
     {
         return _lstNetworkLogs.SelectedIndices.Count > 0
@@ -227,10 +264,18 @@ public partial class MainForm
             if (MatchesNetworkFilter(buf.Get(i)))
                 _filteredNetworkIndices.Add(i);
         }
+
         RefreshNetworkLogList();
         UpdateLogCount();
     }
 
+    /// <summary>
+    /// 尝试增量追加网络日志到过滤索引，避免全量过滤。缓冲区满时返回 false 需全量刷新。
+    /// </summary>
+    /// <param name="entry">新增的日志条目。</param>
+    /// <param name="bufferCountBeforeAdd">添加前的缓冲区计数。</param>
+    /// <param name="bufferWasFull">缓冲区是否已满（触发环形覆盖）。</param>
+    /// <returns>增量追加成功返回 true；需要全量过滤返回 false。</returns>
     private bool TryAppendNetworkLogIncrementally(LogEntry entry, int bufferCountBeforeAdd, bool bufferWasFull)
     {
         if (bufferWasFull)
@@ -242,9 +287,14 @@ public partial class MainForm
         {
             _filteredNetworkIndices.Add(bufferCountBeforeAdd);
         }
+
         return true;
     }
 
+    /// <summary>
+    /// 调度网络日志刷新，防抖处理避免频繁刷新。根据需要决定全量过滤或增量刷新。
+    /// </summary>
+    /// <param name="debounceMs">防抖间隔毫秒数，默认 80ms。</param>
     private void ScheduleNetworkRefresh(int debounceMs = 80)
     {
         if (_networkRefreshScheduled || !IsHandleCreated || IsDisposed)
@@ -289,6 +339,11 @@ public partial class MainForm
         });
     }
 
+    /// <summary>
+    /// 判断日志条目是否匹配当前网络日志过滤条件（关键字、方法、状态码）。
+    /// </summary>
+    /// <param name="entry">待匹配的日志条目。</param>
+    /// <returns>匹配返回 true，否则 false。</returns>
     private bool MatchesNetworkFilter(LogEntry entry)
     {
         var kw = _txtNetworkKeyword.Text.Trim();
@@ -304,7 +359,8 @@ public partial class MainForm
             return false;
 
         var method = _cmbMethod.SelectedItem as string;
-        if (method != Language.All && !string.IsNullOrEmpty(method) && !string.Equals(entry.Method, method, StringComparison.OrdinalIgnoreCase))
+        if (method != Language.All && !string.IsNullOrEmpty(method) &&
+            !string.Equals(entry.Method, method, StringComparison.OrdinalIgnoreCase))
             return false;
 
         var statusFilter = _cmbStatusCode.SelectedItem as string;
@@ -322,6 +378,9 @@ public partial class MainForm
         return true;
     }
 
+    /// <summary>
+    /// 网络日志过滤条件变化事件处理，执行全量过滤刷新。
+    /// </summary>
     private void OnNetworkFilterChanged(object? sender, EventArgs e)
     {
         RefreshNetworkFilter();
@@ -339,16 +398,27 @@ public partial class MainForm
         }
 
         var topIndex = BufferedListViewHelper.GetTopIndexExact(_lstNetworkLogs);
-        var bottomIndex = Math.Min(_lstNetworkLogs.VirtualListSize - 1, topIndex + GetApproxVisibleRowCount(_lstNetworkLogs) - 1);
+        var bottomIndex = Math.Min(_lstNetworkLogs.VirtualListSize - 1,
+            topIndex + GetApproxVisibleRowCount(_lstNetworkLogs) - 1);
         if (bottomIndex < topIndex)
         {
             _lstNetworkLogs.Invalidate();
             return;
         }
 
-        try { _lstNetworkLogs.RedrawItems(topIndex, bottomIndex, false); } catch { _lstNetworkLogs.Invalidate(); }
+        try
+        {
+            _lstNetworkLogs.RedrawItems(topIndex, bottomIndex, false);
+        }
+        catch
+        {
+            _lstNetworkLogs.Invalidate();
+        }
     }
 
+    /// <summary>
+    /// 导出网络日志为 JSON 文件。
+    /// </summary>
     private void OnExportJson(object? sender, EventArgs e)
     {
         using var dlg = new SaveFileDialog { Filter = "JSON|*.json", FileName = "network_logs.json" };
@@ -361,6 +431,9 @@ public partial class MainForm
         File.WriteAllText(dlg.FileName, json);
     }
 
+    /// <summary>
+    /// 导出网络日志为纯文本文件。
+    /// </summary>
     private void OnExportTxt(object? sender, EventArgs e)
     {
         using var dlg = new SaveFileDialog { Filter = "Text|*.txt", FileName = "network_logs.txt" };
