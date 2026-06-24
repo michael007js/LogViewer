@@ -16,122 +16,149 @@ public class JsonTreeView : UserControl
     private static readonly Color ColorSummary = Color.FromArgb(0x80, 0x80, 0x80);
     private static readonly Color ColorHighlight = Color.Yellow;
 
-    private readonly TreeView _treeView;
     private readonly bool _isDesignMode;
-    private bool _syncingFont;
+    private readonly HashSet<TreeNode> _highlightedNodes = new();
+    private TreeView? _treeView;
+    private Control? _designPreview;
+    private Font _displayFont;
+    private TreeViewDrawMode _drawMode = TreeViewDrawMode.OwnerDrawText;
+    private bool _hideSelection;
+    private int _itemHeight = 20;
+    private bool _showLines;
+    private bool _showRootLines;
     private string? _rawText;
     private bool _isJson;
     private string? _searchKeyword;
-    internal readonly HashSet<TreeNode> _highlightedNodes = new();
-
-    private Font _displayFont;
-    private Font _italicFont;
 
     public JsonTreeView()
     {
         _isDesignMode = IsDesignTimeMode();
-        _treeView = new TreeView();
         _displayFont = new Font("Consolas", 11f);
-        _italicFont = new Font("Consolas", 11f, FontStyle.Italic);
-
-        SuspendLayout();
         AutoScaleMode = AutoScaleMode.None;
-        Controls.Add(_treeView);
-        _treeView.Dock = DockStyle.Fill;
-        _treeView.BorderStyle = BorderStyle.None;
-        _treeView.ShowNodeToolTips = false;
-        _treeView.ShowLines = false;
-        _treeView.ShowPlusMinus = true;
-        _treeView.ShowRootLines = false;
-        _treeView.FullRowSelect = false;
-        _treeView.HideSelection = false;
-        _treeView.ItemHeight = 20;
-        _treeView.Font = _displayFont;
-        _treeView.DrawMode = _isDesignMode ? TreeViewDrawMode.Normal : TreeViewDrawMode.OwnerDrawText;
-        _treeView.DrawNode += OnTreeViewDrawNode;
-        Font = _displayFont;
-        ResumeLayout(false);
+        base.Font = _displayFont;
 
         if (_isDesignMode)
         {
-            InitializeDesignTimePreview();
+            InitializeDesignPreview();
         }
         else
         {
-            _treeView.ContextMenuStrip = CreateContextMenu();
+            InitializeRuntimeTreeView();
         }
     }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public TreeNode? SelectedNode => _treeView.SelectedNode;
+    public TreeNode? SelectedNode => _treeView?.SelectedNode;
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public new ContextMenuStrip? ContextMenuStrip
     {
-        get => _treeView.ContextMenuStrip;
-        set => _treeView.ContextMenuStrip = value;
+        get => _treeView?.ContextMenuStrip;
+        set
+        {
+            if (_treeView != null)
+            {
+                _treeView.ContextMenuStrip = value;
+            }
+        }
     }
 
     [DefaultValue(TreeViewDrawMode.OwnerDrawText)]
     public TreeViewDrawMode DrawMode
     {
-        get => _treeView.DrawMode;
-        set => _treeView.DrawMode = value;
+        get => _treeView?.DrawMode ?? _drawMode;
+        set
+        {
+            _drawMode = value;
+            if (_treeView != null)
+            {
+                _treeView.DrawMode = value;
+            }
+        }
     }
 
     [DefaultValue(false)]
     public bool HideSelection
     {
-        get => _treeView.HideSelection;
-        set => _treeView.HideSelection = value;
+        get => _treeView?.HideSelection ?? _hideSelection;
+        set
+        {
+            _hideSelection = value;
+            if (_treeView != null)
+            {
+                _treeView.HideSelection = value;
+            }
+        }
     }
 
     [DefaultValue(20)]
     public int ItemHeight
     {
-        get => _treeView.ItemHeight;
-        set => _treeView.ItemHeight = value;
+        get => _treeView?.ItemHeight ?? _itemHeight;
+        set
+        {
+            _itemHeight = value;
+            if (_treeView != null)
+            {
+                _treeView.ItemHeight = value;
+            }
+        }
     }
 
     [DefaultValue(false)]
     public bool ShowLines
     {
-        get => _treeView.ShowLines;
-        set => _treeView.ShowLines = value;
+        get => _treeView?.ShowLines ?? _showLines;
+        set
+        {
+            _showLines = value;
+            if (_treeView != null)
+            {
+                _treeView.ShowLines = value;
+            }
+        }
     }
 
     [DefaultValue(false)]
     public bool ShowRootLines
     {
-        get => _treeView.ShowRootLines;
-        set => _treeView.ShowRootLines = value;
+        get => _treeView?.ShowRootLines ?? _showRootLines;
+        set
+        {
+            _showRootLines = value;
+            if (_treeView != null)
+            {
+                _treeView.ShowRootLines = value;
+            }
+        }
     }
 
     public void SetFont(Font font)
     {
-        _displayFont?.Dispose();
-        _italicFont?.Dispose();
-        _displayFont = new Font(font.FontFamily, font.Size);
-        _italicFont = new Font(font.FontFamily, font.Size, FontStyle.Italic);
-        _syncingFont = true;
-        try
+        _displayFont = font;
+        base.Font = font;
+        if (_treeView != null)
         {
-            base.Font = _displayFont;
-            _treeView.Font = _displayFont;
-        }
-        finally
-        {
-            _syncingFont = false;
+            _treeView.Font = font;
+            _treeView.ItemHeight = (int)(font.Height * 1.3);
+            _treeView.Invalidate();
         }
 
-        _treeView.ItemHeight = (int)(_displayFont.Height * 1.3);
-        _treeView.Invalidate();
+        if (_designPreview != null)
+        {
+            _designPreview.Font = font;
+        }
     }
 
     public void DisplayJson(string rawJson)
     {
+        if (_treeView == null)
+        {
+            return;
+        }
+
         _rawText = rawJson;
         _highlightedNodes.Clear();
         _searchKeyword = null;
@@ -149,6 +176,11 @@ public class JsonTreeView : UserControl
 
     public void DisplayPlainText(string text)
     {
+        if (_treeView == null)
+        {
+            return;
+        }
+
         _rawText = text;
         _isJson = false;
         _highlightedNodes.Clear();
@@ -158,21 +190,26 @@ public class JsonTreeView : UserControl
 
     public void ExpandAll()
     {
-        _treeView.ExpandAll();
+        _treeView?.ExpandAll();
     }
 
     public void CollapseAll()
     {
-        _treeView.CollapseAll();
+        _treeView?.CollapseAll();
     }
 
     public void CollapseToLevel(int level)
     {
-        _treeView.CollapseToLevelStatic(level);
+        _treeView?.CollapseToLevelStatic(level);
     }
 
     public void SearchAndHighlight(string keyword)
     {
+        if (_treeView == null)
+        {
+            return;
+        }
+
         _searchKeyword = keyword;
         _treeView.SearchAndHighlight(_highlightedNodes, keyword);
     }
@@ -180,27 +217,62 @@ public class JsonTreeView : UserControl
     protected override void OnFontChanged(EventArgs e)
     {
         base.OnFontChanged(e);
-        if (!_syncingFont && Font != null)
+        if (Font != null)
         {
             SetFont(Font);
         }
     }
 
+    private void InitializeDesignPreview()
+    {
+        var preview = new Label
+        {
+            Dock = DockStyle.Fill,
+            Text = "{ sample: json }\r\n  \"request\": { ... }\r\n  \"response\": [ ... ]",
+            TextAlign = ContentAlignment.TopLeft,
+            Padding = new Padding(8),
+            BackColor = SystemColors.Window,
+            ForeColor = SystemColors.ControlText,
+            Font = _displayFont
+        };
+
+        _designPreview = preview;
+        Controls.Add(preview);
+        BackColor = SystemColors.Window;
+    }
+
+    private void InitializeRuntimeTreeView()
+    {
+        var treeView = new TreeView
+        {
+            Dock = DockStyle.Fill,
+            BorderStyle = BorderStyle.None,
+            ShowNodeToolTips = false,
+            ShowPlusMinus = true,
+            FullRowSelect = false,
+            Font = _displayFont
+        };
+
+        _treeView = treeView;
+        Controls.Add(treeView);
+        treeView.ShowLines = _showLines;
+        treeView.ShowRootLines = _showRootLines;
+        treeView.HideSelection = _hideSelection;
+        treeView.ItemHeight = _itemHeight;
+        treeView.DrawMode = _drawMode;
+        treeView.DrawNode += OnTreeViewDrawNode;
+        treeView.ContextMenuStrip = CreateContextMenu();
+    }
+
     private void OnTreeViewDrawNode(object? sender, DrawTreeNodeEventArgs e)
     {
-        if (_isDesignMode)
-        {
-            e.DrawDefault = true;
-            return;
-        }
-
         if (e.Node == null)
         {
             return;
         }
 
         var bounds = e.Bounds;
-        if (bounds.IsEmpty)
+        if (bounds.IsEmpty || _treeView == null)
         {
             return;
         }
@@ -253,7 +325,6 @@ public class JsonTreeView : UserControl
         {
             var keyPart = $"\"{info.Key}\": ";
             x += DrawTextSegment(g, keyPart, _displayFont, ColorKey, x, y, bounds);
-
             var summary = isNodeExpanded ? (text.Contains("{") ? "{" : "[") : text[(text.IndexOf(":") + 2)..];
             DrawTextSegment(g, summary, _displayFont, ColorSummary, x, y, bounds);
         }
@@ -315,7 +386,7 @@ public class JsonTreeView : UserControl
         var copyValue = new ToolStripMenuItem("Copy Value");
         copyValue.Click += (s, e) =>
         {
-            if (_treeView.SelectedNode?.Tag is JsonPathInfo info)
+            if (_treeView?.SelectedNode?.Tag is JsonPathInfo info)
             {
                 ClipboardTextHelper.TrySetText(info.RawValue);
             }
@@ -324,7 +395,7 @@ public class JsonTreeView : UserControl
         var copyPath = new ToolStripMenuItem("Copy JSONPath");
         copyPath.Click += (s, e) =>
         {
-            if (_treeView.SelectedNode != null)
+            if (_treeView?.SelectedNode != null)
             {
                 ClipboardTextHelper.TrySetText(JsonFormatter.GetJsonPath(_treeView.SelectedNode));
             }
@@ -333,7 +404,7 @@ public class JsonTreeView : UserControl
         var copyNode = new ToolStripMenuItem("Copy Node JSON");
         copyNode.Click += (s, e) =>
         {
-            if (_treeView.SelectedNode != null)
+            if (_treeView?.SelectedNode != null)
             {
                 ClipboardTextHelper.TrySetText(_treeView.SelectedNode.Text);
             }
@@ -341,40 +412,16 @@ public class JsonTreeView : UserControl
 
         var sep1 = new ToolStripSeparator();
         var expandAll = new ToolStripMenuItem("Expand All");
-        expandAll.Click += (s, e) => _treeView.ExpandAll();
+        expandAll.Click += (s, e) => _treeView?.ExpandAll();
 
         var collapseAll = new ToolStripMenuItem("Collapse All");
-        collapseAll.Click += (s, e) => _treeView.CollapseAll();
+        collapseAll.Click += (s, e) => _treeView?.CollapseAll();
 
         var collapseTo2 = new ToolStripMenuItem("Collapse to Level 2");
         collapseTo2.Click += (s, e) => CollapseToLevel(2);
 
         menu.Items.AddRange(new ToolStripItem[] { copyValue, copyPath, copyNode, sep1, expandAll, collapseAll, collapseTo2 });
         return menu;
-    }
-
-    private void InitializeDesignTimePreview()
-    {
-        if (_treeView.Nodes.Count > 0)
-        {
-            return;
-        }
-
-        var root = _treeView.Nodes.Add("{ sample: json }");
-        root.Nodes.Add("\"request\": { ... }");
-        root.Nodes.Add("\"response\": [ ... ]");
-        root.Expand();
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            _displayFont?.Dispose();
-            _italicFont?.Dispose();
-        }
-
-        base.Dispose(disposing);
     }
 
     private static bool IsDesignTimeMode()

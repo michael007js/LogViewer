@@ -63,7 +63,7 @@ public partial class MainForm : Form
     private System.Windows.Forms.Label _lblLogCount;
 
     private ListView _lstNetworkLogs = null!;
-    private ListView _lstSystemLogs = null!;
+    private System.Windows.Forms.ListView _lstSystemLogs;
 
     private Panel _pnlSystemFilter = null!;
     private Panel _systemActionBar = null!;
@@ -80,9 +80,12 @@ public partial class MainForm : Form
     private TabPage _tabRequestBody = null!;
     private TabPage _tabResponseBody = null!;
 
-    private LogViewer.UI.JsonTreeView _jsonHeaders;
-    private JsonTreeView _jsonRequestBody = null!;
-    private JsonTreeView _jsonResponseBody = null!;
+    private System.Windows.Forms.Panel _jsonHeaders;
+    private Panel _jsonRequestBody = null!;
+    private Panel _jsonResponseBody = null!;
+    private JsonTreeView? _jsonHeadersView;
+    private JsonTreeView? _jsonRequestBodyView;
+    private JsonTreeView? _jsonResponseBodyView;
 
     private TextBox _rawHeaders = null!;
     private TextBox _rawRequestBody = null!;
@@ -108,7 +111,7 @@ public partial class MainForm : Form
     private ToolStripStatusLabel _lblAdbStatus = null!;
     private ToolStripStatusLabel _lblLogcatStatus = null!;
 
-    private FlowLayoutPanel _pnlBottomBar = null!;
+    private System.Windows.Forms.FlowLayoutPanel _pnlBottomBar;
     private Button _btnClear = null!;
     private Button _btnExportJson = null!;
     private Button _btnExportTxt = null!;
@@ -127,6 +130,7 @@ public partial class MainForm : Form
             return;
         }
 
+        InitializeJsonTreeViewsRuntime();
         WireComponentEvents();
         ApplySettings();
 
@@ -368,9 +372,9 @@ public partial class MainForm : Form
         var font = new Font("Consolas", _settings.FontSize);
         _lstNetworkLogs.Font = font;
         _lstSystemLogs.Font = font;
-        _jsonHeaders.SetFont(font);
-        _jsonRequestBody.SetFont(font);
-        _jsonResponseBody.SetFont(font);
+        _jsonHeadersView?.SetFont(font);
+        _jsonRequestBodyView?.SetFont(font);
+        _jsonResponseBodyView?.SetFont(font);
         ApplyLeftPanelWidthSetting();
         if (_cmbMethod.SelectedIndex < 0 && _cmbMethod.Items.Count > 0) _cmbMethod.SelectedIndex = 0;
         if (_cmbStatusCode.SelectedIndex < 0 && _cmbStatusCode.Items.Count > 0) _cmbStatusCode.SelectedIndex = 0;
@@ -382,9 +386,9 @@ public partial class MainForm : Form
 
     private JsonTreeView? GetActiveJsonView()
     {
-        if (_tabDetail.SelectedTab == _tabHeaders) return _jsonHeaders;
-        if (_tabDetail.SelectedTab == _tabRequestBody) return _jsonRequestBody;
-        if (_tabDetail.SelectedTab == _tabResponseBody) return _jsonResponseBody;
+        if (_tabDetail.SelectedTab == _tabHeaders) return _jsonHeadersView;
+        if (_tabDetail.SelectedTab == _tabRequestBody) return _jsonRequestBodyView;
+        if (_tabDetail.SelectedTab == _tabResponseBody) return _jsonResponseBodyView;
         return null;
     }
 
@@ -410,12 +414,32 @@ public partial class MainForm : Form
 
     private void SyncDetailViewVisibility()
     {
-        _jsonHeaders.Visible = !_detailViewIsRaw;
+        if (_jsonHeadersView != null) _jsonHeadersView.Visible = !_detailViewIsRaw;
         _rawHeaders.Visible = _detailViewIsRaw;
-        _jsonRequestBody.Visible = !_detailViewIsRaw;
+        if (_jsonRequestBodyView != null) _jsonRequestBodyView.Visible = !_detailViewIsRaw;
         _rawRequestBody.Visible = _detailViewIsRaw;
-        _jsonResponseBody.Visible = !_detailViewIsRaw;
+        if (_jsonResponseBodyView != null) _jsonResponseBodyView.Visible = !_detailViewIsRaw;
         _rawResponseBody.Visible = _detailViewIsRaw;
+    }
+
+    private void InitializeJsonTreeViewsRuntime()
+    {
+        _jsonHeadersView = CreateRuntimeJsonTreeView(_jsonHeaders, nameof(_jsonHeadersView));
+        _jsonRequestBodyView = CreateRuntimeJsonTreeView(_jsonRequestBody, nameof(_jsonRequestBodyView));
+        _jsonResponseBodyView = CreateRuntimeJsonTreeView(_jsonResponseBody, nameof(_jsonResponseBodyView));
+    }
+
+    private static JsonTreeView CreateRuntimeJsonTreeView(Control host, string name)
+    {
+        var view = new JsonTreeView
+        {
+            Dock = DockStyle.Fill,
+            Name = name,
+            Margin = Padding.Empty
+        };
+        host.Controls.Add(view);
+        view.BringToFront();
+        return view;
     }
 
     private RingBuffer<LogEntry> GetCurrentLogBuffer()
@@ -733,9 +757,9 @@ public partial class MainForm : Form
     {
         if (entry == null)
         {
-            _jsonHeaders.DisplayPlainText("");
-            _jsonRequestBody.DisplayPlainText("");
-            _jsonResponseBody.DisplayPlainText("");
+            _jsonHeadersView?.DisplayPlainText("");
+            _jsonRequestBodyView?.DisplayPlainText("");
+            _jsonResponseBodyView?.DisplayPlainText("");
             _rawHeaders.Text = "";
             _rawRequestBody.Text = "";
             _rawResponseBody.Text = "";
@@ -744,15 +768,15 @@ public partial class MainForm : Form
 
         if (_settings.AutoFormatJson)
         {
-            _jsonHeaders.DisplayPlainText(entry.Headers ?? "");
-            _jsonRequestBody.DisplayJson(entry.Send ?? "");
-            _jsonResponseBody.DisplayJson(entry.Content ?? "");
+            _jsonHeadersView?.DisplayPlainText(entry.Headers ?? "");
+            _jsonRequestBodyView?.DisplayJson(entry.Send ?? "");
+            _jsonResponseBodyView?.DisplayJson(entry.Content ?? "");
         }
         else
         {
-            _jsonHeaders.DisplayPlainText(entry.Headers ?? "");
-            _jsonRequestBody.DisplayPlainText(entry.Send ?? "");
-            _jsonResponseBody.DisplayPlainText(entry.Content ?? "");
+            _jsonHeadersView?.DisplayPlainText(entry.Headers ?? "");
+            _jsonRequestBodyView?.DisplayPlainText(entry.Send ?? "");
+            _jsonResponseBodyView?.DisplayPlainText(entry.Content ?? "");
         }
 
         _rawHeaders.Text = entry.Headers ?? "";
@@ -1891,4 +1915,5 @@ public partial class MainForm : Form
             return 9d / 16d;
         }
     }
+
 }

@@ -7,6 +7,7 @@ namespace LogViewer.UI;
 
 public sealed class DevicePanel : UserControl
 {
+    private readonly bool _isDesignMode;
     private ComboBox _cmbDevices = null!;
     private Button _btnRefreshAdb = null!;
     private Panel _mirrorHostPanel = null!;
@@ -47,10 +48,16 @@ public sealed class DevicePanel : UserControl
     {
         get
         {
+            if (_isDesignMode)
+            {
+                return IntPtr.Zero;
+            }
+
             if (_mirrorHostPanel?.IsHandleCreated == true)
             {
                 return _mirrorHostPanel.Handle;
             }
+
             return IntPtr.Zero;
         }
     }
@@ -61,69 +68,43 @@ public sealed class DevicePanel : UserControl
 
     public DevicePanel()
     {
-        if (IsDesignTimeMode())
-        {
-            InitializeDesignTimePlaceholder();
-            BackColor = SystemColors.Control;
-            return;
-        }
-
+        _isDesignMode = IsDesignTimeMode();
         InitializeComponents();
+        if (_isDesignMode)
+        {
+            ApplyDesignTimePreview();
+        }
     }
 
-    private void InitializeDesignTimePlaceholder()
+    private void ApplyDesignTimePreview()
     {
-        if (Controls.Count > 0)
+        if (_cmbDevices == null)
         {
             return;
         }
 
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            RowCount = 3,
-            ColumnCount = 1,
-            Padding = new Padding(8)
-        };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
+        _cmbDevices.SelectedIndexChanged -= OnDeviceSelected;
+        _cmbDevices.BeginUpdate();
+        _cmbDevices.Items.Clear();
+        _cmbDevices.Items.Add(new DeviceSelectorItem(null, Language.All));
+        _cmbDevices.Items.Add(new DeviceSelectorItem("demo", "Pixel 8 Pro [ADB] (12)"));
+        _cmbDevices.SelectedIndex = 1;
+        _cmbDevices.EndUpdate();
+        _cmbDevices.SelectedIndexChanged += OnDeviceSelected;
 
-        var selector = new ComboBox
-        {
-            Dock = DockStyle.Top,
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Font = new Font("Consolas", 9f)
-        };
-        selector.Items.Add($"● {Language.All}");
-        selector.SelectedIndex = 0;
-
-        var mirror = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BorderStyle = BorderStyle.FixedSingle,
-            BackColor = Color.Black
-        };
-        mirror.Controls.Add(new Label
-        {
-            Dock = DockStyle.Fill,
-            Text = Language.ScrcpyHost,
-            ForeColor = Color.WhiteSmoke,
-            TextAlign = ContentAlignment.MiddleCenter
-        });
-
-        var controls = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill
-        };
-        controls.Controls.Add(new Button { Text = Language.Start, AutoSize = true });
-        controls.Controls.Add(new Button { Text = Language.Rotate, AutoSize = true });
-        controls.Controls.Add(new Button { Text = Language.Screenshot, AutoSize = true });
-
-        layout.Controls.Add(selector, 0, 0);
-        layout.Controls.Add(mirror, 0, 1);
-        layout.Controls.Add(controls, 0, 2);
-        Controls.Add(layout);
+        _selectedDeviceId = "demo";
+        _mirrorStatusText = Language.ScrcpyHost;
+        _mirrorHostVisible = false;
+        _mirrorRunning = false;
+        _mirrorReady = true;
+        _mirrorViewportPanel.Visible = false;
+        _btnRefreshAdb.Enabled = false;
+        _btnMirrorToggle.Enabled = false;
+        _btnMirrorReconnect.Enabled = false;
+        _btnMirrorRotate.Enabled = false;
+        _btnMirrorScreenshot.Enabled = false;
+        _btnMirrorPopout.Enabled = false;
+        UpdateMirrorUiState();
     }
 
     private void InitializeComponents()
@@ -170,9 +151,8 @@ public sealed class DevicePanel : UserControl
         _mirrorViewportPanel = new Panel
         {
             BackColor = Color.Black,
-            Visible = true
+            Visible = false
         };
-        _mirrorViewportPanel.Visible = false;
         _mirrorHostPanel.Controls.Add(_mirrorViewportPanel);
 
         _lblMirrorPlaceholder = new Label
@@ -455,6 +435,11 @@ public sealed class DevicePanel : UserControl
 
     public IntPtr EnsureMirrorHostHandle()
     {
+        if (_isDesignMode)
+        {
+            return IntPtr.Zero;
+        }
+
         InitializeComponents();
         UpdateMirrorHostBounds();
 
@@ -497,10 +482,16 @@ public sealed class DevicePanel : UserControl
     {
         InitializeComponents();
 
+        if (_isDesignMode)
+        {
+            UpdateMirrorUiState();
+            return;
+        }
+
         _cmbDevices.BeginUpdate();
         _cmbDevices.SelectedIndexChanged -= OnDeviceSelected;
         _cmbDevices.Items.Clear();
-        _cmbDevices.Items.Add(new DeviceSelectorItem(null, $"● {Language.All}"));
+        _cmbDevices.Items.Add(new DeviceSelectorItem(null, Language.All));
 
         foreach (var kvp in _devices.OrderBy(static pair => pair.Value.Info.DisplayName, StringComparer.OrdinalIgnoreCase))
         {
@@ -520,7 +511,7 @@ public sealed class DevicePanel : UserControl
 
     private string BuildDeviceDisplayText(DeviceRecord record)
     {
-        var status = record.IsAdbOnly || !record.Info.IsConnected ? "○" : "●";
+        var status = record.IsAdbOnly || !record.Info.IsConnected ? "\u25CB" : "\u25CF";
         var qa = record.Info.IsQa ? " [QA]" : string.Empty;
         var adb = record.Info.AdbSerial != null ? " [ADB]" : string.Empty;
         return $"{status} {record.Info.DisplayName}{qa}{adb} ({record.LogCount})";
@@ -565,6 +556,15 @@ public sealed class DevicePanel : UserControl
             return;
         }
 
+        if (_isDesignMode)
+        {
+            _lblMirrorPlaceholder.Text = _mirrorStatusText;
+            _lblMirrorPlaceholder.Visible = true;
+            _lblMirrorStatus.Text = _mirrorStatusText;
+            _btnMirrorToggle.Text = Language.Start;
+            return;
+        }
+
         var hasSpecificDevice = !string.IsNullOrEmpty(_selectedDeviceId);
         DeviceRecord? selectedRecord = null;
         var hasSelectedRecord = hasSpecificDevice && _devices.TryGetValue(_selectedDeviceId!, out selectedRecord);
@@ -588,7 +588,7 @@ public sealed class DevicePanel : UserControl
 
     private void UpdateMirrorHostBounds()
     {
-        if (_mirrorHostPanel == null)
+        if (_isDesignMode || _mirrorHostPanel == null)
         {
             return;
         }
