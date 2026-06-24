@@ -225,6 +225,7 @@ public partial class MainForm : Form
         _settings = AppSettings.Load();
         _allLogs = new RingBuffer<LogEntry>(_settings.MaxLogEntriesAll);
         InitializeComponent();
+        Icon = new Icon(Path.Combine(AppContext.BaseDirectory, "icon.ico"));
         ApplyLanguage();
 
         if (IsDesignTimeMode())
