@@ -52,7 +52,7 @@ LogViewer/                            ← 项目根目录
 │   ├── DeviceConnection.cs                 ← 单设备连接+协议解析+ArrayPool+消息类型switch
 │   └── LogcatReader.cs                     ← adb logcat进程流式读取+正则解析threadtime格式
 │
-├── UI/                                     ← 界面层（16 .cs + 1 .resx）
+├── UI/                                     ← 界面层（17 .cs + 1 .resx）
 │   ├── MainForm.cs                         ← 主窗口共用字段/构造函数/跨功能方法/服务器事件/窗口生命周期
 │   ├── MainForm.NetworkLogs.cs             ← 网络日志配置/过滤/显示/交互/导出（partial class）
 │   ├── MainForm.Preview.cs                 ← JSON预览面板初始化/视图切换/详情显示（partial class）
@@ -65,7 +65,8 @@ LogViewer/                            ← 项目根目录
 │   ├── JsonDetailForm.Designer.cs          ← JSON详情窗口设计器控件树（左右分栏+工具栏）
 │   ├── JsonTreeView.cs                     ← JSON折叠+语法高亮TreeView（OwnerDrawText自绘+渲染/交互）
 │   ├── JsonTreeViewLoader.cs               ← JSON→TreeNode构建扩展方法（LoadJson/LoadPlainText/Search/Collapse）
-│   ├── DevicePanel.cs                      ← 左侧ADB设备操控面板（设备选择+scrcpy宿主+控制条）
+│   ├── DevicePanel.cs                      ← 左侧ADB设备操控面板手写逻辑（设备选择+scrcpy宿主+控制条）
+│   ├── DevicePanel.Designer.cs             ← 左侧ADB设备操控面板设计器控件树（Rider/WinForms Designer 可视化调整）
 │   ├── SystemLogSnapshot.cs                ← System Logs 当前 scope/filter 只读快照
 │   ├── SettingsDialog.cs                   ← 设置对话框手写逻辑（设计期保护 + 值加载/保存）
 │   ├── SettingsDialog.Designer.cs          ← 设置对话框设计器控件树（Rider/WinForms Designer 可视化调整）

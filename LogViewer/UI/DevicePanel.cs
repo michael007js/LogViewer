@@ -9,32 +9,10 @@ namespace LogViewer.UI;
 /// 左侧设备控制面板，包含 ADB 设备下拉列表、scrcpy 投屏宿主区域和控制按钮栏。
 /// 管理 ADB 设备扫描、scrcpy 生命周期、设备选择和投屏显示布局。
 /// </summary>
-public sealed class DevicePanel : UserControl
+public sealed partial class DevicePanel : UserControl
 {
     /// <summary>是否处于设计器模式。</summary>
     private readonly bool _isDesignMode;
-    /// <summary>设备下拉选择框。</summary>
-    private ComboBox _cmbDevices = null!;
-    /// <summary>ADB 扫描刷新按钮。</summary>
-    private Button _btnRefreshAdb = null!;
-    /// <summary>scrcpy 投屏宿主面板（承载窗口句柄）。</summary>
-    private Panel _mirrorHostPanel = null!;
-    /// <summary>scrcpy 视口面板（保持宽高比居中显示）。</summary>
-    private Panel _mirrorViewportPanel = null!;
-    /// <summary>投屏占位提示标签。</summary>
-    private Label _lblMirrorPlaceholder = null!;
-    /// <summary>投屏状态文本标签。</summary>
-    private Label _lblMirrorStatus = null!;
-    /// <summary>投屏启动/停止按钮。</summary>
-    private Button _btnMirrorToggle = null!;
-    /// <summary>投屏重连按钮。</summary>
-    private Button _btnMirrorReconnect = null!;
-    /// <summary>投屏旋转按钮。</summary>
-    private Button _btnMirrorRotate = null!;
-    /// <summary>投屏截图按钮。</summary>
-    private Button _btnMirrorScreenshot = null!;
-    /// <summary>投屏弹出窗口按钮。</summary>
-    private Button _btnMirrorPopout = null!;
     /// <summary>设备ID到设备记录的映射表。</summary>
     private readonly Dictionary<string, DeviceRecord> _devices = new();
     /// <summary>当前选中的设备ID。</summary>
@@ -110,11 +88,98 @@ public sealed class DevicePanel : UserControl
     public DevicePanel()
     {
         _isDesignMode = IsDesignTimeMode();
-        InitializeComponents();
+        InitializeComponent();
         if (_isDesignMode)
         {
             ApplyDesignTimePreview();
         }
+        else
+        {
+            RefreshList();
+            UpdateMirrorUiState();
+        }
+    }
+
+    /// <summary>ADB 扫描刷新按钮点击事件处理器。</summary>
+    private void OnRefreshAdbClick(object? sender, EventArgs e)
+    {
+        RefreshAdbRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>投屏宿主面板尺寸变化事件处理器。</summary>
+    private void OnMirrorHostResized(object? sender, EventArgs e)
+    {
+        UpdateMirrorHostBounds();
+    }
+
+    /// <summary>投屏宿主面板布局变化事件处理器。</summary>
+    private void OnMirrorHostLayoutChanged(object? sender, LayoutEventArgs e)
+    {
+        UpdateMirrorHostBounds();
+    }
+
+    /// <summary>投屏启动/停止按钮点击事件处理器。</summary>
+    private void OnMirrorToggleClick(object? sender, EventArgs e)
+    {
+        if (TryGetSelectedDeviceForAction(out var deviceId))
+        {
+            if (_mirrorRunning)
+            {
+                MirrorStopRequested?.Invoke(this, deviceId);
+            }
+            else
+            {
+                MirrorStartRequested?.Invoke(this, deviceId);
+            }
+        }
+    }
+
+    /// <summary>投屏重连按钮点击事件处理器。</summary>
+    private void OnMirrorReconnectClick(object? sender, EventArgs e)
+    {
+        if (TryGetSelectedDeviceForAction(out var deviceId))
+        {
+            MirrorReconnectRequested?.Invoke(this, deviceId);
+        }
+    }
+
+    /// <summary>投屏旋转按钮点击事件处理器。</summary>
+    private void OnMirrorRotateClick(object? sender, EventArgs e)
+    {
+        if (TryGetSelectedDeviceForAction(out var deviceId))
+        {
+            MirrorRotateRequested?.Invoke(this, deviceId);
+        }
+    }
+
+    /// <summary>投屏截图按钮点击事件处理器。</summary>
+    private void OnMirrorScreenshotClick(object? sender, EventArgs e)
+    {
+        if (TryGetSelectedDeviceForAction(out var deviceId))
+        {
+            MirrorScreenshotRequested?.Invoke(this, deviceId);
+        }
+    }
+
+    /// <summary>投屏弹出窗口按钮点击事件处理器。</summary>
+    private void OnMirrorPopoutClick(object? sender, EventArgs e)
+    {
+        if (TryGetSelectedDeviceForAction(out var deviceId))
+        {
+            MirrorPopoutRequested?.Invoke(this, deviceId);
+        }
+    }
+
+    /// <summary>面板自身尺寸变化事件处理器。</summary>
+    private void OnPanelResized(object? sender, EventArgs e)
+    {
+        UpdateMirrorHostBounds();
+    }
+
+    /// <summary>面板自身布局变化事件处理器。</summary>
+    private void OnPanelLayoutChanged(object? sender, LayoutEventArgs e)
+    {
+        UpdateMirrorHostBounds();
     }
 
     /// <summary>
@@ -122,11 +187,6 @@ public sealed class DevicePanel : UserControl
     /// </summary>
     private void ApplyDesignTimePreview()
     {
-        if (_cmbDevices == null)
-        {
-            return;
-        }
-
         _cmbDevices.SelectedIndexChanged -= OnDeviceSelected;
         _cmbDevices.BeginUpdate();
         _cmbDevices.Items.Clear();
@@ -149,176 +209,6 @@ public sealed class DevicePanel : UserControl
         _btnMirrorScreenshot.Enabled = false;
         _btnMirrorPopout.Enabled = false;
         UpdateMirrorUiState();
-    }
-
-    /// <summary>
-    /// 创建并布局所有子控件：设备下拉框、ADB刷新按钮、投屏宿主面板、状态标签和控制按钮栏。
-    /// 使用 TableLayoutPanel 实现自适应布局。
-    /// </summary>
-    private void InitializeComponents()
-    {
-        if (_cmbDevices != null)
-        {
-            return;
-        }
-
-        BackColor = SystemColors.Control;
-        Padding = new Padding(8);
-
-        _cmbDevices = new ComboBox
-        {
-            Dock = DockStyle.Top,
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Font = new Font("Consolas", 9f),
-            Height = 28
-        };
-        _cmbDevices.SelectedIndexChanged += OnDeviceSelected;
-
-        _btnRefreshAdb = new Button
-        {
-            Text = Language.ScanAdb,
-            Dock = DockStyle.Top,
-            Height = 26,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Consolas", 8f)
-        };
-        _btnRefreshAdb.Click += (_, _) => RefreshAdbRequested?.Invoke(this, EventArgs.Empty);
-
-        _mirrorHostPanel = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.Black,
-            BorderStyle = BorderStyle.FixedSingle,
-            Margin = new Padding(0, 8, 0, 8)
-        };
-        _mirrorHostPanel.Resize += (_, _) => UpdateMirrorHostBounds();
-        _mirrorHostPanel.SizeChanged += (_, _) => UpdateMirrorHostBounds();
-        _mirrorHostPanel.VisibleChanged += (_, _) => UpdateMirrorHostBounds();
-        _mirrorHostPanel.Layout += (_, _) => UpdateMirrorHostBounds();
-
-        _mirrorViewportPanel = new Panel
-        {
-            BackColor = Color.Black,
-            Visible = false
-        };
-        _mirrorHostPanel.Controls.Add(_mirrorViewportPanel);
-
-        _lblMirrorPlaceholder = new Label
-        {
-            Dock = DockStyle.Fill,
-            ForeColor = Color.Gainsboro,
-            BackColor = Color.Black,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Text = _mirrorStatusText
-        };
-        _mirrorHostPanel.Controls.Add(_lblMirrorPlaceholder);
-
-        _lblMirrorStatus = new Label
-        {
-            Dock = DockStyle.Bottom,
-            Height = 36,
-            ForeColor = Color.DimGray,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(2, 0, 2, 0),
-            Text = _mirrorStatusText
-        };
-
-        _btnMirrorToggle = CreateControlButton(Language.Start);
-        _btnMirrorToggle.Click += (_, _) =>
-        {
-            if (TryGetSelectedDeviceForAction(out var deviceId))
-            {
-                if (_mirrorRunning)
-                {
-                    MirrorStopRequested?.Invoke(this, deviceId);
-                }
-                else
-                {
-                    MirrorStartRequested?.Invoke(this, deviceId);
-                }
-            }
-        };
-
-        _btnMirrorReconnect = CreateControlButton(Language.Reconnect);
-        _btnMirrorReconnect.Click += (_, _) =>
-        {
-            if (TryGetSelectedDeviceForAction(out var deviceId))
-            {
-                MirrorReconnectRequested?.Invoke(this, deviceId);
-            }
-        };
-
-        _btnMirrorRotate = CreateControlButton(Language.Rotate);
-        _btnMirrorRotate.Click += (_, _) =>
-        {
-            if (TryGetSelectedDeviceForAction(out var deviceId))
-            {
-                MirrorRotateRequested?.Invoke(this, deviceId);
-            }
-        };
-
-        _btnMirrorScreenshot = CreateControlButton(Language.Screenshot);
-        _btnMirrorScreenshot.Click += (_, _) =>
-        {
-            if (TryGetSelectedDeviceForAction(out var deviceId))
-            {
-                MirrorScreenshotRequested?.Invoke(this, deviceId);
-            }
-        };
-
-        _btnMirrorPopout = CreateControlButton(Language.Popout);
-        _btnMirrorPopout.Click += (_, _) =>
-        {
-            if (TryGetSelectedDeviceForAction(out var deviceId))
-            {
-                MirrorPopoutRequested?.Invoke(this, deviceId);
-            }
-        };
-
-        var buttonBar = new TableLayoutPanel
-        {
-            Dock = DockStyle.Bottom,
-            ColumnCount = 2,
-            RowCount = 3,
-            Height = 102,
-            Margin = new Padding(0)
-        };
-        buttonBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        buttonBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        buttonBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-        buttonBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-        buttonBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-
-        buttonBar.Controls.Add(_btnMirrorToggle, 0, 0);
-        buttonBar.Controls.Add(_btnMirrorReconnect, 1, 0);
-        buttonBar.Controls.Add(_btnMirrorRotate, 0, 1);
-        buttonBar.Controls.Add(_btnMirrorScreenshot, 1, 1);
-        buttonBar.Controls.Add(_btnMirrorPopout, 0, 2);
-        buttonBar.SetColumnSpan(_btnMirrorPopout, 2);
-
-        var container = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 5
-        };
-        container.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        container.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-        container.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        container.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        container.RowStyles.Add(new RowStyle(SizeType.Absolute, 102));
-
-        container.Controls.Add(_cmbDevices, 0, 0);
-        container.Controls.Add(_btnRefreshAdb, 0, 1);
-        container.Controls.Add(_mirrorHostPanel, 0, 2);
-        container.Controls.Add(_lblMirrorStatus, 0, 3);
-        container.Controls.Add(buttonBar, 0, 4);
-
-        Controls.Add(container);
-        RefreshList();
-        UpdateMirrorUiState();
-        Resize += (_, _) => UpdateMirrorHostBounds();
-        Layout += (_, _) => UpdateMirrorHostBounds();
     }
 
     /// <summary>
@@ -555,7 +445,6 @@ public sealed class DevicePanel : UserControl
             return IntPtr.Zero;
         }
 
-        InitializeComponents();
         UpdateMirrorHostBounds();
 
         if (_mirrorHostPanel?.IsHandleCreated != true)
@@ -575,24 +464,6 @@ public sealed class DevicePanel : UserControl
     }
 
     /// <summary>
-    /// 创建控制按钮（扁平样式，Consolas 字体）。
-    /// </summary>
-    /// <param name="text">按钮显示文本。</param>
-    /// <returns>创建的 Button 实例。</returns>
-    private Button CreateControlButton(string text)
-    {
-        return new Button
-        {
-            Text = text,
-            Dock = DockStyle.Fill,
-            Height = 28,
-            Margin = new Padding(0, 0, 6, 6),
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font("Consolas", 8f)
-        };
-    }
-
-    /// <summary>
     /// 尝试获取当前选中设备ID用于操作，返回是否选中了有效设备。
     /// </summary>
     /// <param name="deviceId">输出的设备ID，未选中时为空字符串。</param>
@@ -608,8 +479,6 @@ public sealed class DevicePanel : UserControl
     /// </summary>
     private void RefreshList()
     {
-        InitializeComponents();
-
         if (_isDesignMode)
         {
             UpdateMirrorUiState();
