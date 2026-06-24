@@ -382,11 +382,19 @@ public partial class MainForm : Form
         _btnClear.Click += OnClear;
         _btnExportJson.Click += OnExportJson;
         _btnExportTxt.Click += OnExportTxt;
-        _outerSplit.SplitterMoved += (_, _) => { ScheduleEmbeddedMirrorRestart(); };
+        _outerSplit.SplitterMoved += (_, _) =>
+        {
+            if (_scrcpySession?.IsRunning != true) return;
+            _userResizedMirror = true;
+        };
         Load += OnMainFormLoad;
         Shown += async (s, e) => await OnMainFormShownAsync();
-        Resize += (_, _) => ScheduleEmbeddedMirrorRestart();
-        ResizeEnd += (_, _) => ScheduleEmbeddedMirrorRestart();
+        ResizeEnd += (_, _) =>
+        {
+            if (_scrcpySession?.IsRunning != true || !_userResizedMirror) return;
+            _userResizedMirror = false;
+            ScheduleEmbeddedMirrorRestart();
+        };
     }
 
     /// <summary>

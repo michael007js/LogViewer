@@ -161,6 +161,7 @@ public sealed partial class DevicePanel : UserControl
     /// <summary>投屏启动/停止按钮点击事件处理器。</summary>
     private void OnMirrorToggleClick(object? sender, EventArgs e)
     {
+        File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] MirrorToggle: selectedDevice={_selectedDeviceId}, mirrorRunning={_mirrorRunning}, sender={sender?.GetType().Name}\r\n");
         if (TryGetSelectedDeviceForAction(out var deviceId))
         {
             if (_mirrorRunning)

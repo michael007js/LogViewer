@@ -447,13 +447,8 @@ internal sealed class ScrcpyManager
 
         try
         {
-            var windowHandle = await WaitForWindowAsync(process, stderrTask, cancellationToken).ConfigureAwait(false);
-            var session = new ScrcpySession(process, windowHandle, options)
-            {
-                LastErrorText = await stderrTask.ConfigureAwait(false)
-            };
-        // stdout 仅消费防止管道阻塞，无需等待结果
-        _ = stdoutTask;
+            var windowHandle = await WaitForWindowAsync(process, stderrTask, cancellationToken, options.WindowTitle).ConfigureAwait(false);
+            var session = new ScrcpySession(process, windowHandle, options);
             return session;
         }
         // 启动失败时清理进程，防止僵尸进程
@@ -500,34 +495,44 @@ internal sealed class ScrcpyManager
     /// <returns>scrcpy 窗口句柄</returns>
     /// <exception cref="InvalidOperationException">scrcpy 在创建窗口前退出</exception>
     /// <exception cref="TimeoutException">等待窗口超时（约8秒）</exception>
-    private static async Task<IntPtr> WaitForWindowAsync(Process process, Task<string> stderrTask, CancellationToken cancellationToken)
+    private static async Task<IntPtr> WaitForWindowAsync(Process process, Task<string> stderrTask, CancellationToken cancellationToken, string windowTitle)
     {
-        // 等待进程完成初始化，5秒超时
-        try { process.WaitForInputIdle(5000); } catch { }
-
-        // 最多轮询80次（约8秒），等待 scrcpy 创建窗口
-        for (var attempt = 0; attempt < 80; attempt++)
+        return await Task.Run(async () =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            process.Refresh();
-
-            if (process.HasExited)
+            for (var attempt = 0; attempt < 80; attempt++)
             {
-                var errorText = (await stderrTask.ConfigureAwait(false)).Trim();
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(errorText)
-                    ? "scrcpy exited before creating a window."
-                    : $"scrcpy exited before creating a window. {errorText}");
+                if (attempt % 10 == 0)
+                {
+                    try
+                    {
+                        File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] WaitForWindow attempt={attempt}, pid={process.Id}\r\n");
+                        var exited = process.HasExited;
+                        var handle = process.MainWindowHandle;
+                        File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] WaitForWindow attempt={attempt}, exited={exited}, handle={handle}\r\n");
+                        if (exited)
+                        {
+                            throw new InvalidOperationException("scrcpy exited before creating a window.");
+                        }
+                        if (handle != IntPtr.Zero)
+                        {
+                            return handle;
+                        }
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] WaitForWindow exception at attempt={attempt}: {ex.Message}\r\n");
+                    }
+                }
+
+                Thread.Sleep(100);
             }
 
-            if (process.MainWindowHandle != IntPtr.Zero)
-            {
-                return process.MainWindowHandle;
-            }
-
-            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
-        }
-
-        throw new TimeoutException("Timed out waiting for scrcpy window.");
+            throw new TimeoutException("Timed out waiting for scrcpy window.");
+        }, cancellationToken);
     }
 
 }
@@ -649,6 +654,32 @@ internal static class EmbeddedWindowHost
         }
     }
 
+    public static IntPtr FindWindowByTitle(string title)
+    {
+        return FindWindow(null, title);
+    }
+
+    public static IntPtr FindWindowByTitlePrefix(string titlePrefix)
+    {
+        var result = IntPtr.Zero;
+        EnumWindows((hWnd, _) =>
+        {
+            if (GetWindowTextLength(hWnd) > 0 && IsWindowVisible(hWnd))
+            {
+                var length = GetWindowTextLength(hWnd) + 1;
+                var sb = new System.Text.StringBuilder(length);
+                GetWindowText(hWnd, sb, length);
+                if (sb.ToString().StartsWith(titlePrefix, StringComparison.Ordinal))
+                {
+                    result = hWnd;
+                    return false;
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+        return result;
+    }
+
     /// <summary>
     /// 获取宿主窗口的客户区尺寸
     /// </summary>
@@ -730,6 +761,23 @@ internal static class EmbeddedWindowHost
     /// <summary>向窗口发送消息（异步）</summary>
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
 
     /// <summary>
     /// Win32 RECT 结构体，表示矩形区域
