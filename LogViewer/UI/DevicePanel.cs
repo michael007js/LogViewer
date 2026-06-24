@@ -89,6 +89,7 @@ public sealed partial class DevicePanel : UserControl
     {
         _isDesignMode = IsDesignTimeMode();
         InitializeComponent();
+        WireRuntimeEvents();
         if (_isDesignMode)
         {
             ApplyDesignTimePreview();
@@ -98,6 +99,26 @@ public sealed partial class DevicePanel : UserControl
             RefreshList();
             UpdateMirrorUiState();
         }
+    }
+
+    /// <summary>
+    /// 绑定所有运行时事件处理器。放在此处而非 Designer.cs，避免设计器重新生成时丢失事件绑定。
+    /// </summary>
+    private void WireRuntimeEvents()
+    {
+        _cmbDevices.SelectedIndexChanged += OnDeviceSelected;
+        _btnRefreshAdb.Click += OnRefreshAdbClick;
+        _mirrorHostPanel.Resize += OnMirrorHostResized;
+        _mirrorHostPanel.SizeChanged += OnMirrorHostResized;
+        _mirrorHostPanel.VisibleChanged += OnMirrorHostResized;
+        _mirrorHostPanel.Layout += OnMirrorHostLayoutChanged;
+        _btnMirrorToggle.Click += OnMirrorToggleClick;
+        _btnMirrorReconnect.Click += OnMirrorReconnectClick;
+        _btnMirrorRotate.Click += OnMirrorRotateClick;
+        _btnMirrorScreenshot.Click += OnMirrorScreenshotClick;
+        _btnMirrorPopout.Click += OnMirrorPopoutClick;
+        Resize += OnPanelResized;
+        Layout += OnPanelLayoutChanged;
     }
 
     /// <summary>ADB 扫描刷新按钮点击事件处理器。</summary>
