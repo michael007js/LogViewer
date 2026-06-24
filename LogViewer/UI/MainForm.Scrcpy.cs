@@ -344,7 +344,6 @@ public partial class MainForm
                     _devicePanel.SetMirrorAspectRatio(contentAspectRatio);
                     _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true,
                         isRunning: true, isReady: true);
-                    File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] Mirror STARTED OK, handle={_scrcpySession.WindowHandle}\r\n");
                     ApplyEmbeddedMirrorLayout();
                 }));
             }

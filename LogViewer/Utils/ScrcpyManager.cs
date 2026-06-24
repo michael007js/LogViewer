@@ -505,28 +505,14 @@ internal sealed class ScrcpyManager
             {
                 if (attempt % 10 == 0)
                 {
-                    try
+                    if (process.HasExited)
                     {
-                        File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] WaitForWindow attempt={attempt}, pid={process.Id}\r\n");
-                        var exited = process.HasExited;
-                        var handle = process.MainWindowHandle;
-                        File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] WaitForWindow attempt={attempt}, exited={exited}, handle={handle}\r\n");
-                        if (exited)
-                        {
-                            throw new InvalidOperationException("scrcpy exited before creating a window.");
-                        }
-                        if (handle != IntPtr.Zero)
-                        {
-                            return handle;
-                        }
+                        throw new InvalidOperationException("scrcpy exited before creating a window.");
                     }
-                    catch (InvalidOperationException)
+
+                    if (process.MainWindowHandle != IntPtr.Zero)
                     {
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        File.AppendAllText(@"C:\_worklog\mirror_debug.log", $"[{DateTime.Now:HH:mm:ss.fff}] WaitForWindow exception at attempt={attempt}: {ex.Message}\r\n");
+                        return process.MainWindowHandle;
                     }
                 }
 
