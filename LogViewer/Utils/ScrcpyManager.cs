@@ -555,6 +555,7 @@ internal static class EmbeddedWindowHost
     private const int WsMaximize = 0x01000000;
     // WS_SYSMENU：系统菜单样式
     private const int WsSysMenu = 0x00080000;
+    private const int WsClipChildren = 0x02000000;
     // SWP_NOZORDER：不改变 Z 序
     private const uint SwpNoZOrder = 0x0004;
     // SWP_NOACTIVATE：不激活窗口
@@ -576,6 +577,7 @@ internal static class EmbeddedWindowHost
         if (windowHandle == IntPtr.Zero || hostHandle == IntPtr.Zero)
             return;
 
+        EnableClipChildren(hostHandle);
         SetParent(windowHandle, hostHandle);
 
         if (IntPtr.Size == 8)
@@ -626,6 +628,25 @@ internal static class EmbeddedWindowHost
     {
         if (windowHandle != IntPtr.Zero)
             PostMessage(windowHandle, WmClose, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    public static void EnableClipChildren(IntPtr hostHandle)
+    {
+        if (hostHandle == IntPtr.Zero)
+            return;
+
+        if (IntPtr.Size == 8)
+        {
+            var style = GetWindowLongPtr(hostHandle, GwlStyle).ToInt64();
+            if ((style & WsClipChildren) == 0)
+                SetWindowLongPtr(hostHandle, GwlStyle, (IntPtr)(style | WsClipChildren));
+        }
+        else
+        {
+            var style = GetWindowLong(hostHandle, GwlStyle);
+            if ((style & WsClipChildren) == 0)
+                SetWindowLong(hostHandle, GwlStyle, style | WsClipChildren);
+        }
     }
 
     /// <summary>

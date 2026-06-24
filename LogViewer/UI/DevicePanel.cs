@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using LogViewer.Models;
 using LogViewer.Static;
+using LogViewer.Utils;
 
 namespace LogViewer.UI;
 
@@ -112,6 +113,9 @@ public sealed partial class DevicePanel : UserControl
         _mirrorHostPanel.SizeChanged += OnMirrorHostResized;
         _mirrorHostPanel.VisibleChanged += OnMirrorHostResized;
         _mirrorHostPanel.Layout += OnMirrorHostLayoutChanged;
+        _mirrorHostPanel.Paint += OnMirrorHostPaint;
+        button1.Click += OnMirrorToggleClick;
+        button2.Click += OnMirrorReconnectClick;
         _btnMirrorToggle.Click += OnMirrorToggleClick;
         _btnMirrorReconnect.Click += OnMirrorReconnectClick;
         _btnMirrorRotate.Click += OnMirrorRotateClick;
@@ -131,6 +135,21 @@ public sealed partial class DevicePanel : UserControl
     private void OnMirrorHostResized(object? sender, EventArgs e)
     {
         UpdateMirrorHostBounds();
+    }
+
+    /// <summary>投屏宿主面板 Paint 事件处理器，在投屏未显示时绘制占位文本。</summary>
+    private void OnMirrorHostPaint(object? sender, PaintEventArgs e)
+    {
+        if (_mirrorHostVisible)
+        {
+            return;
+        }
+
+        using var brush = new SolidBrush(Color.Gainsboro);
+        var textSize = e.Graphics.MeasureString(_mirrorStatusText, Font);
+        var x = (_mirrorHostPanel.ClientSize.Width - textSize.Width) / 2;
+        var y = (_mirrorHostPanel.ClientSize.Height - textSize.Height) / 2;
+        e.Graphics.DrawString(_mirrorStatusText, Font, brush, x, y);
     }
 
     /// <summary>投屏宿主面板布局变化事件处理器。</summary>
@@ -225,6 +244,8 @@ public sealed partial class DevicePanel : UserControl
         _btnRefreshAdb.Enabled = false;
         _btnMirrorToggle.Enabled = false;
         _btnMirrorReconnect.Enabled = false;
+        button1.Enabled = false;
+        button2.Enabled = false;
         _btnMirrorRotate.Enabled = false;
         _btnMirrorScreenshot.Enabled = false;
         _btnMirrorPopout.Enabled = false;
@@ -409,6 +430,7 @@ public sealed partial class DevicePanel : UserControl
         _mirrorHostVisible = hostVisible;
         _mirrorRunning = isRunning;
         _mirrorReady = isReady;
+        _mirrorHostPanel.MirrorActive = hostVisible;
         UpdateMirrorUiState();
     }
 
@@ -419,6 +441,7 @@ public sealed partial class DevicePanel : UserControl
     {
         _mirrorHostVisible = false;
         _mirrorReady = false;
+        _mirrorHostPanel.MirrorActive = false;
         UpdateMirrorUiState();
     }
 
@@ -472,6 +495,8 @@ public sealed partial class DevicePanel : UserControl
             _mirrorHostPanel?.CreateControl();
             _ = _mirrorHostPanel?.Handle;
         }
+
+        EmbeddedWindowHost.EnableClipChildren(_mirrorHostPanel!.Handle);
 
         return MirrorHostHandle;
     }
@@ -575,17 +600,11 @@ public sealed partial class DevicePanel : UserControl
     /// </summary>
     private void UpdateMirrorUiState()
     {
-        if (_lblMirrorPlaceholder == null)
-        {
-            return;
-        }
-
         if (_isDesignMode)
         {
-            _lblMirrorPlaceholder.Text = _mirrorStatusText;
-            _lblMirrorPlaceholder.Visible = true;
             _lblMirrorStatus.Text = _mirrorStatusText;
             _btnMirrorToggle.Text = Language.Start;
+            button1.Text = Language.Start;
             return;
         }
 
@@ -594,20 +613,21 @@ public sealed partial class DevicePanel : UserControl
         var hasSelectedRecord = hasSpecificDevice && _devices.TryGetValue(_selectedDeviceId!, out selectedRecord);
         var hasAdb = hasSelectedRecord && !string.IsNullOrEmpty(selectedRecord?.Info.AdbSerial);
 
-        _lblMirrorPlaceholder.Text = _mirrorStatusText;
-        _lblMirrorPlaceholder.Visible = !_mirrorHostVisible;
         _lblMirrorStatus.Text = _mirrorStatusText;
         if (!_mirrorHostVisible)
         {
-            _lblMirrorPlaceholder.BringToFront();
+            _mirrorHostPanel.Invalidate();
         }
 
         _btnMirrorToggle.Enabled = hasAdb;
         _btnMirrorReconnect.Enabled = hasAdb && _mirrorRunning;
+        button1.Enabled = hasAdb;
+        button2.Enabled = hasAdb && _mirrorRunning;
         _btnMirrorRotate.Enabled = hasAdb && _mirrorRunning;
         _btnMirrorScreenshot.Enabled = hasAdb;
         _btnMirrorPopout.Enabled = hasAdb;
         _btnMirrorToggle.Text = _mirrorRunning ? Language.Stop : Language.Start;
+        button1.Text = _mirrorRunning ? Language.Stop : Language.Start;
     }
 
     /// <summary>
@@ -652,7 +672,10 @@ public sealed partial class DevicePanel : UserControl
             MirrorLayoutChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        _mirrorHostPanel.Invalidate();
+        if (!_mirrorHostVisible)
+        {
+            _mirrorHostPanel.Invalidate();
+        }
     }
 
     /// <summary>
@@ -714,6 +737,26 @@ public sealed partial class DevicePanel : UserControl
                processName.Contains("rider", StringComparison.OrdinalIgnoreCase) ||
                processName.Contains("jetbrains", StringComparison.OrdinalIgnoreCase) ||
                commandLine.Contains("JetBrains.ReSharper.Features.WinForms.Designer.External.Core", StringComparison.OrdinalIgnoreCase) ||
-               commandLine.Contains("WinFormsDesigner", StringComparison.OrdinalIgnoreCase);
+                commandLine.Contains("WinFormsDesigner", StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+/// <summary>
+/// 投屏宿主面板，当嵌入镜像窗口时跳过背景绘制，避免覆盖 scrcpy 子窗口。
+/// </summary>
+internal sealed class MirrorHostPanel : Panel
+{
+    private const int WmEraseBkgnd = 0x0014;
+
+    public bool MirrorActive { get; set; }
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WmEraseBkgnd && MirrorActive)
+        {
+            m.Result = IntPtr.Zero;
+            return;
+        }
+        base.WndProc(ref m);
     }
 }
