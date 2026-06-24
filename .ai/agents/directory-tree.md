@@ -52,8 +52,11 @@ LogViewer/                            ← 项目根目录
 │   ├── DeviceConnection.cs                 ← 单设备连接+协议解析+ArrayPool+消息类型switch
 │   └── LogcatReader.cs                     ← adb logcat进程流式读取+正则解析threadtime格式
 │
-├── UI/                                     ← 界面层（12 .cs + 1 .resx）
-│   ├── MainForm.cs                         ← 主窗口手写逻辑（事件/网络日志/设备/scrcpy宿主/设置）
+├── UI/                                     ← 界面层（16 .cs + 1 .resx）
+│   ├── MainForm.cs                         ← 主窗口共用字段/构造函数/跨功能方法/服务器事件/窗口生命周期
+│   ├── MainForm.NetworkLogs.cs             ← 网络日志配置/过滤/显示/交互/导出（partial class）
+│   ├── MainForm.Preview.cs                 ← JSON预览面板初始化/视图切换/详情显示（partial class）
+│   ├── MainForm.Scrcpy.cs                  ← scrcpy投屏生命周期/状态同步/截图（partial class）
 │   ├── MainForm.SystemLogs.cs              ← System Logs 快照/过滤/Pause/Resume 运行时逻辑
 │   ├── MainForm.Designer.cs                ← 主窗口设计器控件树（支持设计器拖动）
 │   ├── BufferedListView.cs                 ← ListView 双缓冲/精确顶部索引/滚动恢复辅助
