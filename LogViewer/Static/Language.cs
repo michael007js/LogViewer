@@ -7,7 +7,7 @@ namespace LogViewer.Static;
 public static class Language
 {
     /// <summary>应用程序主窗口标题。</summary>
-    public const string AppTitle = "网络日志查看器";
+    public const string AppTitle = "Android Logcat [Authory By Michael 😏]";
 
     /// <summary>顶部菜单栏"工具"菜单项文本。</summary>
     public const string ToolsMenu = "工具";

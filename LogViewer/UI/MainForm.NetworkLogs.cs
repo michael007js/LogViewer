@@ -29,7 +29,7 @@ public partial class MainForm
     {
         BufferedListViewHelper.EnableDoubleBuffer(_lstNetworkLogs);
         _lstNetworkLogs.Columns.Add("Method", 60);
-        _lstNetworkLogs.Columns.Add("URL", 300);
+        _lstNetworkLogs.Columns.Add("URL", 500);
         _lstNetworkLogs.Columns.Add("Status", 55);
         _lstNetworkLogs.Columns.Add("Dur", 55);
         _lstNetworkLogs.Columns.Add("Request", 200);
