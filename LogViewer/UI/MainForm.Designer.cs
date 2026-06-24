@@ -169,7 +169,7 @@ public partial class MainForm
         // 
         _outerSplit.Panel2.Controls.Add(_innerSplit);
         _outerSplit.Size = new System.Drawing.Size(1264, 560);
-        _outerSplit.SplitterDistance = 222;
+        _outerSplit.SplitterDistance = 220;
         _outerSplit.TabIndex = 0;
         // 
         // _devicePanel
@@ -180,7 +180,7 @@ public partial class MainForm
         _devicePanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _devicePanel.Name = "_devicePanel";
         _devicePanel.Padding = new System.Windows.Forms.Padding(8, 2, 8, 2);
-        _devicePanel.Size = new System.Drawing.Size(222, 560);
+        _devicePanel.Size = new System.Drawing.Size(220, 560);
         _devicePanel.TabIndex = 0;
         // 
         // _innerSplit
@@ -198,8 +198,8 @@ public partial class MainForm
         // _innerSplit.Panel2
         // 
         _innerSplit.Panel2.Controls.Add(_detailPanel);
-        _innerSplit.Size = new System.Drawing.Size(1038, 560);
-        _innerSplit.SplitterDistance = 671;
+        _innerSplit.Size = new System.Drawing.Size(1040, 560);
+        _innerSplit.SplitterDistance = 672;
         _innerSplit.TabIndex = 0;
         // 
         // _logPanel
@@ -209,7 +209,7 @@ public partial class MainForm
         _logPanel.Location = new System.Drawing.Point(0, 0);
         _logPanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _logPanel.Name = "_logPanel";
-        _logPanel.Size = new System.Drawing.Size(671, 560);
+        _logPanel.Size = new System.Drawing.Size(672, 560);
         _logPanel.TabIndex = 0;
         // 
         // _tabLogType
@@ -221,7 +221,7 @@ public partial class MainForm
         _tabLogType.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabLogType.Name = "_tabLogType";
         _tabLogType.SelectedIndex = 0;
-        _tabLogType.Size = new System.Drawing.Size(671, 560);
+        _tabLogType.Size = new System.Drawing.Size(672, 560);
         _tabLogType.TabIndex = 0;
         // 
         // _tabNetwork
@@ -359,7 +359,7 @@ public partial class MainForm
         _tabSystem.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabSystem.Name = "_tabSystem";
         _tabSystem.Padding = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _tabSystem.Size = new System.Drawing.Size(663, 533);
+        _tabSystem.Size = new System.Drawing.Size(664, 533);
         _tabSystem.TabIndex = 1;
         _tabSystem.Text = "System Logs";
         _tabSystem.UseVisualStyleBackColor = true;
@@ -373,7 +373,7 @@ public partial class MainForm
         _systemTabContainer.Location = new System.Drawing.Point(3, 2);
         _systemTabContainer.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _systemTabContainer.Name = "_systemTabContainer";
-        _systemTabContainer.Size = new System.Drawing.Size(657, 529);
+        _systemTabContainer.Size = new System.Drawing.Size(658, 529);
         _systemTabContainer.TabIndex = 0;
         // 
         // _lstSystemLogs
@@ -385,7 +385,7 @@ public partial class MainForm
         _lstSystemLogs.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _lstSystemLogs.MultiSelect = false;
         _lstSystemLogs.Name = "_lstSystemLogs";
-        _lstSystemLogs.Size = new System.Drawing.Size(657, 466);
+        _lstSystemLogs.Size = new System.Drawing.Size(658, 466);
         _lstSystemLogs.TabIndex = 0;
         _lstSystemLogs.UseCompatibleStateImageBehavior = false;
         _lstSystemLogs.View = System.Windows.Forms.View.Details;
@@ -401,13 +401,13 @@ public partial class MainForm
         _systemActionBar.Location = new System.Drawing.Point(0, 25);
         _systemActionBar.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _systemActionBar.Name = "_systemActionBar";
-        _systemActionBar.Size = new System.Drawing.Size(657, 38);
+        _systemActionBar.Size = new System.Drawing.Size(658, 38);
         _systemActionBar.TabIndex = 2;
         // 
         // _lblSystemBacklog
         // 
         _lblSystemBacklog.Dock = System.Windows.Forms.DockStyle.Right;
-        _lblSystemBacklog.Location = new System.Drawing.Point(487, 0);
+        _lblSystemBacklog.Location = new System.Drawing.Point(488, 0);
         _lblSystemBacklog.Name = "_lblSystemBacklog";
         _lblSystemBacklog.Size = new System.Drawing.Size(170, 38);
         _lblSystemBacklog.TabIndex = 3;
@@ -462,7 +462,7 @@ public partial class MainForm
         _pnlSystemFilter.Location = new System.Drawing.Point(0, 0);
         _pnlSystemFilter.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _pnlSystemFilter.Name = "_pnlSystemFilter";
-        _pnlSystemFilter.Size = new System.Drawing.Size(657, 25);
+        _pnlSystemFilter.Size = new System.Drawing.Size(658, 25);
         _pnlSystemFilter.TabIndex = 1;
         // 
         // _txtSystemKeyword
@@ -502,7 +502,7 @@ public partial class MainForm
         _detailPanel.Location = new System.Drawing.Point(0, 0);
         _detailPanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _detailPanel.Name = "_detailPanel";
-        _detailPanel.Size = new System.Drawing.Size(363, 560);
+        _detailPanel.Size = new System.Drawing.Size(364, 560);
         _detailPanel.TabIndex = 0;
         // 
         // _tabDetail
@@ -515,7 +515,7 @@ public partial class MainForm
         _tabDetail.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabDetail.Name = "_tabDetail";
         _tabDetail.SelectedIndex = 0;
-        _tabDetail.Size = new System.Drawing.Size(363, 536);
+        _tabDetail.Size = new System.Drawing.Size(364, 536);
         _tabDetail.TabIndex = 0;
         // 
         // _tabHeaders
@@ -526,7 +526,7 @@ public partial class MainForm
         _tabHeaders.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabHeaders.Name = "_tabHeaders";
         _tabHeaders.Padding = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _tabHeaders.Size = new System.Drawing.Size(355, 509);
+        _tabHeaders.Size = new System.Drawing.Size(356, 509);
         _tabHeaders.TabIndex = 0;
         _tabHeaders.Text = "Headers";
         _tabHeaders.UseVisualStyleBackColor = true;
@@ -541,7 +541,7 @@ public partial class MainForm
         _rawHeaders.Name = "_rawHeaders";
         _rawHeaders.ReadOnly = true;
         _rawHeaders.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-        _rawHeaders.Size = new System.Drawing.Size(349, 505);
+        _rawHeaders.Size = new System.Drawing.Size(350, 505);
         _rawHeaders.TabIndex = 0;
         _rawHeaders.Visible = false;
         _rawHeaders.WordWrap = false;
@@ -552,7 +552,7 @@ public partial class MainForm
         _jsonHeaders.Location = new System.Drawing.Point(3, 2);
         _jsonHeaders.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _jsonHeaders.Name = "_jsonHeaders";
-        _jsonHeaders.Size = new System.Drawing.Size(349, 505);
+        _jsonHeaders.Size = new System.Drawing.Size(350, 505);
         _jsonHeaders.TabIndex = 1;
         // 
         // _tabRequestBody
@@ -641,7 +641,7 @@ public partial class MainForm
         _pnlJsonToolbar.Location = new System.Drawing.Point(0, 0);
         _pnlJsonToolbar.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _pnlJsonToolbar.Name = "_pnlJsonToolbar";
-        _pnlJsonToolbar.Size = new System.Drawing.Size(363, 24);
+        _pnlJsonToolbar.Size = new System.Drawing.Size(364, 24);
         _pnlJsonToolbar.TabIndex = 1;
         // 
         // _txtJsonSearch
