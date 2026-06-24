@@ -30,201 +30,172 @@ partial class DevicePanel
     /// </summary>
     private void InitializeComponent()
     {
-        _container = new System.Windows.Forms.TableLayoutPanel();
-        _cmbDevices = new System.Windows.Forms.ComboBox();
-        _btnRefreshAdb = new System.Windows.Forms.Button();
-        _mirrorHostPanel = new System.Windows.Forms.Panel();
-        _mirrorViewportPanel = new System.Windows.Forms.Panel();
-        _lblMirrorPlaceholder = new System.Windows.Forms.Label();
-        _lblMirrorStatus = new System.Windows.Forms.Label();
-        _buttonBar = new System.Windows.Forms.TableLayoutPanel();
-        _btnMirrorToggle = new System.Windows.Forms.Button();
-        _btnMirrorReconnect = new System.Windows.Forms.Button();
-        _btnMirrorRotate = new System.Windows.Forms.Button();
-        _btnMirrorScreenshot = new System.Windows.Forms.Button();
-        _btnMirrorPopout = new System.Windows.Forms.Button();
+        _container = new TableLayoutPanel();
+        _cmbDevices = new ComboBox();
+        _btnRefreshAdb = new Button();
+        _mirrorHostPanel = new Panel();
+        _mirrorViewportPanel = new Panel();
+        _lblMirrorPlaceholder = new Label();
+        _lblMirrorStatus = new Label();
+        _buttonBar = new TableLayoutPanel();
+        _btnMirrorToggle = new Button();
+        _btnMirrorReconnect = new Button();
+        _btnMirrorRotate = new Button();
+        _btnMirrorScreenshot = new Button();
+        _btnMirrorPopout = new Button();
         _container.SuspendLayout();
         _mirrorHostPanel.SuspendLayout();
         _buttonBar.SuspendLayout();
         SuspendLayout();
         // 
-        // _container
-        // 
-        _container.ColumnCount = 1;
-        _container.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
-        _container.Controls.Add(_cmbDevices, 0, 0);
-        _container.Controls.Add(_btnRefreshAdb, 0, 1);
-        _container.Controls.Add(_mirrorHostPanel, 0, 2);
-        _container.Controls.Add(_lblMirrorStatus, 0, 3);
-        _container.Controls.Add(_buttonBar, 0, 4);
-        _container.Dock = System.Windows.Forms.DockStyle.Fill;
-        _container.Location = new System.Drawing.Point(8, 8);
-        _container.Name = "_container";
-        _container.RowCount = 5;
-        _container.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 28F));
-        _container.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 30F));
-        _container.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-        _container.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 36F));
-        _container.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 102F));
-        _container.Size = new System.Drawing.Size(241, 527);
-        _container.TabIndex = 0;
-        // 
         // _cmbDevices
         // 
-        _cmbDevices.Dock = System.Windows.Forms.DockStyle.Top;
-        _cmbDevices.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-        _cmbDevices.Font = new System.Drawing.Font("Consolas", 9F);
-        _cmbDevices.Location = new System.Drawing.Point(3, 3);
-        _cmbDevices.Name = "_cmbDevices";
-        _cmbDevices.Size = new System.Drawing.Size(235, 22);
-        _cmbDevices.TabIndex = 0;
+        _cmbDevices.Dock = DockStyle.Top;
+        _cmbDevices.DropDownStyle = ComboBoxStyle.DropDownList;
+        _cmbDevices.Font = new Font("Consolas", 9F);
+        _cmbDevices.Height = 28;
+        _cmbDevices.SelectedIndexChanged += new EventHandler(OnDeviceSelected);
         // 
         // _btnRefreshAdb
         // 
-        _btnRefreshAdb.Dock = System.Windows.Forms.DockStyle.Top;
-        _btnRefreshAdb.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnRefreshAdb.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnRefreshAdb.Location = new System.Drawing.Point(3, 31);
-        _btnRefreshAdb.Name = "_btnRefreshAdb";
-        _btnRefreshAdb.Size = new System.Drawing.Size(235, 24);
-        _btnRefreshAdb.TabIndex = 1;
-        _btnRefreshAdb.Text = "扫描 ADB";
+        _btnRefreshAdb.Dock = DockStyle.Top;
+        _btnRefreshAdb.FlatStyle = FlatStyle.Flat;
+        _btnRefreshAdb.Font = new Font("Consolas", 8F);
+        _btnRefreshAdb.Height = 26;
+        _btnRefreshAdb.Text = Language.ScanAdb;
+        _btnRefreshAdb.Click += new EventHandler(OnRefreshAdbClick);
         // 
         // _mirrorHostPanel
         // 
-        _mirrorHostPanel.BackColor = System.Drawing.Color.Black;
-        _mirrorHostPanel.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-        _mirrorHostPanel.Controls.Add(_mirrorViewportPanel);
-        _mirrorHostPanel.Controls.Add(_lblMirrorPlaceholder);
-        _mirrorHostPanel.Dock = System.Windows.Forms.DockStyle.Fill;
-        _mirrorHostPanel.Location = new System.Drawing.Point(0, 66);
-        _mirrorHostPanel.Margin = new System.Windows.Forms.Padding(0, 8, 0, 8);
-        _mirrorHostPanel.Name = "_mirrorHostPanel";
-        _mirrorHostPanel.Size = new System.Drawing.Size(241, 315);
-        _mirrorHostPanel.TabIndex = 2;
+        _mirrorHostPanel.BackColor = Color.Black;
+        _mirrorHostPanel.BorderStyle = BorderStyle.FixedSingle;
+        _mirrorHostPanel.Dock = DockStyle.Fill;
+        _mirrorHostPanel.Margin = new Padding(0, 8, 0, 8);
+        _mirrorHostPanel.Resize += new EventHandler(OnMirrorHostResized);
+        _mirrorHostPanel.SizeChanged += new EventHandler(OnMirrorHostResized);
+        _mirrorHostPanel.VisibleChanged += new EventHandler(OnMirrorHostResized);
+        _mirrorHostPanel.Layout += new LayoutEventHandler(OnMirrorHostLayoutChanged);
         // 
         // _mirrorViewportPanel
         // 
-        _mirrorViewportPanel.BackColor = System.Drawing.Color.Black;
-        _mirrorViewportPanel.Dock = System.Windows.Forms.DockStyle.Fill;
-        _mirrorViewportPanel.Location = new System.Drawing.Point(0, 0);
-        _mirrorViewportPanel.Name = "_mirrorViewportPanel";
-        _mirrorViewportPanel.Size = new System.Drawing.Size(239, 313);
-        _mirrorViewportPanel.TabIndex = 0;
+        _mirrorViewportPanel.BackColor = Color.Black;
         _mirrorViewportPanel.Visible = false;
         // 
         // _lblMirrorPlaceholder
         // 
-        _lblMirrorPlaceholder.BackColor = System.Drawing.Color.Black;
-        _lblMirrorPlaceholder.Dock = System.Windows.Forms.DockStyle.Fill;
-        _lblMirrorPlaceholder.ForeColor = System.Drawing.Color.Gainsboro;
-        _lblMirrorPlaceholder.Location = new System.Drawing.Point(0, 0);
-        _lblMirrorPlaceholder.Name = "_lblMirrorPlaceholder";
-        _lblMirrorPlaceholder.Size = new System.Drawing.Size(239, 313);
-        _lblMirrorPlaceholder.TabIndex = 1;
-        _lblMirrorPlaceholder.Text = "请选择具体设备以操控手机";
-        _lblMirrorPlaceholder.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+        _lblMirrorPlaceholder.BackColor = Color.Black;
+        _lblMirrorPlaceholder.Dock = DockStyle.Fill;
+        _lblMirrorPlaceholder.ForeColor = Color.Gainsboro;
+        _lblMirrorPlaceholder.Text = Language.DeviceSelectPrompt;
+        _lblMirrorPlaceholder.TextAlign = ContentAlignment.MiddleCenter;
         // 
         // _lblMirrorStatus
         // 
-        _lblMirrorStatus.Dock = System.Windows.Forms.DockStyle.Bottom;
-        _lblMirrorStatus.ForeColor = System.Drawing.Color.DimGray;
-        _lblMirrorStatus.Location = new System.Drawing.Point(3, 389);
-        _lblMirrorStatus.Name = "_lblMirrorStatus";
-        _lblMirrorStatus.Padding = new System.Windows.Forms.Padding(2, 0, 2, 0);
-        _lblMirrorStatus.Size = new System.Drawing.Size(235, 36);
-        _lblMirrorStatus.TabIndex = 3;
-        _lblMirrorStatus.Text = "请选择具体设备以操控手机";
-        _lblMirrorStatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+        _lblMirrorStatus.Dock = DockStyle.Bottom;
+        _lblMirrorStatus.ForeColor = Color.DimGray;
+        _lblMirrorStatus.Height = 36;
+        _lblMirrorStatus.Padding = new Padding(2, 0, 2, 0);
+        _lblMirrorStatus.Text = Language.DeviceSelectPrompt;
+        _lblMirrorStatus.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // _btnMirrorToggle
+        // 
+        _btnMirrorToggle.Dock = DockStyle.Fill;
+        _btnMirrorToggle.FlatStyle = FlatStyle.Flat;
+        _btnMirrorToggle.Font = new Font("Consolas", 8F);
+        _btnMirrorToggle.Height = 28;
+        _btnMirrorToggle.Margin = new Padding(0, 0, 6, 6);
+        _btnMirrorToggle.Text = Language.Start;
+        _btnMirrorToggle.Click += new EventHandler(OnMirrorToggleClick);
+        // 
+        // _btnMirrorReconnect
+        // 
+        _btnMirrorReconnect.Dock = DockStyle.Fill;
+        _btnMirrorReconnect.FlatStyle = FlatStyle.Flat;
+        _btnMirrorReconnect.Font = new Font("Consolas", 8F);
+        _btnMirrorReconnect.Height = 28;
+        _btnMirrorReconnect.Margin = new Padding(0, 0, 6, 6);
+        _btnMirrorReconnect.Text = Language.Reconnect;
+        _btnMirrorReconnect.Click += new EventHandler(OnMirrorReconnectClick);
+        // 
+        // _btnMirrorRotate
+        // 
+        _btnMirrorRotate.Dock = DockStyle.Fill;
+        _btnMirrorRotate.FlatStyle = FlatStyle.Flat;
+        _btnMirrorRotate.Font = new Font("Consolas", 8F);
+        _btnMirrorRotate.Height = 28;
+        _btnMirrorRotate.Margin = new Padding(0, 0, 6, 6);
+        _btnMirrorRotate.Text = Language.Rotate;
+        _btnMirrorRotate.Click += new EventHandler(OnMirrorRotateClick);
+        // 
+        // _btnMirrorScreenshot
+        // 
+        _btnMirrorScreenshot.Dock = DockStyle.Fill;
+        _btnMirrorScreenshot.FlatStyle = FlatStyle.Flat;
+        _btnMirrorScreenshot.Font = new Font("Consolas", 8F);
+        _btnMirrorScreenshot.Height = 28;
+        _btnMirrorScreenshot.Margin = new Padding(0, 0, 6, 6);
+        _btnMirrorScreenshot.Text = Language.Screenshot;
+        _btnMirrorScreenshot.Click += new EventHandler(OnMirrorScreenshotClick);
+        // 
+        // _btnMirrorPopout
+        // 
+        _btnMirrorPopout.Dock = DockStyle.Fill;
+        _btnMirrorPopout.FlatStyle = FlatStyle.Flat;
+        _btnMirrorPopout.Font = new Font("Consolas", 8F);
+        _btnMirrorPopout.Height = 28;
+        _btnMirrorPopout.Margin = new Padding(0, 0, 6, 6);
+        _btnMirrorPopout.Text = Language.Popout;
+        _btnMirrorPopout.Click += new EventHandler(OnMirrorPopoutClick);
         // 
         // _buttonBar
         // 
         _buttonBar.ColumnCount = 2;
-        _buttonBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
-        _buttonBar.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
+        _buttonBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        _buttonBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        _buttonBar.Dock = DockStyle.Bottom;
+        _buttonBar.Height = 102;
+        _buttonBar.Margin = new Padding(0);
+        _buttonBar.RowCount = 3;
+        _buttonBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+        _buttonBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+        _buttonBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
         _buttonBar.Controls.Add(_btnMirrorToggle, 0, 0);
         _buttonBar.Controls.Add(_btnMirrorReconnect, 1, 0);
         _buttonBar.Controls.Add(_btnMirrorRotate, 0, 1);
         _buttonBar.Controls.Add(_btnMirrorScreenshot, 1, 1);
         _buttonBar.Controls.Add(_btnMirrorPopout, 0, 2);
-        _buttonBar.Dock = System.Windows.Forms.DockStyle.Bottom;
-        _buttonBar.Location = new System.Drawing.Point(0, 425);
-        _buttonBar.Margin = new System.Windows.Forms.Padding(0);
-        _buttonBar.Name = "_buttonBar";
-        _buttonBar.RowCount = 3;
-        _buttonBar.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 30F));
-        _buttonBar.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 30F));
-        _buttonBar.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 30F));
-        _buttonBar.Size = new System.Drawing.Size(241, 102);
-        _buttonBar.TabIndex = 4;
-        // 
-        // _btnMirrorToggle
-        // 
-        _btnMirrorToggle.Dock = System.Windows.Forms.DockStyle.Fill;
-        _btnMirrorToggle.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnMirrorToggle.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnMirrorToggle.Location = new System.Drawing.Point(0, 0);
-        _btnMirrorToggle.Margin = new System.Windows.Forms.Padding(0, 0, 6, 6);
-        _btnMirrorToggle.Name = "_btnMirrorToggle";
-        _btnMirrorToggle.Size = new System.Drawing.Size(114, 24);
-        _btnMirrorToggle.TabIndex = 0;
-        _btnMirrorToggle.Text = "启动";
-        // 
-        // _btnMirrorReconnect
-        // 
-        _btnMirrorReconnect.Dock = System.Windows.Forms.DockStyle.Fill;
-        _btnMirrorReconnect.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnMirrorReconnect.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnMirrorReconnect.Location = new System.Drawing.Point(120, 0);
-        _btnMirrorReconnect.Margin = new System.Windows.Forms.Padding(0, 0, 6, 6);
-        _btnMirrorReconnect.Name = "_btnMirrorReconnect";
-        _btnMirrorReconnect.Size = new System.Drawing.Size(115, 24);
-        _btnMirrorReconnect.TabIndex = 1;
-        _btnMirrorReconnect.Text = "重连";
-        // 
-        // _btnMirrorRotate
-        // 
-        _btnMirrorRotate.Dock = System.Windows.Forms.DockStyle.Fill;
-        _btnMirrorRotate.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnMirrorRotate.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnMirrorRotate.Location = new System.Drawing.Point(0, 30);
-        _btnMirrorRotate.Margin = new System.Windows.Forms.Padding(0, 0, 6, 6);
-        _btnMirrorRotate.Name = "_btnMirrorRotate";
-        _btnMirrorRotate.Size = new System.Drawing.Size(114, 24);
-        _btnMirrorRotate.TabIndex = 2;
-        _btnMirrorRotate.Text = "旋转";
-        // 
-        // _btnMirrorScreenshot
-        // 
-        _btnMirrorScreenshot.Dock = System.Windows.Forms.DockStyle.Fill;
-        _btnMirrorScreenshot.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnMirrorScreenshot.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnMirrorScreenshot.Location = new System.Drawing.Point(120, 30);
-        _btnMirrorScreenshot.Margin = new System.Windows.Forms.Padding(0, 0, 6, 6);
-        _btnMirrorScreenshot.Name = "_btnMirrorScreenshot";
-        _btnMirrorScreenshot.Size = new System.Drawing.Size(115, 24);
-        _btnMirrorScreenshot.TabIndex = 3;
-        _btnMirrorScreenshot.Text = "截图";
-        // 
-        // _btnMirrorPopout
-        // 
         _buttonBar.SetColumnSpan(_btnMirrorPopout, 2);
-        _btnMirrorPopout.Dock = System.Windows.Forms.DockStyle.Fill;
-        _btnMirrorPopout.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnMirrorPopout.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnMirrorPopout.Location = new System.Drawing.Point(0, 60);
-        _btnMirrorPopout.Margin = new System.Windows.Forms.Padding(0, 0, 6, 6);
-        _btnMirrorPopout.Name = "_btnMirrorPopout";
-        _btnMirrorPopout.Size = new System.Drawing.Size(235, 36);
-        _btnMirrorPopout.TabIndex = 4;
-        _btnMirrorPopout.Text = "弹出";
+        // 
+        // _mirrorHostPanel
+        // 
+        _mirrorHostPanel.Controls.Add(_mirrorViewportPanel);
+        _mirrorHostPanel.Controls.Add(_lblMirrorPlaceholder);
+        // 
+        // _container
+        // 
+        _container.ColumnCount = 1;
+        _container.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        _container.Controls.Add(_cmbDevices, 0, 0);
+        _container.Controls.Add(_btnRefreshAdb, 0, 1);
+        _container.Controls.Add(_mirrorHostPanel, 0, 2);
+        _container.Controls.Add(_lblMirrorStatus, 0, 3);
+        _container.Controls.Add(_buttonBar, 0, 4);
+        _container.Dock = DockStyle.Fill;
+        _container.RowCount = 5;
+        _container.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
+        _container.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+        _container.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        _container.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
+        _container.RowStyles.Add(new RowStyle(SizeType.Absolute, 102F));
         // 
         // DevicePanel
         // 
-        BackColor = System.Drawing.SystemColors.Control;
+        BackColor = SystemColors.Control;
+        Padding = new Padding(8);
         Controls.Add(_container);
-        Padding = new System.Windows.Forms.Padding(8);
-        Size = new System.Drawing.Size(257, 543);
+        Resize += new EventHandler(OnPanelResized);
+        Layout += new LayoutEventHandler(OnPanelLayoutChanged);
         _container.ResumeLayout(false);
         _mirrorHostPanel.ResumeLayout(false);
         _buttonBar.ResumeLayout(false);
@@ -233,17 +204,17 @@ partial class DevicePanel
 
     #endregion
 
-    private System.Windows.Forms.TableLayoutPanel _container;
-    private System.Windows.Forms.TableLayoutPanel _buttonBar;
-    private System.Windows.Forms.ComboBox _cmbDevices;
-    private System.Windows.Forms.Button _btnRefreshAdb;
-    private System.Windows.Forms.Panel _mirrorHostPanel;
-    private System.Windows.Forms.Panel _mirrorViewportPanel;
-    private System.Windows.Forms.Label _lblMirrorPlaceholder;
-    private System.Windows.Forms.Label _lblMirrorStatus;
-    private System.Windows.Forms.Button _btnMirrorToggle;
-    private System.Windows.Forms.Button _btnMirrorReconnect;
-    private System.Windows.Forms.Button _btnMirrorRotate;
-    private System.Windows.Forms.Button _btnMirrorScreenshot;
-    private System.Windows.Forms.Button _btnMirrorPopout;
+    private TableLayoutPanel _container;
+    private TableLayoutPanel _buttonBar;
+    private ComboBox _cmbDevices;
+    private Button _btnRefreshAdb;
+    private Panel _mirrorHostPanel;
+    private Panel _mirrorViewportPanel;
+    private Label _lblMirrorPlaceholder;
+    private Label _lblMirrorStatus;
+    private Button _btnMirrorToggle;
+    private Button _btnMirrorReconnect;
+    private Button _btnMirrorRotate;
+    private Button _btnMirrorScreenshot;
+    private Button _btnMirrorPopout;
 }
