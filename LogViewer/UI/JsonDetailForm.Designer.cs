@@ -65,7 +65,7 @@ public partial class JsonDetailForm
         // 
         _split.Panel2.Controls.Add(_responseContainer);
         _split.Size = new System.Drawing.Size(984, 561);
-        _split.SplitterDistance = 483;
+        _split.SplitterDistance = 432;
         _split.TabIndex = 0;
         // 
         // _requestContainer
@@ -76,15 +76,22 @@ public partial class JsonDetailForm
         _requestContainer.Dock = System.Windows.Forms.DockStyle.Fill;
         _requestContainer.Location = new System.Drawing.Point(0, 0);
         _requestContainer.Name = "_requestContainer";
-        _requestContainer.Size = new System.Drawing.Size(483, 561);
+        _requestContainer.Size = new System.Drawing.Size(432, 561);
         _requestContainer.TabIndex = 0;
         // 
         // _rawRequest
         // 
-        _rawRequest.Location = new System.Drawing.Point(0, 0);
+        _rawRequest.BackColor = System.Drawing.SystemColors.Window;
+        _rawRequest.Dock = System.Windows.Forms.DockStyle.Fill;
+        _rawRequest.Location = new System.Drawing.Point(0, 26);
+        _rawRequest.Multiline = true;
         _rawRequest.Name = "_rawRequest";
-        _rawRequest.Size = new System.Drawing.Size(100, 22);
+        _rawRequest.ReadOnly = true;
+        _rawRequest.ScrollBars = System.Windows.Forms.ScrollBars.Both;
+        _rawRequest.Size = new System.Drawing.Size(432, 535);
         _rawRequest.TabIndex = 0;
+        _rawRequest.Visible = false;
+        _rawRequest.WordWrap = false;
         // 
         // _jsonRequest
         // 
@@ -93,7 +100,7 @@ public partial class JsonDetailForm
         _jsonRequest.Font = new System.Drawing.Font("Consolas", 11F);
         _jsonRequest.Location = new System.Drawing.Point(0, 26);
         _jsonRequest.Name = "_jsonRequest";
-        _jsonRequest.Size = new System.Drawing.Size(483, 535);
+        _jsonRequest.Size = new System.Drawing.Size(432, 535);
         _jsonRequest.TabIndex = 1;
         // 
         // _requestToolbar
@@ -108,7 +115,7 @@ public partial class JsonDetailForm
         _requestToolbar.Dock = System.Windows.Forms.DockStyle.Top;
         _requestToolbar.Location = new System.Drawing.Point(0, 0);
         _requestToolbar.Name = "_requestToolbar";
-        _requestToolbar.Size = new System.Drawing.Size(483, 26);
+        _requestToolbar.Size = new System.Drawing.Size(432, 26);
         _requestToolbar.TabIndex = 2;
         // 
         // _lblRequestTitle
@@ -177,15 +184,22 @@ public partial class JsonDetailForm
         _responseContainer.Dock = System.Windows.Forms.DockStyle.Fill;
         _responseContainer.Location = new System.Drawing.Point(0, 0);
         _responseContainer.Name = "_responseContainer";
-        _responseContainer.Size = new System.Drawing.Size(497, 561);
+        _responseContainer.Size = new System.Drawing.Size(548, 561);
         _responseContainer.TabIndex = 0;
         // 
         // _rawResponse
         // 
-        _rawResponse.Location = new System.Drawing.Point(0, 0);
+        _rawResponse.BackColor = System.Drawing.SystemColors.Window;
+        _rawResponse.Dock = System.Windows.Forms.DockStyle.Fill;
+        _rawResponse.Location = new System.Drawing.Point(0, 26);
+        _rawResponse.Multiline = true;
         _rawResponse.Name = "_rawResponse";
-        _rawResponse.Size = new System.Drawing.Size(100, 22);
+        _rawResponse.ReadOnly = true;
+        _rawResponse.ScrollBars = System.Windows.Forms.ScrollBars.Both;
+        _rawResponse.Size = new System.Drawing.Size(548, 535);
         _rawResponse.TabIndex = 0;
+        _rawResponse.Visible = false;
+        _rawResponse.WordWrap = false;
         // 
         // _jsonResponse
         // 
@@ -194,7 +208,7 @@ public partial class JsonDetailForm
         _jsonResponse.Font = new System.Drawing.Font("Consolas", 11F);
         _jsonResponse.Location = new System.Drawing.Point(0, 26);
         _jsonResponse.Name = "_jsonResponse";
-        _jsonResponse.Size = new System.Drawing.Size(497, 535);
+        _jsonResponse.Size = new System.Drawing.Size(548, 535);
         _jsonResponse.TabIndex = 1;
         // 
         // _responseToolbar
@@ -209,7 +223,7 @@ public partial class JsonDetailForm
         _responseToolbar.Dock = System.Windows.Forms.DockStyle.Top;
         _responseToolbar.Location = new System.Drawing.Point(0, 0);
         _responseToolbar.Name = "_responseToolbar";
-        _responseToolbar.Size = new System.Drawing.Size(497, 26);
+        _responseToolbar.Size = new System.Drawing.Size(548, 26);
         _responseToolbar.TabIndex = 2;
         // 
         // _lblResponseTitle
@@ -293,14 +307,4 @@ public partial class JsonDetailForm
         ResumeLayout(false);
     }
 
-    private static void ConfigureRawTextBox(TextBox textBox)
-    {
-        textBox.Dock = DockStyle.Fill;
-        textBox.Multiline = true;
-        textBox.ReadOnly = true;
-        textBox.WordWrap = false;
-        textBox.ScrollBars = ScrollBars.Both;
-        textBox.BackColor = Color.White;
-        textBox.Visible = false;
-    }
 }

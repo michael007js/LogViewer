@@ -13,6 +13,7 @@ public partial class JsonDetailForm : Form
     /// <summary>当前显示的日志条目。</summary>
     private LogEntry _entry = new();
 
+    /// <summary>自定义字体实例（从调用方传入的字体克隆，需在 Dispose 中释放）。</summary>
     private Font _font = SystemFonts.DefaultFont;
 
     private SplitContainer _split;
@@ -21,11 +22,9 @@ public partial class JsonDetailForm : Form
 
     private JsonTreeView _jsonResponse;
 
-    /// <summary>请求原始文本框。</summary>
-    private TextBox _rawRequest = null!;
+    private TextBox _rawRequest;
 
-    /// <summary>响应原始文本框。</summary>
-    private TextBox _rawResponse = null!;
+    private TextBox _rawResponse;
 
     /// <summary>切换请求视图模式的按钮。</summary>
     private Button _btnToggleRequest = null!;
@@ -39,10 +38,13 @@ public partial class JsonDetailForm : Form
     /// <summary>折叠请求 JSON 树的按钮。</summary>
     private Button _btnCollapseReq = null!;
 
+    /// <summary>折叠请求 JSON 树到第2级的按钮。</summary>
     private Button _btnLvl2Req;
 
+    /// <summary>请求 JSON 搜索关键字输入框。</summary>
     private TextBox _txtSearchReq;
 
+    /// <summary>执行请求 JSON 搜索高亮的按钮。</summary>
     private Button _btnSearchReq;
 
     /// <summary>展开响应 JSON 树的按钮。</summary>
@@ -51,10 +53,13 @@ public partial class JsonDetailForm : Form
     /// <summary>折叠响应 JSON 树的按钮。</summary>
     private Button _btnCollapseRes = null!;
 
+    /// <summary>折叠响应 JSON 树到第2级的按钮。</summary>
     private Button _btnLvl2Res;
 
+    /// <summary>响应 JSON 搜索关键字输入框。</summary>
     private TextBox _txtSearchRes;
 
+    /// <summary>执行响应 JSON 搜索高亮的按钮。</summary>
     private Button _btnSearchRes;
 
     /// <summary>请求视图是否为原始文本模式。</summary>
@@ -71,6 +76,10 @@ public partial class JsonDetailForm : Form
         InitializeComponent();
     }
 
+    /// <summary>
+    /// 运行时构造函数，传入日志条目和字体初始化窗口。
+    /// 设置标题栏文本，连接事件，加载 JSON 数据到树视图和文本框。
+    /// </summary>
     public JsonDetailForm(LogEntry entry, Font font)
     {
         _entry = entry;
@@ -82,6 +91,7 @@ public partial class JsonDetailForm : Form
         LoadData();
     }
 
+    /// <summary>连接所有工具栏按钮和搜索控件的 Click 事件，以及窗口 Shown 事件用于延迟布局。</summary>
     private void WireComponentEvents()
     {
         _btnToggleRequest.Click += (s, e) => ToggleRequestView();
@@ -94,25 +104,9 @@ public partial class JsonDetailForm : Form
         _btnCollapseRes.Click += (s, e) => _jsonResponse.CollapseAll();
         _btnLvl2Res.Click += (s, e) => _jsonResponse.CollapseToLevel(2);
         _btnSearchRes.Click += (s, e) => _jsonResponse.SearchAndHighlight(_txtSearchRes.Text);
-        Shown += (s, e) => BeginInvoke(new Action(ApplyInitialSplitterLayout));
     }
 
-    private void ApplyInitialSplitterLayout()
-    {
-        int total = _split.ClientSize.Width - _split.SplitterWidth;
-        int minPanel1 = _split.Panel1MinSize;
-        int minPanel2 = _split.Panel2MinSize;
-
-        if (total <= 0 || total < minPanel1 + minPanel2)
-        {
-            return;
-        }
-
-        int maxDistance = total - minPanel2;
-        int distance = Math.Clamp((int)(total * 0.4), minPanel1, maxDistance);
-        _split.SplitterDistance = distance;
-    }
-
+    /// <summary>将日志条目的请求/响应 JSON 加载到树视图和原始文本框，尝试格式化 JSON。</summary>
     private void LoadData()
     {
         _jsonRequest.DisplayJson(_entry.Send ?? "");
@@ -121,6 +115,7 @@ public partial class JsonDetailForm : Form
         _rawResponse.Text = JsonFormatter.FormatJson(_entry.Content) ?? _entry.Content ?? "";
     }
 
+    /// <summary>切换请求区域在 JSON 树视图和原始文本之间，同步启用/禁用树操作按钮。</summary>
     private void ToggleRequestView()
     {
         _requestIsRaw = !_requestIsRaw;
@@ -134,6 +129,7 @@ public partial class JsonDetailForm : Form
         _btnSearchReq.Enabled = !_requestIsRaw;
     }
 
+    /// <summary>切换响应区域在 JSON 树视图和原始文本之间，同步启用/禁用树操作按钮。</summary>
     private void ToggleResponseView()
     {
         _responseIsRaw = !_responseIsRaw;
@@ -147,6 +143,7 @@ public partial class JsonDetailForm : Form
         _btnSearchRes.Enabled = !_responseIsRaw;
     }
 
+    /// <summary>拦截 Ctrl+W 快捷键关闭窗口。</summary>
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (keyData == (Keys.Control | Keys.W))
@@ -158,6 +155,7 @@ public partial class JsonDetailForm : Form
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
+    /// <summary>释放自定义字体实例，调用基类清理。</summary>
     protected override void Dispose(bool disposing)
     {
         if (disposing) _font?.Dispose();
