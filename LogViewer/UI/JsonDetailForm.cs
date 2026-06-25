@@ -87,6 +87,8 @@ public partial class JsonDetailForm : Form
         InitializeComponent();
         Text = string.Format(Language.JsonDetailTitle, _entry.Method ?? string.Empty, _entry.UrlPath ?? string.Empty,
             _entry.Code, _entry.Duration);
+        _txtSearchReq.PlaceholderText = Language.SearchPlaceholder;
+        _txtSearchRes.PlaceholderText = Language.SearchPlaceholder;
         WireComponentEvents();
         LoadData();
     }

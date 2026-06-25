@@ -10,7 +10,7 @@ namespace LogViewer.Network;
 /// <summary>
 /// 单设备 TCP 连接管理器，负责与 Android 设备建立 TCP 连接并解析协议帧。
 /// 协议格式：[4字节大端int=长度][1字节消息类型][UTF-8 JSON字节]
-/// 支持设备注册（0x01）和网络日志（0x02）两种消息类型。
+/// 支持设备注册（0x01）、网络日志（0x02）、心跳保活（0x03 Ping / 0x04 Pong）四种消息类型。
 /// </summary>
 public class DeviceConnection
 {
@@ -26,6 +26,13 @@ public class DeviceConnection
 
     /// <summary>远程端点地址，格式如 "192.168.1.100:12345"。</summary>
     public string RemoteEndpoint => _tcpClient.Client.RemoteEndPoint?.ToString() ?? "";
+
+    /// <summary>
+    /// 最后一次收到消息的时间，用于服务端超时检测。
+    /// 每次收到任何消息帧（包括 Ping）都会刷新此时间戳。
+    /// LogServer.OnTimeoutCheck 定期扫描，超过 TimeoutSeconds 未活跃则断开连接。
+    /// </summary>
+    public DateTime LastActiveTime { get; set; } = DateTime.Now;
 
     /// <summary>设备注册事件，当收到 0x01 消息时触发。</summary>
     public event EventHandler<DeviceInfo>? Registered;
@@ -49,7 +56,10 @@ public class DeviceConnection
     }
 
     /// <summary>
-    /// JSON 序列化选项，设置 PropertyNameCaseInsensitive = true 以兼容 Android 端 Gson 的小写驼峰命名。
+    /// JSON 序列化选项，必须设置 PropertyNameCaseInsensitive = true 以兼容 Android 端 Gson 的小写驼峰命名。
+    /// Android 端 Gson 默认输出小写驼峰（如 isRedirect、sendTime），
+    /// 而 C# System.Text.Json 默认区分大小写且属性为 PascalCase，
+    /// 不设置此选项将导致所有字段反序列化为默认值（null/0/false）。
     /// </summary>
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -58,7 +68,8 @@ public class DeviceConnection
 
     /// <summary>
     /// 异步接收并解析 TCP 数据流，循环读取消息帧并分发处理。
-    /// 协议帧格式：[4字节大端int=长度][1字节消息类型][UTF-8 JSON字节]
+    /// 收到 Ping(0x03) 时自动回复 Pong(0x04)，实现双向心跳保活。
+    /// 收到任何消息帧都刷新 LastActiveTime，供 LogServer 超时检测使用。
     /// </summary>
     public async Task StartReceivingAsync()
     {
@@ -66,27 +77,27 @@ public class DeviceConnection
         {
             while (!_ct.IsCancellationRequested && _tcpClient.Connected)
             {
-                // 读取4字节长度字段（大端序）
                 var lengthBytes = await ReadExactAsync(4);
                 if (lengthBytes == null) break;
 
-                // 大端序转小端序：Java ByteBuffer.putInt() 默认大端，C# BitConverter 是小端
+                // 大端序处理：Java ByteBuffer.putInt() 默认大端输出，
+                // x86/x64 是小端序，必须反转字节序才能正确读取长度值
                 if (BitConverter.IsLittleEndian) Array.Reverse(lengthBytes);
                 int totalLength = BitConverter.ToInt32(lengthBytes, 0);
                 if (totalLength <= 0 || totalLength > 10 * 1024 * 1024) break;
 
-                // 读取payload数据
                 var payloadBytes = await ReadExactAsync(totalLength);
                 if (payloadBytes == null) break;
 
-                // 解析消息类型和JSON内容
                 byte messageType = payloadBytes[0];
                 string jsonStr = Encoding.UTF8.GetString(payloadBytes, 1, totalLength - 1);
 
-                // 根据消息类型分发处理
+                // 每次收到消息帧都刷新最后活跃时间，包括 Ping 心跳帧
+                LastActiveTime = DateTime.Now;
+
                 switch (messageType)
                 {
-                    case 0x01: // 设备注册消息
+                    case 0x01:
                         DeviceInfo = JsonSerializer.Deserialize<DeviceInfo>(jsonStr, JsonOptions);
                         if (DeviceInfo != null)
                         {
@@ -94,15 +105,24 @@ public class DeviceConnection
                         }
 
                         break;
-                    case 0x02: // 网络日志消息
+                    case 0x02:
                         var entry = JsonSerializer.Deserialize<LogEntry>(jsonStr, JsonOptions);
                         if (entry != null)
                         {
-                            // 尝试解压 Gzip 压缩的内容
                             entry.Content = TryDecodeGzipJsonContent(entry.Content);
                             LogReceived?.Invoke(this, entry);
                         }
 
+                        break;
+                    // 客户端 Ping 心跳保活：回复 Pong 以确认连接存活，
+                    // 防止 adb reverse 隧道因空闲超时静默断连。
+                    // 使用异步写入避免阻塞接收循环，同步 Flush 在 TCP 发送缓冲区满时
+                    // 会等待对端 ACK，导致后续所有消息帧排队，UI 卡顿 3-4 秒。
+                    case 0x03:
+                        _ = SendPongAsync();
+                        break;
+                    // 服务端不会收到 Pong（Pong 是服务端发出的），忽略即可
+                    case 0x04:
                         break;
                 }
             }
@@ -161,7 +181,6 @@ public class DeviceConnection
         try
         {
             var bytes = Convert.FromBase64String(content);
-            // 检查 Gzip 魔数 (0x1F 0x8B)
             if (bytes.Length < 2 || bytes[0] != 0x1F || bytes[1] != 0x8B)
             {
                 return content;
@@ -278,6 +297,35 @@ public class DeviceConnection
         catch
         {
             return decoded;
+        }
+    }
+
+    /// <summary>
+    /// 异步回复 Pong 消息，用于双向心跳保活。
+    /// 当收到客户端 Ping(0x03) 后异步回复 Pong(0x04)，
+    /// 客户端 readLoop 通过 lastPongTime 确认连接存活。
+    /// 帧格式：[4字节大端int=3][0x04][{}]（payload长度=1字节类型+2字节JSON"{}"）。
+    /// 使用异步写入避免同步 Flush 阻塞接收循环（TCP 发送缓冲区满时等 ACK 可卡 3-4 秒）。
+    /// 写入失败时不主动断开，由 LogServer 超时检测机制统一处理。
+    /// </summary>
+    private async Task SendPongAsync()
+    {
+        try
+        {
+            var jsonBytes = Encoding.UTF8.GetBytes("{}");
+            int payloadLength = 1 + jsonBytes.Length;
+
+            // 大端序处理：与接收端一致，长度字段必须转为大端序
+            var lengthBytes = BitConverter.GetBytes(payloadLength);
+            if (BitConverter.IsLittleEndian) Array.Reverse(lengthBytes);
+
+            await _stream.WriteAsync(lengthBytes, 0, 4, _ct);
+            await _stream.WriteAsync(new byte[] { 0x04 }, 0, 1, _ct);
+            await _stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, _ct);
+            await _stream.FlushAsync(_ct);
+        }
+        catch
+        {
         }
     }
 

@@ -64,16 +64,12 @@ public partial class MainForm : Form
     /// <summary>系统日志自动滚动是否启用。</summary>
     private bool _systemAutoScrollEnabled = true;
 
-    /// <summary>外层水平分割容器，左侧为设备面板，右侧为日志区域。</summary>
     private SplitContainer _outerSplit;
 
-    /// <summary>内层水平分割容器，上侧为日志列表，下侧为详情面板。</summary>
     private SplitContainer _innerSplit;
 
-    /// <summary>左侧 ADB 设备操控面板，包含设备选择、scrcpy 宿主和控制条。</summary>
     private DevicePanel _devicePanel;
 
-    /// <summary>日志类型切换 TabControl，切换网络日志与系统日志视图。</summary>
     private TabControl _tabLogType;
 
     /// <summary>网络日志 Tab 页。</summary>
@@ -82,8 +78,7 @@ public partial class MainForm : Form
     /// <summary>系统日志 Tab 页。</summary>
     private TabPage _tabSystem;
 
-    /// <summary>网络日志过滤条件面板。</summary>
-    private Panel _pnlNetworkFilter;
+    private System.Windows.Forms.Panel _pnlNetworkFilter;
 
     /// <summary>网络日志关键字搜索输入框。</summary>
     private TextBox _txtNetworkKeyword;
@@ -94,26 +89,19 @@ public partial class MainForm : Form
     /// <summary>HTTP 状态码范围过滤下拉框（ALL/2xx/3xx/4xx/5xx/0）。</summary>
     private ComboBox _cmbStatusCode;
 
-    /// <summary>滚动到顶部按钮，同时禁用自动滚动。</summary>
     private Button _btnScrollToTop;
 
-    /// <summary>滚动到底部按钮，同时启用自动滚动。</summary>
     private Button _btnScrollToBottom;
 
-    /// <summary>网络日志计数标签，显示过滤数/总数/容量百分比。</summary>
     private Label _lblLogCount;
 
-    /// <summary>网络日志列表，使用 VirtualMode 渲染百万级数据。</summary>
-    private ListView _lstNetworkLogs;
+    private System.Windows.Forms.ListView _lstNetworkLogs;
 
-    /// <summary>系统日志列表，使用 VirtualMode 渲染。</summary>
-    private ListView _lstSystemLogs;
+    private System.Windows.Forms.ListView _lstSystemLogs;
 
-    /// <summary>系统日志过滤条件面板。</summary>
-    private Panel _pnlSystemFilter;
+    private System.Windows.Forms.Panel _pnlSystemFilter;
 
-    /// <summary>系统日志操作栏面板（Pause/Resume、滚动等）。</summary>
-    private Panel _systemActionBar;
+    private System.Windows.Forms.Panel _systemActionBar;
 
     /// <summary>系统日志关键字搜索输入框。</summary>
     private TextBox _txtSystemKeyword;
@@ -124,19 +112,14 @@ public partial class MainForm : Form
     /// <summary>系统日志 Tag 过滤下拉框，选项动态刷新。</summary>
     private ComboBox _cmbLogTag;
 
-    /// <summary>系统日志滚动到顶部按钮。</summary>
-    private Button _btnSystemScrollToTop;
+    private System.Windows.Forms.Button _btnSystemScrollToTop;
 
-    /// <summary>系统日志滚动到底部按钮。</summary>
-    private Button _btnSystemScrollToBottom;
+    private System.Windows.Forms.Button _btnSystemScrollToBottom;
 
-    /// <summary>系统日志暂停/恢复按钮，Pause 冻结视图并累计 backlog。</summary>
-    private Button _btnSystemPauseResume;
+    private System.Windows.Forms.Button _btnSystemPauseResume;
 
-    /// <summary>系统日志 backlog 计数标签，显示 Pause 期间累积的未刷新条数。</summary>
-    private Label _lblSystemBacklog;
+    private System.Windows.Forms.Label _lblSystemBacklog;
 
-    /// <summary>日志详情 TabControl，包含 Headers/RequestBody/ResponseBody 三个 Tab。</summary>
     private TabControl _tabDetail;
 
     /// <summary>请求头 Tab 页。</summary>
@@ -148,7 +131,6 @@ public partial class MainForm : Form
     /// <summary>响应体 Tab 页。</summary>
     private TabPage _tabResponseBody;
 
-    /// <summary>Headers JSON 折叠视图容器面板。</summary>
     private Panel _jsonHeaders;
 
     /// <summary>请求体 JSON 折叠视图容器面板。</summary>
@@ -166,7 +148,6 @@ public partial class MainForm : Form
     /// <summary>响应体 JSON 折叠+语法高亮 TreeView。</summary>
     private JsonTreeView? _jsonResponseBodyView;
 
-    /// <summary>Headers 原始 JSON 文本框（Raw 视图）。</summary>
     private TextBox _rawHeaders;
 
     /// <summary>请求体原始 JSON 文本框（Raw 视图）。</summary>
@@ -202,7 +183,6 @@ public partial class MainForm : Form
     /// <summary>状态栏：正在运行的 Logcat 进程数量。</summary>
     private ToolStripStatusLabel _lblLogcatStatus;
 
-    /// <summary>底部操作栏面板，包含清空和导出按钮。</summary>
     private FlowLayoutPanel _pnlBottomBar;
 
     /// <summary>清空当前日志按钮。</summary>
@@ -239,7 +219,9 @@ public partial class MainForm : Form
 
         if (_adbHelper.IsAdbAvailable())
         {
-            _adbHelper.EnsureServerStarted();
+            // 后台启动 ADB server，不阻塞 UI 线程。
+            // adb start-server 的 WaitForExit(5000) 最多等 5 秒，在 UI 线程执行会导致启动卡顿。
+            Task.Run(() => _adbHelper.EnsureServerStarted());
         }
 
         if (!_adbHelper.IsAdbAvailable())
@@ -731,9 +713,9 @@ public partial class MainForm : Form
                 if (IsHandleCreated)
                     BeginInvoke(() =>
                     {
-                        _lblStatus.Text = "\u25CF Running";
+                        _lblStatus.Text = $"\u25CF {Language.Running}";
                         _lblStatus.ForeColor = Color.Green;
-                        _lblServerStatus.Text = $"Server: {port}";
+                        _lblServerStatus.Text = Language.ServerPort(port);
                     });
             }
             catch (Exception ex)
@@ -741,10 +723,10 @@ public partial class MainForm : Form
                 if (IsHandleCreated)
                     BeginInvoke(() =>
                     {
-                        _lblStatus.Text = "\u25CB Error";
+                        _lblStatus.Text = $"\u25CB {Language.Error}";
                         _lblStatus.ForeColor = Color.Red;
-                        _lblServerStatus.Text = $"Server: {ex.Message}";
-                        MessageBox.Show($"Failed to start server: {ex.Message}", "Error", MessageBoxButtons.OK,
+                        _lblServerStatus.Text = Language.ServerError(ex.Message);
+                        MessageBox.Show(Language.FailedToStartServer(ex.Message), Language.Error, MessageBoxButtons.OK,
                             MessageBoxIcon.Error);
                     });
             }
@@ -761,14 +743,14 @@ public partial class MainForm : Form
         var adbPath = _adbHelper.GetAdbPath();
         if (adbPath == null)
         {
-            _btnAdbReverse.DropDownItems.Add("ADB not found").Enabled = false;
+            _btnAdbReverse.DropDownItems.Add(Language.AdbNotFound).Enabled = false;
             return;
         }
 
         var devices = _adbHelper.GetDevices();
         if (devices.Count == 0)
         {
-            _btnAdbReverse.DropDownItems.Add("No devices connected").Enabled = false;
+            _btnAdbReverse.DropDownItems.Add(Language.NoDevicesConnected).Enabled = false;
             return;
         }
 
@@ -777,23 +759,23 @@ public partial class MainForm : Form
             var item = new ToolStripMenuItem(dev.DisplayName, null, (s, ev) =>
             {
                 var (ok, output) = _adbHelper.ReversePort(adbPath, dev, _settings.ServerPort);
-                MessageBox.Show(ok ? $"Reverse success for {dev.DisplayName}" : $"Reverse failed:\n{output}",
-                    "ADB Reverse", MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+                MessageBox.Show(Language.AdbReverseResult(dev.Serial, ok, output),
+                    Language.AdbReverse, MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Error);
             });
             _btnAdbReverse.DropDownItems.Add(item);
         }
 
         _btnAdbReverse.DropDownItems.Add(new ToolStripSeparator());
-        var allItem = new ToolStripMenuItem("Reverse All Devices", null, (s, ev) =>
+        var allItem = new ToolStripMenuItem(Language.AdbReverseAll, null, (s, ev) =>
         {
             var results = new List<string>();
             foreach (var dev in devices)
             {
                 var (ok, output) = _adbHelper.ReversePort(adbPath, dev, _settings.ServerPort);
-                results.Add($"{dev.DisplayName}: {(ok ? "OK" : output)}");
+                results.Add(Language.ReverseAllDeviceResult(dev.DisplayName, ok, output));
             }
 
-            MessageBox.Show(string.Join("\n", results), "ADB Reverse All", MessageBoxButtons.OK,
+            MessageBox.Show(string.Join("\n", results), Language.AdbReverse, MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
         });
         _btnAdbReverse.DropDownItems.Add(allItem);
@@ -1046,7 +1028,7 @@ public partial class MainForm : Form
             }
             else
             {
-                MessageBox.Show("Cannot start logcat: ADB not available.", "Logcat", MessageBoxButtons.OK,
+                MessageBox.Show(Language.CannotStartLogcat, Language.LogcatTitle, MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
             }
         }
@@ -1143,9 +1125,9 @@ public partial class MainForm : Form
         var filtered = _filteredNetworkIndices.Count;
         var max = _currentDeviceId == null ? _settings.MaxLogEntriesAll : _settings.MaxLogEntriesPerDevice;
         var pct = (double)total / max;
-        var suffix = _networkAutoScrollEnabled && IsAtBottom(_lstNetworkLogs) ? "" : " \u2B07 Paused";
-        var countText = filtered != total ? $"Logs: {filtered}/{total}" : $"Logs: {total}";
-        _lblLogCount.Text = $"{countText}/{max}{suffix}";
+        var countText = Language.LogsCount(filtered, total);
+        var isPaused = !(_networkAutoScrollEnabled && IsAtBottom(_lstNetworkLogs));
+        _lblLogCount.Text = Language.LogsCountWithMax(countText, max, isPaused);
         _lblLogCount.ForeColor = pct >= 1.0 ? Color.Red : pct >= 0.8 ? Color.Orange : DefaultForeColor;
 
         _btnScrollToBottom.BackColor = _networkAutoScrollEnabled ? Color.LightSkyBlue : DefaultBackColor;
@@ -1157,7 +1139,7 @@ public partial class MainForm : Form
     /// </summary>
     private void UpdateDeviceCountStatus()
     {
-        _lblDeviceCountStatus.Text = $"Devices: {_deviceLogs.Count}";
+        _lblDeviceCountStatus.Text = Language.DevicesCount(_deviceLogs.Count);
     }
 
     /// <summary>
@@ -1166,7 +1148,7 @@ public partial class MainForm : Form
     private void UpdateLogcatStatus()
     {
         var running = _logcatReaders.Values.Count(r => r.IsRunning);
-        _lblLogcatStatus.Text = $"Logcat: {running}";
+        _lblLogcatStatus.Text = Language.LogcatCount(running);
     }
 
     #endregion

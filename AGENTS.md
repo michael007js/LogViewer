@@ -219,6 +219,15 @@
 |--------|------|------|----------|
 | `0x01` | 设备注册 | Android→PC | `DeviceRegisterInfo` |
 | `0x02` | 网络日志 | Android→PC | `LogData` |
+| `0x03` | Ping | Android→PC | 空 JSON `{}` |
+| `0x04` | Pong | PC→Android | 空 JSON `{}` |
+
+### 心跳保活机制
+
+- **触发场景**：adb reverse 隧道可能因空闲超时静默断连，设备列表无法自动出现
+- **客户端**：connectLoop 每 5s 通过 sendQueue 发送 Ping(0x03)；readLoop 收到 Pong(0x04) 后更新 lastPongTime；connectLoop 检测 lastPongTime 超过 15s 未更新则判定 Pong 超时，调用 handleClose(socket) 关闭连接触发重连
+- **服务端**：DeviceConnection 收到 Ping 后回复 Pong 并刷新 LastActiveTime；LogServer 每 10s 扫描所有连接，LastActiveTime 超过 20s 则断开连接
+- **竞态防护**：handleClose(Socket) 通过 CAS 式检查 currentSocket==socket 只关闭旧连接，防止误杀新连接；REPLACE 策略新连接替换旧连接时，OnDeviceDisconnected 通过引用比较 existing==conn 防止旧事件误删新连接
 
 ## JSON 大小写（已踩坑，务必牢记）
 

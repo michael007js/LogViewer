@@ -48,6 +48,12 @@
 |--------|------|------|----------|
 | `0x01` | 设备注册 | Android→PC | `DeviceRegisterInfo` |
 | `0x02` | 网络日志 | Android→PC | `LogData` |
+| `0x03` | Ping | Android→PC | 空 JSON `{}` |
+| `0x04` | Pong | PC→Android | 空 JSON `{}` |
+
+### 心跳保活
+
+客户端每 5s 发 Ping，服务端回 Pong 并刷新 LastActiveTime；客户端 15s 无 Pong 判超时重连；服务端 20s 无消息断开连接。详见 AGENTS.md 心跳保活机制节。
 
 ### JSON 大小写（已踩坑）
 

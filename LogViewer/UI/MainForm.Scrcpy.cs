@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using LogViewer.Static;
 using LogViewer.Utils;
 using Timer = System.Windows.Forms.Timer;
 
@@ -61,7 +62,7 @@ public partial class MainForm
 
         if (string.IsNullOrEmpty(_currentDeviceId))
         {
-            _devicePanel.SetMirrorStatus("\u8BF7\u9009\u62E9\u5177\u4F53\u8BBE\u5907\u4EE5\u64CD\u63A7\u624B\u673A",
+            _devicePanel.SetMirrorStatus(Language.DeviceSelectPrompt,
                 hostVisible: false, isRunning: false, isReady: false);
             return;
         }
@@ -70,21 +71,21 @@ public partial class MainForm
         if (string.IsNullOrEmpty(serial))
         {
             _devicePanel.SetMirrorStatus(
-                "\u5F53\u524D\u8BBE\u5907\u672A\u5339\u914D ADB serial\uFF0C\u65E0\u6CD5\u542F\u52A8\u624B\u673A\u955C\u50CF",
+                Language.MirrorDeviceSerialMissing,
                 hostVisible: false, isRunning: false, isReady: false);
             return;
         }
 
         if (_scrcpyPreparing)
         {
-            _devicePanel.SetMirrorStatus(_scrcpyDeployStatus ?? "\u6B63\u5728\u90E8\u7F72 scrcpy...",
+            _devicePanel.SetMirrorStatus(_scrcpyDeployStatus ?? Language.ScrcpyPreparing,
                 hostVisible: false, isRunning: false, isReady: false);
             return;
         }
 
         if (string.Equals(_mirrorStartingSerial, serial, StringComparison.Ordinal))
         {
-            _devicePanel.SetMirrorStatus($"\u6B63\u5728\u542F\u52A8\u955C\u50CF\uFF1A{serial}", hostVisible: false,
+            _devicePanel.SetMirrorStatus(Language.MirrorStarting(serial), hostVisible: false,
                 isRunning: false, isReady: false);
             return;
         }
@@ -93,10 +94,10 @@ public partial class MainForm
         if (string.IsNullOrEmpty(scrcpyPath) || !_scrcpyValidated)
         {
             var message = !string.IsNullOrEmpty(_scrcpyDeployError)
-                ? $"\u81EA\u52A8\u90E8\u7F72 scrcpy \u5931\u8D25\uFF1A{_scrcpyDeployError}"
+                ? $"自动部署 scrcpy 失败：{_scrcpyDeployError}"
                 : string.IsNullOrEmpty(scrcpyPath)
-                    ? "\u672A\u5B8C\u6210 scrcpy \u90E8\u7F72\uFF0C\u7A0D\u540E\u4F1A\u81EA\u52A8\u51C6\u5907"
-                    : "scrcpy 校验中...";
+                    ? "未完成 scrcpy 部署，稍后会自动准备"
+                    : Language.ScrcpyChecking;
             _devicePanel.SetMirrorStatus(message, hostVisible: false, isRunning: false, isReady: false);
             return;
         }
@@ -104,12 +105,12 @@ public partial class MainForm
         if (_scrcpySession?.IsRunning == true &&
             string.Equals(_scrcpySession.DeviceSerial, serial, StringComparison.Ordinal))
         {
-            _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true,
+                    _devicePanel.SetMirrorStatus(Language.MirrorConnected(serial), hostVisible: true,
                 isRunning: true, isReady: true);
             return;
         }
 
-        _devicePanel.SetMirrorStatus($"\u5DF2\u5C31\u7EEA\uFF0C\u53EF\u542F\u52A8\u955C\u50CF\uFF1A{serial}",
+        _devicePanel.SetMirrorStatus(Language.MirrorReady(serial),
             hostVisible: false, isRunning: false, isReady: false);
     }
 
@@ -125,7 +126,7 @@ public partial class MainForm
         {
             _scrcpyPreparing = true;
             _scrcpyDeployError = null;
-            _scrcpyDeployStatus = "\u6B63\u5728\u90E8\u7F72 scrcpy...";
+            _scrcpyDeployStatus = Language.ScrcpyPreparing;
             UpdateAdbStatus();
 
             if (reportToMirrorPanel && !string.IsNullOrEmpty(_currentDeviceId))
@@ -150,7 +151,7 @@ public partial class MainForm
 
             if (!string.IsNullOrEmpty(scrcpyPath))
             {
-                _scrcpyDeployStatus = $"\u5DF2\u5B8C\u6210 scrcpy \u90E8\u7F72\uFF1A{Path.GetFileName(scrcpyPath)}";
+                _scrcpyDeployStatus = $"已完成 scrcpy 部署：{Path.GetFileName(scrcpyPath)}";
             }
 
             return scrcpyPath;
@@ -298,7 +299,7 @@ public partial class MainForm
         {
             _mirrorStartingSerial = serial;
             _devicePanel.SetMirrorAspectRatio(GetDeviceContentAspectRatio(serial));
-            _devicePanel.SetMirrorStatus($"\u6B63\u5728\u542F\u52A8\u955C\u50CF\uFF1A{serial}", hostVisible: false,
+            _devicePanel.SetMirrorStatus(Language.MirrorStarting(serial), hostVisible: false,
                 isRunning: false, isReady: false);
         }
 
@@ -342,7 +343,7 @@ public partial class MainForm
                     _scrcpySession = session;
                     _scrcpySession.Exited += OnScrcpySessionExited;
                     _devicePanel.SetMirrorAspectRatio(contentAspectRatio);
-                    _devicePanel.SetMirrorStatus($"\u955C\u50CF\u5DF2\u8FDE\u63A5\uFF1A{serial}", hostVisible: true,
+            _devicePanel.SetMirrorStatus(Language.MirrorConnected(serial), hostVisible: true,
                         isRunning: true, isReady: true);
                     ApplyEmbeddedMirrorLayout();
                 }));
@@ -369,7 +370,7 @@ public partial class MainForm
                 BeginInvoke(new Action(() =>
                 {
                     _mirrorStartingSerial = null;
-                    _devicePanel.SetMirrorStatus($"\u955C\u50CF\u542F\u52A8\u5931\u8D25\uFF1A{ex.Message}",
+                    _devicePanel.SetMirrorStatus(Language.MirrorStartFailed(ex.Message),
                         hostVisible: false, isRunning: false, isReady: false);
                 }));
             }
@@ -526,13 +527,13 @@ public partial class MainForm
         {
             var bytes = RunAdbBinary(adbPath, serial, "exec-out screencap -p");
             File.WriteAllBytes(dialog.FileName, bytes);
-            _devicePanel.SetMirrorStatus($"\u622A\u56FE\u5DF2\u4FDD\u5B58\uFF1A{Path.GetFileName(dialog.FileName)}",
+            _devicePanel.SetMirrorStatus(Language.ScreenshotSaved(Path.GetFileName(dialog.FileName)),
                 hostVisible: _scrcpySession?.IsRunning == true, isRunning: _scrcpySession?.IsRunning == true,
                 isReady: _scrcpySession != null);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"\u622A\u56FE\u5931\u8D25\uFF1A{ex.Message}", "Screenshot", MessageBoxButtons.OK,
+            MessageBox.Show(Language.ScreenshotFailed(ex.Message), Language.ScreenshotTitle, MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
             RefreshMirrorPanelState();
         }

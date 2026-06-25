@@ -28,12 +28,12 @@ public partial class MainForm
     private void ConfigureLogLists()
     {
         BufferedListViewHelper.EnableDoubleBuffer(_lstNetworkLogs);
-        _lstNetworkLogs.Columns.Add("Method", 60);
-        _lstNetworkLogs.Columns.Add("URL", 500);
-        _lstNetworkLogs.Columns.Add("Status", 55);
-        _lstNetworkLogs.Columns.Add("Dur", 55);
-        _lstNetworkLogs.Columns.Add("Request", 200);
-        _lstNetworkLogs.Columns.Add("Response", 200);
+        _lstNetworkLogs.Columns.Add(Language.MethodColumn, 60);
+        _lstNetworkLogs.Columns.Add(Language.UrlColumn, 500);
+        _lstNetworkLogs.Columns.Add(Language.StatusColumn, 55);
+        _lstNetworkLogs.Columns.Add(Language.DurationColumn, 55);
+        _lstNetworkLogs.Columns.Add(Language.RequestColumn, 200);
+        _lstNetworkLogs.Columns.Add(Language.ResponseColumn, 200);
         _lstNetworkLogs.RetrieveVirtualItem += OnNetworkLogsRetrieveVirtualItem;
     }
 
@@ -144,39 +144,39 @@ public partial class MainForm
     private ContextMenuStrip CreateNetworkLogMenu()
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Copy URL", null, (s, e) =>
+        menu.Items.Add(Language.CopyUrl, null, (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
             ClipboardTextHelper.TrySetText(entry?.Url);
         });
-        menu.Items.Add("Copy Method + URL", null, (s, e) =>
+        menu.Items.Add(Language.CopyMethodUrl, null, (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
             ClipboardTextHelper.TrySetText(entry == null ? null : $"{entry.Method} {entry.Url}".Trim());
         });
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Copy Request Body", null, (s, e) =>
+        menu.Items.Add(Language.CopyRequestBody, null, (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
             ClipboardTextHelper.TrySetText(entry?.Send);
         });
-        menu.Items.Add("Copy URL + Request Body", null, (s, e) =>
+        menu.Items.Add(Language.CopyUrlRequestBody, null, (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
             ClipboardTextHelper.TrySetText(entry == null ? null : FormatUrlWithBody(entry.Url, entry.Send));
         });
-        menu.Items.Add("Copy Response Body", null, (s, e) =>
+        menu.Items.Add(Language.CopyResponseBody, null, (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
             ClipboardTextHelper.TrySetText(entry?.Content);
         });
-        menu.Items.Add("Copy URL + Response Body", null, (s, e) =>
+        menu.Items.Add(Language.CopyUrlResponseBody, null, (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
             ClipboardTextHelper.TrySetText(entry == null ? null : FormatUrlWithBody(entry.Url, entry.Content));
         });
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("View Detail", null, (s, e) =>
+        menu.Items.Add(Language.ViewDetail, null, (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
             if (entry != null) new JsonDetailForm(entry, _lstNetworkLogs.Font).Show(this);

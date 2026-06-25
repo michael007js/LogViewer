@@ -633,6 +633,11 @@ public sealed partial class DevicePanel : UserControl
         _btnMirrorPopout.Enabled = hasAdb;
         _btnMirrorToggle.Text = _mirrorRunning ? Language.Stop : Language.Start;
         button1.Text = _mirrorRunning ? Language.Stop : Language.Start;
+        _btnMirrorReconnect.Text = Language.Reconnect;
+        button2.Text = Language.Reconnect;
+        _btnMirrorRotate.Text = Language.Rotate;
+        _btnMirrorScreenshot.Text = Language.Screenshot;
+        _btnMirrorPopout.Text = Language.Popout;
     }
 
     /// <summary>

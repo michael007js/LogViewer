@@ -215,6 +215,14 @@ rtk git diff                                                     # Git 差异
 | LogEntry.content 截断 | Android 端超过 50KB 截断并追加 `[truncated, original: XXX KB]` |
 | 非模态子窗口 ContextMenuStrip 吃掉主窗口右键消息 | JsonDetailForm.Show() 打开后，ToolStripManager.ModalMenuFilter 拦截 WM_CONTEXTMENU，导致主窗口其他控件右键菜单弹不出。修复：给需要右键的控件设置固定的 ContextMenuStrip，不用 MouseUp+new ContextMenuStrip |
 | 新建 ADB 设备须自动 adb reverse | 拔出重插后，ADB 扫描检测到设备但 adb reverse 未执行 → Android 端无法连 TCP → 面板不更新。ApplyAdbDevices 对新建设备后台 Task.Run 执行 reverse |
+| Ping/Pong 保活机制 | 客户端每 5s 发 Ping(0x03)，服务端回 Pong(0x04)；服务端超 20s 无消息断开连接触发重连；解决静默断连后设备列表不出现 |
+| 重连风暴根因与修复 | connectLoop 内循环退出后无退避等待 → 立即建新 Socket → 同 deviceId REPLACE 杀旧连接 → readLoop EOF → handleClose 置空 → 内循环又退出 → 循环。修复：内循环退出后强制 sleep(RECONNECT_DELAY_MS) |
+| handleClose vs closeCurrentStream | readLoop/sendLoop 调用 closeCurrentStream() 会无条件置空 currentSocket，误杀 connectLoop 已创建的新连接。handleClose(Socket) 通过 CAS 式检查 currentSocket==socket 只关闭旧连接。stop() 中仍可用 closeCurrentStream() |
+| writeLock 必要性 | connectLoop 首次注册消息直写 OutputStream，sendLoop 写队列数据，两者并发写同一流会导致协议帧交错损坏。writeLock 保证串行写入 |
+| Ping 走 sendQueue 不走直写 | Ping 通过 sendQueue 发送由 sendLoop 统一写出，避免 connectLoop/sendLoop/Ping 三路并发写入同一流增加锁竞争与帧交错风险 |
+| 服务端 REPLACE 竞态防护 | 新连接 Registered 事件替换旧连接后，旧连接的 Disconnected 事件可能后到。OnDeviceDisconnected 通过引用比较 existing==conn 确保旧事件不会误删新连接 |
+| DeviceId 为空时必须用稳定 key | 不能用 `unknown_{endpoint}`（含端口），端口每次重连都变 → 同一设备产生不同 key → DevicePanel 无限添加。改用 IP 地址部分（去端口） |
+| SendPong 必须异步 | 同步 _stream.Write + Flush 在 TCP 发送缓冲区满时等 ACK，阻塞接收循环导致 UI 卡顿 3-4 秒。改为 await _stream.WriteAsync + FlushAsync
 | 左侧设备区已升级为 scrcpy 宿主 | DevicePanel 不再只是设备下拉框；设备选择与日志 scope 共用一个选择器，选择 `All` 时左侧只显示占位提示，不启动镜像 |
 | scrcpy 自动部署优先 | 保持项目零 NuGet 依赖；启动时自动从官方 GitHub Releases 部署到 LocalAppData，本地路径输入只作为高级覆盖/修复兜底 |
 | 切换设备前先停旧 scrcpy | 内嵌镜像与当前设备强绑定；切换设备必须先停旧实例，再起新实例，避免窗口错绑和孤儿进程 |

@@ -27,7 +27,8 @@ partial class DevicePanel
         _btnMirrorToggle = new System.Windows.Forms.Button();
         _btnMirrorReconnect = new System.Windows.Forms.Button();
         tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
-        _mirrorHostPanel = new MirrorHostPanel();
+        _lblMirrorStatus = new System.Windows.Forms.Label();
+        _mirrorHostPanel = new LogViewer.UI.MirrorHostPanel();
         tableLayoutPanel2 = new System.Windows.Forms.TableLayoutPanel();
         button1 = new System.Windows.Forms.Button();
         button2 = new System.Windows.Forms.Button();
@@ -36,7 +37,6 @@ partial class DevicePanel
         _btnMirrorPopout = new System.Windows.Forms.Button();
         _cmbDevices = new System.Windows.Forms.ComboBox();
         _btnRefreshAdb = new System.Windows.Forms.Button();
-        _lblMirrorStatus = new System.Windows.Forms.Label();
         _buttonBar.SuspendLayout();
         tableLayoutPanel1.SuspendLayout();
         tableLayoutPanel2.SuspendLayout();
@@ -94,11 +94,23 @@ partial class DevicePanel
         tableLayoutPanel1.RowCount = 5;
         tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
         tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
-        tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 80F));
-        tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 84F));
-        tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
+        tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 70F));
+        tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
+        tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
         tableLayoutPanel1.Size = new System.Drawing.Size(156, 351);
         tableLayoutPanel1.TabIndex = 28;
+        // 
+        // _lblMirrorStatus
+        // 
+        _lblMirrorStatus.Dock = System.Windows.Forms.DockStyle.Fill;
+        _lblMirrorStatus.ForeColor = System.Drawing.Color.DimGray;
+        _lblMirrorStatus.Location = new System.Drawing.Point(3, 331);
+        _lblMirrorStatus.Name = "_lblMirrorStatus";
+        _lblMirrorStatus.Padding = new System.Windows.Forms.Padding(2, 0, 2, 0);
+        _lblMirrorStatus.Size = new System.Drawing.Size(150, 20);
+        _lblMirrorStatus.TabIndex = 31;
+        _lblMirrorStatus.Text = "请选择具体设备以操控手机";
+        _lblMirrorStatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
         // 
         // _mirrorHostPanel
         // 
@@ -106,6 +118,7 @@ partial class DevicePanel
         _mirrorHostPanel.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
         _mirrorHostPanel.Dock = System.Windows.Forms.DockStyle.Fill;
         _mirrorHostPanel.Location = new System.Drawing.Point(3, 61);
+        _mirrorHostPanel.MirrorActive = false;
         _mirrorHostPanel.Name = "_mirrorHostPanel";
         _mirrorHostPanel.Size = new System.Drawing.Size(150, 183);
         _mirrorHostPanel.TabIndex = 30;
@@ -213,18 +226,6 @@ partial class DevicePanel
         _btnRefreshAdb.TabIndex = 2;
         _btnRefreshAdb.Text = "扫描 ADB";
         // 
-        // _lblMirrorStatus
-        // 
-        _lblMirrorStatus.Dock = System.Windows.Forms.DockStyle.Fill;
-        _lblMirrorStatus.ForeColor = System.Drawing.Color.DimGray;
-        _lblMirrorStatus.Location = new System.Drawing.Point(3, 331);
-        _lblMirrorStatus.Name = "_lblMirrorStatus";
-        _lblMirrorStatus.Padding = new System.Windows.Forms.Padding(2, 0, 2, 0);
-        _lblMirrorStatus.Size = new System.Drawing.Size(150, 20);
-        _lblMirrorStatus.TabIndex = 31;
-        _lblMirrorStatus.Text = "请选择具体设备以操控手机";
-        _lblMirrorStatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-        // 
         // DevicePanel
         // 
         BackColor = System.Drawing.SystemColors.Control;
@@ -239,7 +240,7 @@ partial class DevicePanel
 
     private System.Windows.Forms.TableLayoutPanel tableLayoutPanel1;
 
-    private MirrorHostPanel _mirrorHostPanel;
+    private LogViewer.UI.MirrorHostPanel _mirrorHostPanel;
 
     private System.Windows.Forms.TableLayoutPanel tableLayoutPanel2;
     private System.Windows.Forms.Button button1;

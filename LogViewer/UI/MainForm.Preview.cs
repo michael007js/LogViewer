@@ -7,25 +7,19 @@ namespace LogViewer.UI;
 /// </summary>
 public partial class MainForm
 {
-    /// <summary>JSON 搜索工具栏面板。</summary>
     private Panel _pnlJsonToolbar;
 
     /// <summary>JSON 关键字搜索输入框。</summary>
     private TextBox _txtJsonSearch;
 
-    /// <summary>JSON 搜索按钮。</summary>
     private Button _btnJsonSearch;
 
-    /// <summary>全部展开按钮。</summary>
     private Button _btnExpandAll;
 
-    /// <summary>全部折叠按钮。</summary>
     private Button _btnCollapseAll;
 
-    /// <summary>折叠到第2层按钮。</summary>
     private Button _btnCollapseTo2;
 
-    /// <summary>树视图/原始文本切换按钮。</summary>
     private Button _btnToggleView;
 
     /// <summary>详情视图是否为原始文本模式。</summary>
