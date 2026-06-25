@@ -78,10 +78,9 @@ public partial class MainForm : Form
     /// <summary>系统日志 Tab 页。</summary>
     private TabPage _tabSystem;
 
-    private Panel _pnlNetworkFilter;
+    private System.Windows.Forms.Panel _pnlNetworkFilter;
 
-    /// <summary>网络日志关键字搜索输入框。</summary>
-    private TextBox _txtNetworkKeyword;
+    private System.Windows.Forms.TextBox _txtNetworkKeyword;
 
     /// <summary>HTTP 方法过滤下拉框（ALL/GET/POST/PUT/DELETE/PATCH）。</summary>
     private ComboBox _cmbMethod;
@@ -89,19 +88,19 @@ public partial class MainForm : Form
     /// <summary>HTTP 状态码范围过滤下拉框（ALL/2xx/3xx/4xx/5xx/0）。</summary>
     private ComboBox _cmbStatusCode;
 
-    private Button _btnScrollToTop;
+    private System.Windows.Forms.Button _btnScrollToTop;
 
-    private Button _btnScrollToBottom;
+    private System.Windows.Forms.Button _btnScrollToBottom;
 
-    private Label _lblLogCount;
+    private System.Windows.Forms.Label _lblLogCount;
 
-    private ListView _lstNetworkLogs;
+    private System.Windows.Forms.ListView _lstNetworkLogs;
 
-    private ListView _lstSystemLogs;
+    private System.Windows.Forms.ListView _lstSystemLogs;
 
-    private Panel _pnlSystemFilter;
+    private System.Windows.Forms.Panel _pnlSystemFilter;
 
-    private Panel _systemActionBar;
+    private System.Windows.Forms.Panel _systemActionBar;
 
     /// <summary>系统日志关键字搜索输入框。</summary>
     private TextBox _txtSystemKeyword;
@@ -112,15 +111,15 @@ public partial class MainForm : Form
     /// <summary>系统日志 Tag 过滤下拉框，选项动态刷新。</summary>
     private ComboBox _cmbLogTag;
 
-    private Button _btnSystemScrollToTop;
+    private System.Windows.Forms.Button _btnSystemScrollToTop;
 
-    private Button _btnSystemScrollToBottom;
+    private System.Windows.Forms.Button _btnSystemScrollToBottom;
 
-    private Button _btnSystemPauseResume;
+    private System.Windows.Forms.Button _btnSystemPauseResume;
 
-    private Label _lblSystemBacklog;
+    private System.Windows.Forms.Label _lblSystemBacklog;
 
-    private TabControl _tabDetail;
+    private System.Windows.Forms.TabControl _tabDetail;
 
     /// <summary>请求头 Tab 页。</summary>
     private TabPage _tabHeaders;
@@ -131,7 +130,7 @@ public partial class MainForm : Form
     /// <summary>响应体 Tab 页。</summary>
     private TabPage _tabResponseBody;
 
-    private Panel _jsonHeaders;
+    private System.Windows.Forms.Panel _jsonHeaders;
 
     /// <summary>请求体 JSON 折叠视图容器面板。</summary>
     private Panel _jsonRequestBody;
@@ -148,7 +147,7 @@ public partial class MainForm : Form
     /// <summary>响应体 JSON 折叠+语法高亮 TreeView。</summary>
     private JsonTreeView? _jsonResponseBodyView;
 
-    private TextBox _rawHeaders;
+    private System.Windows.Forms.TextBox _rawHeaders;
 
     /// <summary>请求体原始 JSON 文本框（Raw 视图）。</summary>
     private TextBox _rawRequestBody;
@@ -165,8 +164,7 @@ public partial class MainForm : Form
     /// <summary>工具栏服务器运行状态标签（Running/Error）。</summary>
     private ToolStripLabel _lblStatus;
 
-    /// <summary>主菜单栏。</summary>
-    private MenuStrip _menuStrip;
+    private System.Windows.Forms.MenuStrip _menuStrip;
 
     /// <summary>底部状态栏。</summary>
     private StatusStrip _statusStrip;

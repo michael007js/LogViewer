@@ -7,20 +7,19 @@ namespace LogViewer.UI;
 /// </summary>
 public partial class MainForm
 {
-    private Panel _pnlJsonToolbar;
+    private System.Windows.Forms.Panel _pnlJsonToolbar;
 
-    /// <summary>JSON 关键字搜索输入框。</summary>
-    private TextBox _txtJsonSearch;
+    private System.Windows.Forms.TextBox _txtJsonSearch;
 
-    private Button _btnJsonSearch;
+    private System.Windows.Forms.Button _btnJsonSearch;
 
-    private Button _btnExpandAll;
+    private System.Windows.Forms.Button _btnExpandAll;
 
-    private Button _btnCollapseAll;
+    private System.Windows.Forms.Button _btnCollapseAll;
 
-    private Button _btnCollapseTo2;
+    private System.Windows.Forms.Button _btnCollapseTo2;
 
-    private Button _btnToggleView;
+    private System.Windows.Forms.Button _btnToggleView;
 
     /// <summary>详情视图是否为原始文本模式。</summary>
     private bool _detailViewIsRaw;
