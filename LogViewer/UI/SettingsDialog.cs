@@ -55,7 +55,6 @@ public partial class SettingsDialog : Form
         _lblMaxAll.Text = "全部设备最大日志：";
         _lblMaxSystemLog.Text = "系统日志热缓存：";
         _lblAndroidQueue.Text = "Android 发送队列：";
-        _lblMaxBodySize.Text = "Body 截断(KB)*：";
         _chkAutoAdb.Text = Language.AutoAdbReverse;
         _chkAutoLogcat.Text = Language.AutoStartLogcat;
         _chkAutoStartScrcpy.Text = Language.AutoStartScrcpy;
@@ -63,7 +62,6 @@ public partial class SettingsDialog : Form
         _lblFontSize.Text = "字体大小(pt)：";
         _lblAdbScanInterval.Text = "ADB 扫描间隔(ms)：";
         _lblLogcatFilter.Text = Language.LogcatFilter;
-        _lblSettingsNote.Text = Language.SettingsNote;
         _lblLogcatFilterNote.Text = Language.LogcatFilterNote;
         _btnOk.Text = Language.Confirm;
         _btnCancel.Text = Language.Cancel;
@@ -79,7 +77,6 @@ public partial class SettingsDialog : Form
         _nudMaxAll.Value = _settings.MaxLogEntriesAll;
         _nudMaxSystemLog.Value = _settings.MaxSystemLogEntries;
         _nudAndroidQueue.Value = _settings.AndroidQueueSize;
-        _nudMaxBodySize.Value = _settings.MaxBodySizeKb;
         _chkAutoAdb.Checked = _settings.AutoAdbReverse;
         _chkAutoLogcat.Checked = _settings.AutoStartLogcat;
         _chkAutoStartScrcpy.Checked = _settings.AutoStartScrcpyForSelectedDevice;
@@ -135,7 +132,6 @@ public partial class SettingsDialog : Form
         _settings.MaxLogEntriesAll = (int)_nudMaxAll.Value;
         _settings.MaxSystemLogEntries = (int)_nudMaxSystemLog.Value;
         _settings.AndroidQueueSize = (int)_nudAndroidQueue.Value;
-        _settings.MaxBodySizeKb = (int)_nudMaxBodySize.Value;
         _settings.AutoAdbReverse = _chkAutoAdb.Checked;
         _settings.AutoStartLogcat = _chkAutoLogcat.Checked;
         _settings.AutoStartScrcpyForSelectedDevice = _chkAutoStartScrcpy.Checked;

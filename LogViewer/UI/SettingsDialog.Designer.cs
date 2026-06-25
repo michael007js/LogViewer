@@ -14,8 +14,6 @@ partial class SettingsDialog
     private System.Windows.Forms.NumericUpDown _nudMaxSystemLog = null!;
     private System.Windows.Forms.Label _lblAndroidQueue = null!;
     private System.Windows.Forms.NumericUpDown _nudAndroidQueue = null!;
-    private System.Windows.Forms.Label _lblMaxBodySize = null!;
-    private System.Windows.Forms.NumericUpDown _nudMaxBodySize = null!;
     private System.Windows.Forms.CheckBox _chkAutoAdb = null!;
     private System.Windows.Forms.CheckBox _chkAutoLogcat = null!;
     private System.Windows.Forms.CheckBox _chkAutoStartScrcpy = null!;
@@ -26,7 +24,6 @@ partial class SettingsDialog
     private System.Windows.Forms.NumericUpDown _nudAdbScanInterval = null!;
     private System.Windows.Forms.Label _lblLogcatFilter = null!;
     private System.Windows.Forms.TextBox _txtLogcatFilter = null!;
-    private System.Windows.Forms.Label _lblSettingsNote = null!;
     private System.Windows.Forms.Label _lblLogcatFilterNote = null!;
     private System.Windows.Forms.FlowLayoutPanel _buttonPanel = null!;
     private System.Windows.Forms.Button _btnOk = null!;
@@ -55,8 +52,6 @@ partial class SettingsDialog
         _nudMaxSystemLog = new System.Windows.Forms.NumericUpDown();
         _lblAndroidQueue = new System.Windows.Forms.Label();
         _nudAndroidQueue = new System.Windows.Forms.NumericUpDown();
-        _lblMaxBodySize = new System.Windows.Forms.Label();
-        _nudMaxBodySize = new System.Windows.Forms.NumericUpDown();
         _chkAutoAdb = new System.Windows.Forms.CheckBox();
         _chkAutoLogcat = new System.Windows.Forms.CheckBox();
         _chkAutoStartScrcpy = new System.Windows.Forms.CheckBox();
@@ -67,7 +62,6 @@ partial class SettingsDialog
         _nudAdbScanInterval = new System.Windows.Forms.NumericUpDown();
         _lblLogcatFilter = new System.Windows.Forms.Label();
         _txtLogcatFilter = new System.Windows.Forms.TextBox();
-        _lblSettingsNote = new System.Windows.Forms.Label();
         _lblLogcatFilterNote = new System.Windows.Forms.Label();
         _buttonPanel = new System.Windows.Forms.FlowLayoutPanel();
         _btnCancel = new System.Windows.Forms.Button();
@@ -77,7 +71,6 @@ partial class SettingsDialog
         ((System.ComponentModel.ISupportInitialize)_nudMaxAll).BeginInit();
         ((System.ComponentModel.ISupportInitialize)_nudMaxSystemLog).BeginInit();
         ((System.ComponentModel.ISupportInitialize)_nudAndroidQueue).BeginInit();
-        ((System.ComponentModel.ISupportInitialize)_nudMaxBodySize).BeginInit();
         ((System.ComponentModel.ISupportInitialize)_nudFontSize).BeginInit();
         ((System.ComponentModel.ISupportInitialize)_nudAdbScanInterval).BeginInit();
         _layoutRoot.SuspendLayout();
@@ -99,20 +92,17 @@ partial class SettingsDialog
         _layoutRoot.Controls.Add(_nudMaxSystemLog, 1, 3);
         _layoutRoot.Controls.Add(_lblAndroidQueue, 0, 4);
         _layoutRoot.Controls.Add(_nudAndroidQueue, 1, 4);
-        _layoutRoot.Controls.Add(_lblMaxBodySize, 0, 5);
-        _layoutRoot.Controls.Add(_nudMaxBodySize, 1, 5);
-        _layoutRoot.Controls.Add(_chkAutoAdb, 0, 6);
-        _layoutRoot.Controls.Add(_chkAutoLogcat, 0, 7);
-        _layoutRoot.Controls.Add(_chkAutoStartScrcpy, 0, 8);
-        _layoutRoot.Controls.Add(_chkAutoFormatJson, 0, 9);
-        _layoutRoot.Controls.Add(_lblFontSize, 0, 10);
-        _layoutRoot.Controls.Add(_nudFontSize, 1, 10);
-        _layoutRoot.Controls.Add(_lblAdbScanInterval, 0, 11);
-        _layoutRoot.Controls.Add(_nudAdbScanInterval, 1, 11);
-        _layoutRoot.Controls.Add(_lblLogcatFilter, 0, 12);
-        _layoutRoot.Controls.Add(_txtLogcatFilter, 1, 12);
-        _layoutRoot.Controls.Add(_lblSettingsNote, 0, 13);
-        _layoutRoot.Controls.Add(_lblLogcatFilterNote, 0, 14);
+        _layoutRoot.Controls.Add(_chkAutoAdb, 0, 5);
+        _layoutRoot.Controls.Add(_chkAutoLogcat, 0, 6);
+        _layoutRoot.Controls.Add(_chkAutoStartScrcpy, 0, 7);
+        _layoutRoot.Controls.Add(_chkAutoFormatJson, 0, 8);
+        _layoutRoot.Controls.Add(_lblFontSize, 0, 9);
+        _layoutRoot.Controls.Add(_nudFontSize, 1, 9);
+        _layoutRoot.Controls.Add(_lblAdbScanInterval, 0, 10);
+        _layoutRoot.Controls.Add(_nudAdbScanInterval, 1, 10);
+        _layoutRoot.Controls.Add(_lblLogcatFilter, 0, 11);
+        _layoutRoot.Controls.Add(_txtLogcatFilter, 1, 11);
+        _layoutRoot.Controls.Add(_lblLogcatFilterNote, 0, 12);
         _layoutRoot.Dock = System.Windows.Forms.DockStyle.Fill;
         _layoutRoot.Location = new System.Drawing.Point(12, 12);
         _layoutRoot.Name = "_layoutRoot";
@@ -130,7 +120,6 @@ partial class SettingsDialog
         ConfigureLabel(_lblMaxAll);
         ConfigureLabel(_lblMaxSystemLog);
         ConfigureLabel(_lblAndroidQueue);
-        ConfigureLabel(_lblMaxBodySize);
         ConfigureLabel(_lblFontSize);
         ConfigureLabel(_lblAdbScanInterval);
         ConfigureLabel(_lblLogcatFilter);
@@ -142,7 +131,6 @@ partial class SettingsDialog
         ConfigureNumeric(_nudMaxAll, 100, 100000, 10000);
         ConfigureNumeric(_nudMaxSystemLog, 100, 100000, 10000);
         ConfigureNumeric(_nudAndroidQueue, 100, 10000, 1000);
-        ConfigureNumeric(_nudMaxBodySize, 10, 1024, 500);
         ConfigureNumeric(_nudFontSize, 8, 24, 11);
         ConfigureNumeric(_nudAdbScanInterval, 500, 30000, 2000);
         // 
@@ -178,11 +166,6 @@ partial class SettingsDialog
         // 
         // notes
         // 
-        _lblSettingsNote.AutoSize = true;
-        _lblSettingsNote.Dock = System.Windows.Forms.DockStyle.Fill;
-        _lblSettingsNote.ForeColor = System.Drawing.Color.Gray;
-        _lblSettingsNote.Margin = new System.Windows.Forms.Padding(3, 8, 3, 0);
-        _layoutRoot.SetColumnSpan(_lblSettingsNote, 2);
         _lblLogcatFilterNote.AutoSize = true;
         _lblLogcatFilterNote.Dock = System.Windows.Forms.DockStyle.Fill;
         _lblLogcatFilterNote.ForeColor = System.Drawing.Color.Gray;
@@ -236,7 +219,6 @@ partial class SettingsDialog
         ((System.ComponentModel.ISupportInitialize)_nudMaxAll).EndInit();
         ((System.ComponentModel.ISupportInitialize)_nudMaxSystemLog).EndInit();
         ((System.ComponentModel.ISupportInitialize)_nudAndroidQueue).EndInit();
-        ((System.ComponentModel.ISupportInitialize)_nudMaxBodySize).EndInit();
         ((System.ComponentModel.ISupportInitialize)_nudFontSize).EndInit();
         ((System.ComponentModel.ISupportInitialize)_nudAdbScanInterval).EndInit();
         _layoutRoot.ResumeLayout(false);
