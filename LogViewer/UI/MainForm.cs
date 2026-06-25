@@ -217,17 +217,19 @@ public partial class MainForm : Form
 
         if (_adbHelper.IsAdbAvailable())
         {
-            // 后台启动 ADB server，不阻塞 UI 线程。
-            // adb start-server 的 WaitForExit(5000) 最多等 5 秒，在 UI 线程执行会导致启动卡顿。
-            Task.Run(() => _adbHelper.EnsureServerStarted());
+            // 后台启动 ADB server，完成后再启动扫描循环，避免首次扫描时 ADB 未就绪。
+            Task.Run(() =>
+            {
+                _adbHelper.EnsureServerStarted();
+                if (IsHandleCreated)
+                    BeginInvoke(StartAdbScanLoop);
+            });
         }
-
-        if (!_adbHelper.IsAdbAvailable())
+        else
         {
             Shown += OnMissingAdbPromptShown;
+            StartAdbScanLoop();
         }
-
-        StartAdbScanLoop();
         AutoStartServer();
     }
 
