@@ -128,9 +128,10 @@ adb -s {serial} logcat -v threadtime {filter}
 Program.cs → ApplicationConfiguration.Initialize() → Application.Run(new MainForm())
 ```
 
-1. 启动后点击 "Start Server" 启动 TCP Server
-2. 点击 "ADB Reverse" 执行端口映射
+1. 启动时自动后台启动 ADB server → 自动启动 TCP Server → 自动扫描 ADB 设备
+2. 自动为新设备执行 `adb reverse` 端口映射
 3. 手机 App 网络请求 → 日志实时出现在客户端
+4. 设备连接后自动启动 logcat 进程获取系统日志
 
 ## 9. 设置项
 

@@ -260,7 +260,7 @@ C# 端 `System.Text.Json` 默认**区分大小写**，属性是 PascalCase（`Is
 ```
 LogViewer/
 ├── Program.cs                          入口
-├── LogViewer.csproj             .NET 8 WinForms
+├── LogViewer.csproj                    .NET 8 WinForms
 ├── Models/                             数据模型层（零UI依赖）
 │   ├── LogEntry.cs                     网络日志13字段模型+预览属性
 │   ├── SystemLogEntry.cs               系统日志模型+Level着色
@@ -268,20 +268,38 @@ LogViewer/
 │   ├── AppSettings.cs                  设置+Properties.Settings持久化
 │   └── RingBuffer.cs                   O(1)高性能环形缓冲区
 ├── Network/                            通信层（零UI依赖）
-│   ├── LogServer.cs                    TCP Server，AcceptLoop多设备
-│   ├── DeviceConnection.cs             单设备连接+协议解析+ArrayPool
+│   ├── LogServer.cs                    TCP Server，AcceptLoop多设备，20s超时检测
+│   ├── DeviceConnection.cs             单设备连接+协议解析+ArrayPool+异步Pong回复
 │   └── LogcatReader.cs                 adb logcat进程流式读取+正则解析
 ├── UI/                                 界面层
-│   ├── MainForm.cs                     主窗口全部逻辑
-│   ├── JsonDetailForm.cs               双击弹出的JSON详情窗口
-│   ├── JsonTreeView.cs                 JSON折叠+语法高亮TreeView
-│   ├── DevicePanel.cs                  设备列表+切换面板
-│   └── SettingsDialog.cs               设置对话框
+│   ├── MainForm.cs                     主窗口共用字段/构造函数/服务器事件/窗口生命周期
+│   ├── MainForm.NetworkLogs.cs         网络日志配置/过滤/显示/右键菜单/导出
+│   ├── MainForm.Preview.cs             JSON预览面板初始化/视图切换/详情显示
+│   ├── MainForm.Scrcpy.cs              scrcpy投屏生命周期/状态同步/截图
+│   ├── MainForm.SystemLogs.cs          系统日志快照/过滤/Pause/Resume
+│   ├── MainForm.Designer.cs            主窗口设计器控件树
+│   ├── MainForm.resx                   主窗口资源文件
+│   ├── BufferedListView.cs             ListView双缓冲/精确顶部索引/滚动恢复
+│   ├── ClipboardTextHelper.cs          剪贴板安全写入辅助
+│   ├── EmbeddedWindowHost.cs           scrcpy内嵌窗口宿主（Win32 API）
+│   ├── JsonDetailForm.cs               JSON详情窗口手写逻辑
+│   ├── JsonDetailForm.Designer.cs      JSON详情窗口设计器控件树
+│   ├── JsonTreeView.cs                 JSON折叠+语法高亮TreeView（OwnerDrawText自绘）
+│   ├── JsonTreeViewLoader.cs           JSON→TreeNode构建/搜索/折叠扩展方法
+│   ├── DevicePanel.cs                  左侧ADB设备操控面板+scrcpy宿主+控制条
+│   ├── DevicePanel.Designer.cs         设备面板设计器控件树
+│   ├── SystemLogSnapshot.cs            系统日志当前scope/filter只读快照
+│   ├── SettingsDialog.cs               设置对话框手写逻辑
+│   └── SettingsDialog.Designer.cs      设置对话框设计器控件树
 ├── Static/                             静态资源层（零依赖，被UI引用）
-│   └── Language.cs                     UI字符串常量
+│   └── Language.cs                     UI字符串常量（菜单/状态/按钮/错误提示/列标题/右键菜单）
 ├── Utils/                              工具类
 │   ├── AdbHelper.cs                    ADB搜索/验证/设备列表/Reverse
-│   └── JsonFormatter.cs                JSON格式化+JSONPath
+│   ├── ScrcpyManager.cs                scrcpy搜索/启动/内嵌宿主/窗口生命周期管理
+│   ├── JsonFormatter.cs                JSON格式化+JSONPath
+│   └── SystemLogSessionStore.cs        系统日志会话级jsonl追加存储+索引+热缓存
+├── Runtime/                            运行时外部工具（非代码，CopyToOutputDirectory）
+│   └── WindowsTools/                   adb.exe + scrcpy.exe + 依赖DLL + 资源图片
 └── Properties/
     ├── Settings.settings               用户设置schema
     └── Settings.Designer.cs            类型化Settings访问类

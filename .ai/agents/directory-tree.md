@@ -48,19 +48,20 @@ LogViewer/                            ← 项目根目录
 │   └── RingBuffer.cs                       ← O(1)高性能环形缓冲区（非线程安全，UI线程专用）
 │
 ├── Network/                                ← 通信层（3 .cs，零UI依赖）
-│   ├── LogServer.cs                        ← TCP Server，AcceptLoop多设备，事件广播
-│   ├── DeviceConnection.cs                 ← 单设备连接+协议解析+ArrayPool+消息类型switch
+│   ├── LogServer.cs                        ← TCP Server，AcceptLoop多设备，20s超时检测，REPLACE竞态防护
+│   ├── DeviceConnection.cs                 ← 单设备连接+协议解析+ArrayPool+异步Pong回复+LastActiveTime
 │   └── LogcatReader.cs                     ← adb logcat进程流式读取+正则解析threadtime格式
 │
-├── UI/                                     ← 界面层（17 .cs + 1 .resx）
+├── UI/                                     ← 界面层（19 .cs + 1 .resx）
 │   ├── MainForm.cs                         ← 主窗口共用字段/构造函数/跨功能方法/服务器事件/窗口生命周期
-│   ├── MainForm.NetworkLogs.cs             ← 网络日志配置/过滤/显示/交互/导出（partial class）
+│   ├── MainForm.NetworkLogs.cs             ← 网络日志配置/过滤/显示/右键菜单/导出（partial class）
 │   ├── MainForm.Preview.cs                 ← JSON预览面板初始化/视图切换/详情显示（partial class）
 │   ├── MainForm.Scrcpy.cs                  ← scrcpy投屏生命周期/状态同步/截图（partial class）
 │   ├── MainForm.SystemLogs.cs              ← System Logs 快照/过滤/Pause/Resume 运行时逻辑
 │   ├── MainForm.Designer.cs                ← 主窗口设计器控件树（支持设计器拖动）
 │   ├── BufferedListView.cs                 ← ListView 双缓冲/精确顶部索引/滚动恢复辅助
 │   ├── ClipboardTextHelper.cs              ← 剪贴板安全写入辅助（统一规避 null/empty 复制崩溃）
+│   ├── EmbeddedWindowHost.cs               ← scrcpy内嵌窗口宿主（Win32 API嵌入外部进程窗口）
 │   ├── JsonDetailForm.cs                   ← JSON详情窗口手写逻辑（加载/切换/搜索）
 │   ├── JsonDetailForm.Designer.cs          ← JSON详情窗口设计器控件树（左右分栏+工具栏）
 │   ├── JsonTreeView.cs                     ← JSON折叠+语法高亮TreeView（OwnerDrawText自绘+渲染/交互）
@@ -73,7 +74,7 @@ LogViewer/                            ← 项目根目录
 │   └── MainForm.resx                       ← 主窗口资源文件
 │
 ├── Static/                                  ← 静态资源层（1 .cs，零依赖）
-│   └── Language.cs                          ← UI字符串常量（菜单/状态/按钮/错误提示等）
+│   └── Language.cs                          ← UI字符串常量（菜单/状态/按钮/错误提示/列标题/右键菜单）
 │
 ├── Runtime/                                 ← 运行时外部工具（非代码，CopyToOutputDirectory）
 │   └── WindowsTools/                        ← adb.exe + scrcpy.exe + 依赖DLL + 资源图片

@@ -4,7 +4,7 @@
 
 ## 项目信息
 
-- **项目名称**：android.log.client
+- **项目名称**：LogViewer
 - **项目类型**：.NET 8 WinForms 桌面应用
 - **支持平台**：Windows
 - **项目用途**：Android 网络日志实时查看器，通过 USB 连接多台设备，实时查看网络请求日志和系统日志
@@ -23,7 +23,7 @@
 | 文件 | 路径 | 说明 |
 |------|------|------|
 | 程序入口 | `Program.cs` | Application.Run 启动 MainForm |
-| 项目文件 | `android.log.client.csproj` | .NET 8 WinForms，无第三方 NuGet |
+| 项目文件 | `LogViewer.csproj` | .NET 8 WinForms，无第三方 NuGet |
 | 用户设置 Schema | `Properties/Settings.settings` | ServerPort/MaxLogs/ADB路径等设置定义 |
 | 设置访问类 | `Properties/Settings.Designer.cs` | 自动生成，类型化 Settings.Default |
 
@@ -39,8 +39,8 @@
 ### 通信层 (Network/)
 | 文件 | 说明 |
 |------|------|
-| `LogServer.cs` | TCP Server，AcceptLoop 接受多设备，DeviceConnected/Disconnected 事件 |
-| `DeviceConnection.cs` | 单设备连接 + 协议帧解析 + ArrayPool + switch(messageType) 消息分发 |
+| `LogServer.cs` | TCP Server，AcceptLoop 接受多设备，20s超时检测，REPLACE竞态防护 |
+| `DeviceConnection.cs` | 单设备连接 + 协议帧解析 + ArrayPool + 异步Pong回复 + LastActiveTime |
 | `LogcatReader.cs` | adb logcat 进程流式读取 + 正则解析 threadtime 格式 + LineReceived 事件 |
 
 ### 界面层 (UI/)
@@ -178,10 +178,10 @@ if (BitConverter.IsLittleEndian) Array.Reverse(lengthBytes);
 > 所有命令必须加 `rtk` 前缀。
 
 ```bash
-rtk dotnet build .\android.log.client\android.log.client.csproj     # 构建项目
-rtk dotnet run --project .\android.log.client                      # 运行项目
-rtk git status                                                   # Git 状态
-rtk git diff                                                     # Git 差异
+rtk dotnet build .\LogViewer\LogViewer.csproj              # 构建项目
+rtk dotnet run --project .\LogViewer                       # 运行项目
+rtk git status                                              # Git 状态
+rtk git diff                                                # Git 差异
 ```
 
 ---
@@ -223,6 +223,9 @@ rtk git diff                                                     # Git 差异
 | 服务端 REPLACE 竞态防护 | 新连接 Registered 事件替换旧连接后，旧连接的 Disconnected 事件可能后到。OnDeviceDisconnected 通过引用比较 existing==conn 确保旧事件不会误删新连接 |
 | DeviceId 为空时必须用稳定 key | 不能用 `unknown_{endpoint}`（含端口），端口每次重连都变 → 同一设备产生不同 key → DevicePanel 无限添加。改用 IP 地址部分（去端口） |
 | SendPong 必须异步 | 同步 _stream.Write + Flush 在 TCP 发送缓冲区满时等 ACK，阻塞接收循环导致 UI 卡顿 3-4 秒。改为 await _stream.WriteAsync + FlushAsync
+| EnsureServerStarted 必须后台执行 | 构造函数中同步调用 adb start-server（WaitForExit 5s）阻塞 UI 线程导致启动卡顿。改为 Task.Run 后台执行，完成后再 BeginInvoke 启动扫描循环
+| ADB 扫描循环依赖 ADB Server 就绪 | EnsureServerStarted 改后台后，StartAdbScanLoop 不能立即启动，否则首次扫描时 ADB 未就绪 → 设备列表空 → 不启动 logcat → 系统日志列表为空。必须在 EnsureServerStarted 完成后再启动扫描循环
+| Language 常量必须全部引用 | Language.cs 定义的常量/方法如果未在项目中引用，说明某处有硬编码字符串需要替换。所有 UI 文本必须走 Language 常量，包括右键菜单、列标题、按钮文本、状态栏、提示框
 | 左侧设备区已升级为 scrcpy 宿主 | DevicePanel 不再只是设备下拉框；设备选择与日志 scope 共用一个选择器，选择 `All` 时左侧只显示占位提示，不启动镜像 |
 | scrcpy 自动部署优先 | 保持项目零 NuGet 依赖；启动时自动从官方 GitHub Releases 部署到 LocalAppData，本地路径输入只作为高级覆盖/修复兜底 |
 | 切换设备前先停旧 scrcpy | 内嵌镜像与当前设备强绑定；切换设备必须先停旧实例，再起新实例，避免窗口错绑和孤儿进程 |
