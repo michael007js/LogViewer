@@ -78,7 +78,7 @@ public partial class MainForm : Form
     /// <summary>系统日志 Tab 页。</summary>
     private TabPage _tabSystem;
 
-    private System.Windows.Forms.Panel _pnlNetworkFilter;
+    private Panel _pnlNetworkFilter;
 
     /// <summary>网络日志关键字搜索输入框。</summary>
     private TextBox _txtNetworkKeyword;
@@ -95,13 +95,13 @@ public partial class MainForm : Form
 
     private Label _lblLogCount;
 
-    private System.Windows.Forms.ListView _lstNetworkLogs;
+    private ListView _lstNetworkLogs;
 
-    private System.Windows.Forms.ListView _lstSystemLogs;
+    private ListView _lstSystemLogs;
 
-    private System.Windows.Forms.Panel _pnlSystemFilter;
+    private Panel _pnlSystemFilter;
 
-    private System.Windows.Forms.Panel _systemActionBar;
+    private Panel _systemActionBar;
 
     /// <summary>系统日志关键字搜索输入框。</summary>
     private TextBox _txtSystemKeyword;
@@ -112,13 +112,13 @@ public partial class MainForm : Form
     /// <summary>系统日志 Tag 过滤下拉框，选项动态刷新。</summary>
     private ComboBox _cmbLogTag;
 
-    private System.Windows.Forms.Button _btnSystemScrollToTop;
+    private Button _btnSystemScrollToTop;
 
-    private System.Windows.Forms.Button _btnSystemScrollToBottom;
+    private Button _btnSystemScrollToBottom;
 
-    private System.Windows.Forms.Button _btnSystemPauseResume;
+    private Button _btnSystemPauseResume;
 
-    private System.Windows.Forms.Label _lblSystemBacklog;
+    private Label _lblSystemBacklog;
 
     private TabControl _tabDetail;
 

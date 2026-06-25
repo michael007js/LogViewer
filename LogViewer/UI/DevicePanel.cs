@@ -14,39 +14,55 @@ public sealed partial class DevicePanel : UserControl
 {
     /// <summary>是否处于设计器模式。</summary>
     private readonly bool _isDesignMode;
+
     /// <summary>设备ID到设备记录的映射表。</summary>
     private readonly Dictionary<string, DeviceRecord> _devices = new();
+
     /// <summary>当前选中的设备ID。</summary>
     private string? _selectedDeviceId;
+
     /// <summary>scrcpy 投屏是否正在运行。</summary>
     private bool _mirrorRunning;
+
     /// <summary>scrcpy 投屏是否就绪（窗口已创建）。</summary>
     private bool _mirrorReady;
+
     /// <summary>投屏宿主是否可见（替代占位符）。</summary>
     private bool _mirrorHostVisible;
+
     /// <summary>投屏宽高比（宽/高），默认竖屏 9:16。</summary>
     private double _mirrorAspectRatio = 9d / 16d;
+
     /// <summary>投屏视口在宿主面板内的显示区域矩形。</summary>
     private Rectangle _mirrorDisplayBounds = Rectangle.Empty;
+
     /// <summary>投屏状态提示文本。</summary>
     private string _mirrorStatusText = Language.DeviceSelectPrompt;
 
     /// <summary>设备选中事件，参数为选中的设备ID（null表示"全部"）。</summary>
     public event EventHandler<string?>? DeviceSelected;
+
     /// <summary>ADB 扫描刷新请求事件。</summary>
     public event EventHandler? RefreshAdbRequested;
+
     /// <summary>投屏启动请求事件，参数为设备ID。</summary>
     public event EventHandler<string>? MirrorStartRequested;
+
     /// <summary>投屏停止请求事件，参数为设备ID。</summary>
     public event EventHandler<string>? MirrorStopRequested;
+
     /// <summary>投屏重连请求事件，参数为设备ID。</summary>
     public event EventHandler<string>? MirrorReconnectRequested;
+
     /// <summary>投屏旋转请求事件，参数为设备ID。</summary>
     public event EventHandler<string>? MirrorRotateRequested;
+
     /// <summary>投屏截图请求事件，参数为设备ID。</summary>
     public event EventHandler<string>? MirrorScreenshotRequested;
+
     /// <summary>投屏弹出窗口请求事件，参数为设备ID。</summary>
     public event EventHandler<string>? MirrorPopoutRequested;
+
     /// <summary>投屏布局变更事件（视口位置/尺寸发生变化）。</summary>
     public event EventHandler? MirrorLayoutChanged;
 
@@ -97,6 +113,7 @@ public sealed partial class DevicePanel : UserControl
         }
         else
         {
+            _btnRefreshAdb.Text = Language.ScanAdb;
             RefreshList();
             UpdateMirrorUiState();
         }
@@ -533,7 +550,8 @@ public sealed partial class DevicePanel : UserControl
         _cmbDevices.Items.Clear();
         _cmbDevices.Items.Add(new DeviceSelectorItem(null, Language.All));
 
-        foreach (var kvp in _devices.OrderBy(static pair => pair.Value.Info.DisplayName, StringComparer.OrdinalIgnoreCase))
+        foreach (var kvp in _devices.OrderBy(static pair => pair.Value.Info.DisplayName,
+                     StringComparer.OrdinalIgnoreCase))
         {
             _cmbDevices.Items.Add(new DeviceSelectorItem(kvp.Key, BuildDeviceDisplayText(kvp.Value)));
         }
@@ -590,9 +608,10 @@ public sealed partial class DevicePanel : UserControl
     private void SyncSelectedItem()
     {
         var selected = _cmbDevices.Items
-            .OfType<DeviceSelectorItem>()
-            .FirstOrDefault(item => string.Equals(item.DeviceId ?? string.Empty, _selectedDeviceId ?? string.Empty, StringComparison.Ordinal))
-            ?? _cmbDevices.Items.OfType<DeviceSelectorItem>().FirstOrDefault(item => item.DeviceId == null);
+                           .OfType<DeviceSelectorItem>()
+                           .FirstOrDefault(item => string.Equals(item.DeviceId ?? string.Empty,
+                               _selectedDeviceId ?? string.Empty, StringComparison.Ordinal))
+                       ?? _cmbDevices.Items.OfType<DeviceSelectorItem>().FirstOrDefault(item => item.DeviceId == null);
 
         if (selected != null)
         {
@@ -659,6 +678,7 @@ public sealed partial class DevicePanel : UserControl
                 _mirrorDisplayBounds = Rectangle.Empty;
                 MirrorLayoutChanged?.Invoke(this, EventArgs.Empty);
             }
+
             return;
         }
 
@@ -695,8 +715,10 @@ public sealed partial class DevicePanel : UserControl
     {
         /// <summary>设备信息。</summary>
         public DeviceInfo Info { get; set; } = new();
+
         /// <summary>日志条数。</summary>
         public int LogCount { get; set; }
+
         /// <summary>是否仅通过 ADB 发现（无 TCP 连接）。</summary>
         public bool IsAdbOnly { get; set; }
     }
@@ -719,6 +741,7 @@ public sealed partial class DevicePanel : UserControl
 
         /// <summary>设备ID，null 表示"全部"选项。</summary>
         public string? DeviceId { get; }
+
         /// <summary>下拉列表显示文本。</summary>
         public string Text { get; }
 
@@ -746,8 +769,9 @@ public sealed partial class DevicePanel : UserControl
                processName.Contains("DesignToolsServer", StringComparison.OrdinalIgnoreCase) ||
                processName.Contains("rider", StringComparison.OrdinalIgnoreCase) ||
                processName.Contains("jetbrains", StringComparison.OrdinalIgnoreCase) ||
-               commandLine.Contains("JetBrains.ReSharper.Features.WinForms.Designer.External.Core", StringComparison.OrdinalIgnoreCase) ||
-                commandLine.Contains("WinFormsDesigner", StringComparison.OrdinalIgnoreCase);
+               commandLine.Contains("JetBrains.ReSharper.Features.WinForms.Designer.External.Core",
+                   StringComparison.OrdinalIgnoreCase) ||
+               commandLine.Contains("WinFormsDesigner", StringComparison.OrdinalIgnoreCase);
     }
 }
 

@@ -105,7 +105,7 @@ public partial class MainForm
         if (_scrcpySession?.IsRunning == true &&
             string.Equals(_scrcpySession.DeviceSerial, serial, StringComparison.Ordinal))
         {
-                    _devicePanel.SetMirrorStatus(Language.MirrorConnected(serial), hostVisible: true,
+            _devicePanel.SetMirrorStatus(Language.MirrorConnected(serial), hostVisible: true,
                 isRunning: true, isReady: true);
             return;
         }
@@ -313,6 +313,7 @@ public partial class MainForm
                 var hostSize = _devicePanel.GetMirrorHostClientSize();
                 windowBounds = new Rectangle(0, 0, hostSize.Width, hostSize.Height);
             }
+
             var session = await _scrcpyManager.StartSessionAsync(new ScrcpyStartOptions
             {
                 ScrcpyPath = scrcpyPath,
@@ -343,7 +344,7 @@ public partial class MainForm
                     _scrcpySession = session;
                     _scrcpySession.Exited += OnScrcpySessionExited;
                     _devicePanel.SetMirrorAspectRatio(contentAspectRatio);
-            _devicePanel.SetMirrorStatus(Language.MirrorConnected(serial), hostVisible: true,
+                    _devicePanel.SetMirrorStatus(Language.MirrorConnected(serial), hostVisible: true,
                         isRunning: true, isReady: true);
                     ApplyEmbeddedMirrorLayout();
                 }));

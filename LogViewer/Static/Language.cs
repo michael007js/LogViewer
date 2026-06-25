@@ -308,14 +308,6 @@ public static class Language
     /// <param name="path">期望的 scrcpy 路径。</param>
     public static string ScrcpyNotFound(string path) => $"未找到 scrcpy，请放到程序目录：{path}";
 
-    /// <summary>生成 ADB 反向代理成功提示文本。</summary>
-    /// <param name="deviceName">设备名称。</param>
-    public static string AdbReverseSuccess(string deviceName) => $"已为 {deviceName} 执行反向代理";
-
-    /// <summary>生成 ADB 反向代理失败提示文本。</summary>
-    /// <param name="output">失败输出信息。</param>
-    public static string AdbReverseFailed(string output) => $"反向代理失败：\n{output}";
-
     /// <summary>生成单设备 ADB 反向代理结果文本。</summary>
     /// <param name="serial">设备序列号。</param>
     /// <param name="ok">是否成功。</param>

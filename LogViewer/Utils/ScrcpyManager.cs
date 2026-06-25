@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text;
 using LogViewer.Static;
 
 namespace LogViewer.Utils;
@@ -193,22 +194,41 @@ internal sealed class ScrcpySession : IDisposable
         {
             if (!Process.HasExited)
             {
-        // 优先发送 WM_CLOSE 请求优雅关闭
+                // 优先发送 WM_CLOSE 请求优雅关闭
                 if (WindowHandle != IntPtr.Zero)
                 {
                     EmbeddedWindowHost.RequestClose(WindowHandle);
                 }
                 else
                 {
-                // 优雅关闭失败则发送关闭主窗口命令
-                    try { Process.CloseMainWindow(); } catch { }
+                    // 优雅关闭失败则发送关闭主窗口命令
+                    try
+                    {
+                        Process.CloseMainWindow();
+                    }
+                    catch
+                    {
+                    }
                 }
 
                 // 等待1.5秒，超时则强制终止进程树
                 if (!Process.WaitForExit(1500))
                 {
-                    try { Process.Kill(entireProcessTree: true); } catch { }
-                    try { Process.WaitForExit(1500); } catch { }
+                    try
+                    {
+                        Process.Kill(entireProcessTree: true);
+                    }
+                    catch
+                    {
+                    }
+
+                    try
+                    {
+                        Process.WaitForExit(1500);
+                    }
+                    catch
+                    {
+                    }
                 }
             }
         }
@@ -217,7 +237,13 @@ internal sealed class ScrcpySession : IDisposable
         }
         finally
         {
-            try { Process.Dispose(); } catch { }
+            try
+            {
+                Process.Dispose();
+            }
+            catch
+            {
+            }
         }
     }
 
@@ -273,7 +299,8 @@ internal sealed class ScrcpyManager
     /// <param name="progress">进度报告器，用于向 UI 反馈状态</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>scrcpy 路径；未找到时返回 <c>null</c></returns>
-    public Task<string?> EnsureScrcpyAvailableAsync(bool forceDeploy, IProgress<string>? progress, CancellationToken cancellationToken)
+    public Task<string?> EnsureScrcpyAvailableAsync(bool forceDeploy, IProgress<string>? progress,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var existing = GetScrcpyPath();
@@ -381,7 +408,13 @@ internal sealed class ScrcpyManager
             }
             finally
             {
-                try { process.Dispose(); } catch { }
+                try
+                {
+                    process.Dispose();
+                }
+                catch
+                {
+                }
             }
         }
     }
@@ -447,7 +480,8 @@ internal sealed class ScrcpyManager
 
         try
         {
-            var windowHandle = await WaitForWindowAsync(process, stderrTask, cancellationToken, options.WindowTitle).ConfigureAwait(false);
+            var windowHandle = await WaitForWindowAsync(process, stderrTask, cancellationToken, options.WindowTitle)
+                .ConfigureAwait(false);
             var session = new ScrcpySession(process, windowHandle, options);
             _ = stdoutTask;
             _ = stderrTask;
@@ -497,7 +531,8 @@ internal sealed class ScrcpyManager
     /// <returns>scrcpy 窗口句柄</returns>
     /// <exception cref="InvalidOperationException">scrcpy 在创建窗口前退出</exception>
     /// <exception cref="TimeoutException">等待窗口超时（约8秒）</exception>
-    private static async Task<IntPtr> WaitForWindowAsync(Process process, Task<string> stderrTask, CancellationToken cancellationToken, string windowTitle)
+    private static async Task<IntPtr> WaitForWindowAsync(Process process, Task<string> stderrTask,
+        CancellationToken cancellationToken, string windowTitle)
     {
         return await Task.Run(async () =>
         {
@@ -522,7 +557,6 @@ internal sealed class ScrcpyManager
             throw new TimeoutException("Timed out waiting for scrcpy window.");
         }, cancellationToken);
     }
-
 }
 
 /// <summary>
@@ -536,27 +570,39 @@ internal static class EmbeddedWindowHost
 {
     // GWL_STYLE：窗口样式偏移量
     private const int GwlStyle = -16;
+
     // WS_CHILD：子窗口样式
     private const int WsChild = 0x40000000;
+
     // WS_CAPTION：标题栏样式
     private const int WsCaption = 0x00C00000;
+
     // WS_THICKFRAME：可调大小边框
     private const int WsThickFrame = 0x00040000;
+
     // WS_MINIMIZE：最小化样式
     private const int WsMinimize = 0x20000000;
+
     // WS_MAXIMIZE：最大化样式
     private const int WsMaximize = 0x01000000;
+
     // WS_SYSMENU：系统菜单样式
     private const int WsSysMenu = 0x00080000;
+
     private const int WsClipChildren = 0x02000000;
+
     // SWP_NOZORDER：不改变 Z 序
     private const uint SwpNoZOrder = 0x0004;
+
     // SWP_NOACTIVATE：不激活窗口
     private const uint SwpNoActivate = 0x0010;
+
     // SWP_FRAMECHANGED：重新应用窗口样式
     private const uint SwpFrameChanged = 0x0020;
+
     // SW_SHOW：显示窗口
     private const uint SwShow = 5;
+
     // WM_CLOSE：关闭消息
     private const uint WmClose = 0x0010;
 
@@ -655,7 +701,7 @@ internal static class EmbeddedWindowHost
             if (GetWindowTextLength(hWnd) > 0 && IsWindowVisible(hWnd))
             {
                 var length = GetWindowTextLength(hWnd) + 1;
-                var sb = new System.Text.StringBuilder(length);
+                var sb = new StringBuilder(length);
                 GetWindowText(hWnd, sb, length);
                 if (sb.ToString().StartsWith(titlePrefix, StringComparison.Ordinal))
                 {
@@ -663,6 +709,7 @@ internal static class EmbeddedWindowHost
                     return false;
                 }
             }
+
             return true;
         }, IntPtr.Zero);
         return result;
@@ -732,7 +779,8 @@ internal static class EmbeddedWindowHost
 
     /// <summary>设置窗口位置、大小和Z序</summary>
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy,
+        uint uFlags);
 
     /// <summary>设置窗口的显示状态</summary>
     [DllImport("user32.dll")]
@@ -754,7 +802,7 @@ internal static class EmbeddedWindowHost
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
     [DllImport("user32.dll")]
     private static extern int GetWindowTextLength(IntPtr hWnd);
