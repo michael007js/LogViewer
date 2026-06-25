@@ -106,4 +106,7 @@ public class JsonPathInfo
 
     /// <summary>节点对应的原始 JSON 值文本。</summary>
     public string? RawValue { get; set; }
+
+    /// <summary>懒加载：存储当前节点的 JsonElement 引用，BeforeExpand 时用于构建子节点。</summary>
+    internal JsonElement? Element { get; set; }
 }

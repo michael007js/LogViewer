@@ -27,6 +27,9 @@ public class JsonTreeView : UserControl
     /// <summary>搜索高亮节点集合。</summary>
     private readonly HashSet<TreeNode> _highlightedNodes = new();
 
+    /// <summary>当前 JSON 文档引用，保持存活以使 JsonElement 引用有效，切换/关闭时释放。</summary>
+    private JsonDocument? _jsonDoc;
+
     /// <summary>运行时内部的 TreeView 控件。</summary>
     private TreeView? _treeView;
 
@@ -209,7 +212,7 @@ public class JsonTreeView : UserControl
     }
 
     /// <summary>
-    /// 显示 JSON 内容。若可解析为有效 JSON 则加载为树视图，否则降级为纯文本。
+    /// 显示 JSON 内容。仅解析一次 JsonDocument，懒加载构建树视图。解析失败则降级为纯文本。
     /// </summary>
     /// <param name="rawJson">原始 JSON 字符串。</param>
     public void DisplayJson(string rawJson)
@@ -222,14 +225,18 @@ public class JsonTreeView : UserControl
         _rawText = rawJson;
         _highlightedNodes.Clear();
         _searchKeyword = null;
-        var doc = JsonFormatter.ParseJson(JsonFormatter.FormatJson(rawJson) ?? rawJson);
-        _isJson = doc != null;
-        if (_isJson)
+        _jsonDoc?.Dispose();
+        _jsonDoc = null;
+
+        try
         {
-            _treeView.LoadJson(rawJson, _displayFont);
+            _jsonDoc = JsonDocument.Parse(rawJson);
+            _isJson = true;
+            _treeView.LoadJson(_jsonDoc.RootElement, _displayFont);
         }
-        else
+        catch
         {
+            _isJson = false;
             _treeView.LoadPlainText(rawJson, _displayFont);
         }
     }
@@ -249,6 +256,8 @@ public class JsonTreeView : UserControl
         _isJson = false;
         _highlightedNodes.Clear();
         _searchKeyword = null;
+        _jsonDoc?.Dispose();
+        _jsonDoc = null;
         _treeView.LoadPlainText(text, _displayFont);
     }
 
@@ -344,7 +353,16 @@ public class JsonTreeView : UserControl
         treeView.ItemHeight = _itemHeight;
         treeView.DrawMode = _drawMode;
         treeView.DrawNode += OnTreeViewDrawNode;
+        treeView.BeforeExpand += OnBeforeExpand;
         treeView.ContextMenuStrip = CreateContextMenu();
+    }
+
+    /// <summary>
+    /// TreeView 的 BeforeExpand 事件处理器，懒加载：移除哨兵子节点，从 JsonElement 构建真实子节点。
+    /// </summary>
+    private void OnBeforeExpand(object? sender, TreeViewCancelEventArgs e)
+    {
+        JsonTreeViewLoader.OnBeforeExpand(e.Node, _displayFont);
     }
 
     /// <summary>
@@ -542,6 +560,18 @@ public class JsonTreeView : UserControl
         menu.Items.AddRange(new ToolStripItem[]
             { copyValue, copyPath, copyNode, sep1, expandAll, collapseAll, collapseTo2 });
         return menu;
+    }
+
+    /// <summary>释放 JsonDocument 和自定义字体资源。</summary>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _jsonDoc?.Dispose();
+            _displayFont?.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 
     /// <summary>
