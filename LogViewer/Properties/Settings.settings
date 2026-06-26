@@ -13,6 +13,7 @@
     <FontSize>11</FontSize>
     <AdbScanIntervalMs>2000</AdbScanIntervalMs>
     <LogcatFilter></LogcatFilter>
+    <NotifyRegexError>True</NotifyRegexError>
     <AutoStartScrcpyForSelectedDevice>False</AutoStartScrcpyForSelectedDevice>
     <LastLeftPanelWidth>340</LastLeftPanelWidth>
   </PropertyGroup>

@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using LogViewer.Models;
 
 namespace LogViewer.Utils;
@@ -613,6 +614,53 @@ internal sealed class SystemLogSessionStore : IDisposable
 
         var coldEntry = await ReadEntryForScanAsync(record, cancellationToken).ConfigureAwait(false);
         return coldEntry?.Message?.Contains(keyword, StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    /// <summary>
+    /// 异步判断记录是否匹配指定正则表达式（搜索标签、级别、PID/TID、时间及消息内容）。
+    /// </summary>
+    /// <param name="record">记录引用。</param>
+    /// <param name="keyword">正则表达式模式，为 null 或空表示匹配所有。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="regex">已编译的正则表达式实例。</param>
+    /// <returns>是否匹配关键字。</returns>
+    public async Task<bool> MatchesKeywordAsync(SystemLogRecordRef record, string keyword,
+        CancellationToken cancellationToken, Regex regex)
+    {
+        if (string.IsNullOrEmpty(keyword) || regex == null)
+        {
+            return true;
+        }
+
+        string tagText;
+        SystemLogEntry? hotEntry;
+
+        lock (_gate)
+        {
+            tagText = GetTagValueLocked(record.TagKey);
+            hotEntry = TryGetHotEntryLocked(record.SequenceId, out var loadedEntry) ? loadedEntry : null;
+        }
+
+        if (regex.IsMatch(tagText))
+        {
+            return true;
+        }
+
+        if (regex.IsMatch(DecodeLevel(record.LevelCode)) ||
+            regex.IsMatch(record.ProcessId.ToString()) ||
+            regex.IsMatch(record.ThreadId.ToString()) ||
+            regex.IsMatch(new DateTime(record.TimestampTicks).ToString("HH:mm:ss.fff")))
+        {
+            return true;
+        }
+
+        if (hotEntry?.Message != null && regex.IsMatch(hotEntry.Message))
+        {
+            return true;
+        }
+
+        var coldEntry = await ReadEntryForScanAsync(record, cancellationToken).ConfigureAwait(false);
+        return coldEntry?.Message != null && regex.IsMatch(coldEntry.Message);
     }
 
     /// <summary>

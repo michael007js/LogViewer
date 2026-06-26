@@ -69,6 +69,11 @@ namespace LogViewer.Properties {
 
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool NotifyRegexError { get { return ((bool)(this["NotifyRegexError"])); } set { this["NotifyRegexError"] = value; } }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("False")]
         public bool AutoStartScrcpyForSelectedDevice { get { return ((bool)(this["AutoStartScrcpyForSelectedDevice"])); } set { this["AutoStartScrcpyForSelectedDevice"] = value; } }
 

@@ -61,8 +61,8 @@ public partial class SettingsDialog : Form
         _chkAutoFormatJson.Text = Language.AutoFormatJson;
         _lblFontSize.Text = "字体大小(pt)：";
         _lblAdbScanInterval.Text = "ADB 扫描间隔(ms)：";
-        _lblLogcatFilter.Text = Language.LogcatFilter;
-        _lblLogcatFilterNote.Text = Language.LogcatFilterNote;
+        _lblLogcatFilter.Text = "Logcat 过滤：";
+        _chkNotifyRegexError.Text = Language.NotifyRegexError;
         _btnOk.Text = Language.Confirm;
         _btnCancel.Text = Language.Cancel;
     }
@@ -84,6 +84,7 @@ public partial class SettingsDialog : Form
         _nudFontSize.Value = _settings.FontSize;
         _nudAdbScanInterval.Value = _settings.AdbScanIntervalMs;
         _txtLogcatFilter.Text = _settings.LogcatFilter;
+        _chkNotifyRegexError.Checked = _settings.NotifyRegexError;
     }
 
     /// <summary>
@@ -92,7 +93,6 @@ public partial class SettingsDialog : Form
     private void LoadDesignValues()
     {
         LoadValues();
-        _txtLogcatFilter.Text = "*:I";
     }
 
     /// <summary>
@@ -139,6 +139,7 @@ public partial class SettingsDialog : Form
         _settings.FontSize = (int)_nudFontSize.Value;
         _settings.AdbScanIntervalMs = (int)_nudAdbScanInterval.Value;
         _settings.LogcatFilter = _txtLogcatFilter.Text;
+        _settings.NotifyRegexError = _chkNotifyRegexError.Checked;
         _settings.Save();
         DialogResult = DialogResult.OK;
         Close();

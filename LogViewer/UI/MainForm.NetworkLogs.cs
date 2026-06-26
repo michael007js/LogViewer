@@ -347,16 +347,33 @@ public partial class MainForm
     private bool MatchesNetworkFilter(LogEntry entry)
     {
         var kw = _txtNetworkKeyword.Text.Trim();
-        if (!string.IsNullOrEmpty(kw) &&
-            !(entry.Url?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
-              entry.Method?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
-              entry.Code.ToString().Contains(kw, StringComparison.OrdinalIgnoreCase) ||
-              entry.Duration.ToString().Contains(kw, StringComparison.OrdinalIgnoreCase) ||
-              entry.Headers?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
-              entry.Send?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
-              entry.Content?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
-              entry.Message?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true))
-            return false;
+        if (!string.IsNullOrEmpty(kw))
+        {
+            if (_networkRegexMode && _networkCachedRegex != null)
+            {
+                if (!(_networkCachedRegex.IsMatch(entry.Url ?? "") ||
+                      _networkCachedRegex.IsMatch(entry.Method ?? "") ||
+                      _networkCachedRegex.IsMatch(entry.Code.ToString()) ||
+                      _networkCachedRegex.IsMatch(entry.Duration.ToString()) ||
+                      _networkCachedRegex.IsMatch(entry.Headers ?? "") ||
+                      _networkCachedRegex.IsMatch(entry.Send ?? "") ||
+                      _networkCachedRegex.IsMatch(entry.Content ?? "") ||
+                      _networkCachedRegex.IsMatch(entry.Message ?? "")))
+                    return false;
+            }
+            else
+            {
+                if (!(entry.Url?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
+                      entry.Method?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
+                      entry.Code.ToString().Contains(kw, StringComparison.OrdinalIgnoreCase) ||
+                      entry.Duration.ToString().Contains(kw, StringComparison.OrdinalIgnoreCase) ||
+                      entry.Headers?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
+                      entry.Send?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
+                      entry.Content?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
+                      entry.Message?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true))
+                    return false;
+            }
+        }
 
         var method = _cmbMethod.SelectedItem as string;
         if (method != Language.All && !string.IsNullOrEmpty(method) &&

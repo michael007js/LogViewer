@@ -45,6 +45,9 @@ public class AppSettings
     /// <summary>Logcat 过滤器表达式。</summary>
     public string LogcatFilter { get; set; } = "";
 
+    /// <summary>正则表达式无效时是否弹窗提示。</summary>
+    public bool NotifyRegexError { get; set; } = true;
+
     /// <summary>选中设备时自动启动 scrcpy 投屏。</summary>
     public bool AutoStartScrcpyForSelectedDevice { get; set; }
 
@@ -69,6 +72,7 @@ public class AppSettings
         s.FontSize = FontSize;
         s.AdbScanIntervalMs = AdbScanIntervalMs;
         s.LogcatFilter = LogcatFilter;
+        s.NotifyRegexError = NotifyRegexError;
         s.AutoStartScrcpyForSelectedDevice = AutoStartScrcpyForSelectedDevice;
         s.LastLeftPanelWidth = LastLeftPanelWidth;
         s.Save();
@@ -94,6 +98,7 @@ public class AppSettings
             FontSize = s.FontSize,
             AdbScanIntervalMs = s.AdbScanIntervalMs,
             LogcatFilter = s.LogcatFilter ?? "",
+            NotifyRegexError = s.NotifyRegexError,
             AutoStartScrcpyForSelectedDevice = s.AutoStartScrcpyForSelectedDevice,
             LastLeftPanelWidth = s.LastLeftPanelWidth
         };

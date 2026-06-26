@@ -30,7 +30,9 @@ public partial class MainForm
         /// <summary>最大包含的序列号，Pause 时冻结到此值。</summary>
         long MaxSequenceInclusive,
         /// <summary>存储结构版本号，用于检测存储是否发生重建。</summary>
-        long StoreStructureVersion)
+        long StoreStructureVersion,
+        /// <summary>是否启用正则模式匹配关键字。</summary>
+        bool IsRegex)
     {
         /// <summary>是否有非关键字过滤条件（级别或标签）激活。</summary>
         public bool FilterActive =>
@@ -240,6 +242,22 @@ public partial class MainForm
             {
                 token.ThrowIfCancellationRequested();
                 if (MatchesSystemRecord(record, query))
+                {
+                    filtered.Add(record);
+                }
+            }
+        }
+        else if (query.IsRegex)
+        {
+            foreach (var record in baseRecords)
+            {
+                token.ThrowIfCancellationRequested();
+                if (!MatchesSystemRecord(record, query, includeKeyword: false))
+                {
+                    continue;
+                }
+
+                if (_systemCachedRegex != null && await _systemLogStore.MatchesKeywordAsync(record, query.Keyword, token, _systemCachedRegex).ConfigureAwait(false))
                 {
                     filtered.Add(record);
                 }
@@ -827,7 +845,8 @@ public partial class MainForm
             level,
             tag,
             maxSequenceInclusive,
-            _systemLogStore.StructureVersion);
+            _systemLogStore.StructureVersion,
+            _systemRegexMode);
     }
 
     /// <summary>
@@ -855,7 +874,7 @@ public partial class MainForm
     /// <param name="entry">待匹配的日志条目。</param>
     /// <param name="query">查询参数。</param>
     /// <returns>匹配返回 true。</returns>
-    private static bool MatchesIncomingSystemEntry(SystemLogEntry entry, SystemLogQuery query)
+    private bool MatchesIncomingSystemEntry(SystemLogEntry entry, SystemLogQuery query)
     {
         if (!string.IsNullOrEmpty(query.DeviceId) &&
             !string.Equals(entry.SourceDeviceId ?? string.Empty, query.DeviceId, StringComparison.Ordinal))
@@ -878,6 +897,13 @@ public partial class MainForm
         if (!query.KeywordActive)
         {
             return true;
+        }
+
+        if (query.IsRegex)
+        {
+            if (_systemCachedRegex == null) return true;
+            var combined = $"{entry.LevelShort} {entry.Tag} {entry.Message} {entry.ProcessId} {entry.ThreadId}";
+            return _systemCachedRegex.IsMatch(combined);
         }
 
         return (entry.LevelShort?.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) == true) ||

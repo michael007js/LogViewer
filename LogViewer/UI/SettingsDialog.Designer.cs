@@ -24,7 +24,7 @@ partial class SettingsDialog
     private System.Windows.Forms.NumericUpDown _nudAdbScanInterval = null!;
     private System.Windows.Forms.Label _lblLogcatFilter = null!;
     private System.Windows.Forms.TextBox _txtLogcatFilter = null!;
-    private System.Windows.Forms.Label _lblLogcatFilterNote = null!;
+    private System.Windows.Forms.CheckBox _chkNotifyRegexError = null!;
     private System.Windows.Forms.FlowLayoutPanel _buttonPanel = null!;
     private System.Windows.Forms.Button _btnOk = null!;
     private System.Windows.Forms.Button _btnCancel = null!;
@@ -62,7 +62,7 @@ partial class SettingsDialog
         _nudAdbScanInterval = new System.Windows.Forms.NumericUpDown();
         _lblLogcatFilter = new System.Windows.Forms.Label();
         _txtLogcatFilter = new System.Windows.Forms.TextBox();
-        _lblLogcatFilterNote = new System.Windows.Forms.Label();
+        _chkNotifyRegexError = new System.Windows.Forms.CheckBox();
         _buttonPanel = new System.Windows.Forms.FlowLayoutPanel();
         _btnCancel = new System.Windows.Forms.Button();
         _btnOk = new System.Windows.Forms.Button();
@@ -102,13 +102,12 @@ partial class SettingsDialog
         _layoutRoot.Controls.Add(_nudAdbScanInterval, 1, 10);
         _layoutRoot.Controls.Add(_lblLogcatFilter, 0, 11);
         _layoutRoot.Controls.Add(_txtLogcatFilter, 1, 11);
-        _layoutRoot.Controls.Add(_lblLogcatFilterNote, 0, 12);
+        _layoutRoot.Controls.Add(_chkNotifyRegexError, 0, 12);
         _layoutRoot.Dock = System.Windows.Forms.DockStyle.Fill;
         _layoutRoot.Location = new System.Drawing.Point(12, 12);
         _layoutRoot.Name = "_layoutRoot";
-        _layoutRoot.RowCount = 15;
+        _layoutRoot.RowCount = 14;
         for (var i = 0; i < 13; i++) _layoutRoot.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 34F));
-        _layoutRoot.RowStyles.Add(new System.Windows.Forms.RowStyle());
         _layoutRoot.RowStyles.Add(new System.Windows.Forms.RowStyle());
         _layoutRoot.Size = new System.Drawing.Size(500, 427);
         _layoutRoot.TabIndex = 0;
@@ -164,13 +163,12 @@ partial class SettingsDialog
         _txtLogcatFilter.Size = new System.Drawing.Size(314, 23);
         _txtLogcatFilter.TabIndex = 12;
         // 
-        // notes
+        // _chkNotifyRegexError
         // 
-        _lblLogcatFilterNote.AutoSize = true;
-        _lblLogcatFilterNote.Dock = System.Windows.Forms.DockStyle.Fill;
-        _lblLogcatFilterNote.ForeColor = System.Drawing.Color.Gray;
-        _lblLogcatFilterNote.Margin = new System.Windows.Forms.Padding(3, 4, 3, 0);
-        _layoutRoot.SetColumnSpan(_lblLogcatFilterNote, 2);
+        _chkNotifyRegexError.AutoSize = true;
+        _chkNotifyRegexError.Dock = System.Windows.Forms.DockStyle.Fill;
+        _chkNotifyRegexError.Margin = new System.Windows.Forms.Padding(3);
+        _layoutRoot.SetColumnSpan(_chkNotifyRegexError, 2);
         // 
         // _buttonPanel
         // 

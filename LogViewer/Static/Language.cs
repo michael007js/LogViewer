@@ -138,14 +138,14 @@ public static class Language
     /// <summary>设置项：自动格式化并折叠 JSON。</summary>
     public const string AutoFormatJson = "自动格式化并折叠 JSON";
 
-    /// <summary>设置项：Logcat 过滤标签文本。</summary>
-    public const string LogcatFilter = "Logcat 过滤：";
+    /// <summary>正则模式切换按钮文本。</summary>
+    public const string RegexMode = ".*";
 
-    /// <summary>设置说明：需要修改 Android 端代码生效。</summary>
-    public const string SettingsNote = "* 需要修改 AppConstant.java 并重新编译 Android 应用后生效。";
+    /// <summary>正则表达式无效时的提示标题。</summary>
+    public const string RegexErrorTitle = "正则表达式无效";
 
-    /// <summary>Logcat 过滤输入提示说明。</summary>
-    public const string LogcatFilterNote = "Logcat 过滤：留空表示全部，例如 ActivityManager:I *:S";
+    /// <summary>设置项：正则表达式无效时弹窗提示。</summary>
+    public const string NotifyRegexError = "正则表达式无效时弹窗提示";
 
     /// <summary>"取消"按钮文本。</summary>
     public const string Cancel = "取消";
