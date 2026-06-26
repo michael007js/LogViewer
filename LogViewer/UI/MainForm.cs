@@ -64,13 +64,13 @@ public partial class MainForm : Form
     /// <summary>系统日志自动滚动是否启用。</summary>
     private bool _systemAutoScrollEnabled = true;
 
-    private SplitContainer _outerSplit;
+    private System.Windows.Forms.SplitContainer _outerSplit;
 
-    private SplitContainer _innerSplit;
+    private System.Windows.Forms.SplitContainer _innerSplit;
 
-    private DevicePanel _devicePanel;
+    private LogViewer.UI.DevicePanel _devicePanel;
 
-    private TabControl _tabLogType;
+    private System.Windows.Forms.TabControl _tabLogType;
 
     /// <summary>网络日志 Tab 页。</summary>
     private TabPage _tabNetwork;
@@ -166,7 +166,7 @@ public partial class MainForm : Form
     /// <summary>状态栏：正在运行的 Logcat 进程数量。</summary>
     private ToolStripStatusLabel _lblLogcatStatus;
 
-    private FlowLayoutPanel _pnlBottomBar;
+    private System.Windows.Forms.FlowLayoutPanel _pnlBottomBar;
 
     /// <summary>清空当前日志按钮。</summary>
     private Button _btnClear;
