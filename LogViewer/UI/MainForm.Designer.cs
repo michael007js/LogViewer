@@ -344,11 +344,11 @@ public partial class MainForm
         _lstSystemLogs.Dock = System.Windows.Forms.DockStyle.Fill;
         _lstSystemLogs.FullRowSelect = true;
         _lstSystemLogs.GridLines = true;
-        _lstSystemLogs.Location = new System.Drawing.Point(0, 58);
+        _lstSystemLogs.Location = new System.Drawing.Point(0, 56);
         _lstSystemLogs.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _lstSystemLogs.MultiSelect = false;
         _lstSystemLogs.Name = "_lstSystemLogs";
-        _lstSystemLogs.Size = new System.Drawing.Size(600, 295);
+        _lstSystemLogs.Size = new System.Drawing.Size(600, 297);
         _lstSystemLogs.TabIndex = 0;
         _lstSystemLogs.UseCompatibleStateImageBehavior = false;
         _lstSystemLogs.View = System.Windows.Forms.View.Details;
@@ -364,7 +364,7 @@ public partial class MainForm
         _systemActionBar.Location = new System.Drawing.Point(0, 28);
         _systemActionBar.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _systemActionBar.Name = "_systemActionBar";
-        _systemActionBar.Size = new System.Drawing.Size(600, 30);
+        _systemActionBar.Size = new System.Drawing.Size(600, 28);
         _systemActionBar.TabIndex = 2;
         // 
         // _lblSystemBacklog
@@ -372,7 +372,7 @@ public partial class MainForm
         _lblSystemBacklog.Dock = System.Windows.Forms.DockStyle.Right;
         _lblSystemBacklog.Location = new System.Drawing.Point(430, 0);
         _lblSystemBacklog.Name = "_lblSystemBacklog";
-        _lblSystemBacklog.Size = new System.Drawing.Size(170, 30);
+        _lblSystemBacklog.Size = new System.Drawing.Size(170, 28);
         _lblSystemBacklog.TabIndex = 3;
         _lblSystemBacklog.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
         _lblSystemBacklog.Visible = false;
@@ -386,7 +386,7 @@ public partial class MainForm
         _btnSystemPauseResume.Location = new System.Drawing.Point(236, 0);
         _btnSystemPauseResume.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _btnSystemPauseResume.Name = "_btnSystemPauseResume";
-        _btnSystemPauseResume.Size = new System.Drawing.Size(61, 30);
+        _btnSystemPauseResume.Size = new System.Drawing.Size(61, 28);
         _btnSystemPauseResume.TabIndex = 2;
         _btnSystemPauseResume.Text = "Pause";
         // 
@@ -399,7 +399,7 @@ public partial class MainForm
         _btnSystemScrollToBottom.Location = new System.Drawing.Point(109, 0);
         _btnSystemScrollToBottom.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _btnSystemScrollToBottom.Name = "_btnSystemScrollToBottom";
-        _btnSystemScrollToBottom.Size = new System.Drawing.Size(127, 30);
+        _btnSystemScrollToBottom.Size = new System.Drawing.Size(127, 28);
         _btnSystemScrollToBottom.TabIndex = 1;
         _btnSystemScrollToBottom.Text = "⬇ Scroll to Bottom";
         // 
@@ -412,7 +412,7 @@ public partial class MainForm
         _btnSystemScrollToTop.Location = new System.Drawing.Point(0, 0);
         _btnSystemScrollToTop.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _btnSystemScrollToTop.Name = "_btnSystemScrollToTop";
-        _btnSystemScrollToTop.Size = new System.Drawing.Size(109, 30);
+        _btnSystemScrollToTop.Size = new System.Drawing.Size(109, 28);
         _btnSystemScrollToTop.TabIndex = 0;
         _btnSystemScrollToTop.Text = "↑ Scroll to Top";
         // 
