@@ -346,19 +346,19 @@ public partial class MainForm
     /// <returns>匹配返回 true，否则 false。</returns>
     private bool MatchesNetworkFilter(LogEntry entry)
     {
-        var kw = _txtNetworkKeyword.Text.Trim();
+        var kw = _networkFilterPanel.Keyword;
         if (!string.IsNullOrEmpty(kw))
         {
-            if (_networkRegexMode && _networkCachedRegex != null)
+            if (_networkFilterPanel.RegexMode && _networkFilterPanel.CachedRegex != null)
             {
-                if (!(_networkCachedRegex.IsMatch(entry.Url ?? "") ||
-                      _networkCachedRegex.IsMatch(entry.Method ?? "") ||
-                      _networkCachedRegex.IsMatch(entry.Code.ToString()) ||
-                      _networkCachedRegex.IsMatch(entry.Duration.ToString()) ||
-                      _networkCachedRegex.IsMatch(entry.Headers ?? "") ||
-                      _networkCachedRegex.IsMatch(entry.Send ?? "") ||
-                      _networkCachedRegex.IsMatch(entry.Content ?? "") ||
-                      _networkCachedRegex.IsMatch(entry.Message ?? "")))
+                if (!(_networkFilterPanel.CachedRegex.IsMatch(entry.Url ?? "") ||
+                      _networkFilterPanel.CachedRegex.IsMatch(entry.Method ?? "") ||
+                      _networkFilterPanel.CachedRegex.IsMatch(entry.Code.ToString()) ||
+                      _networkFilterPanel.CachedRegex.IsMatch(entry.Duration.ToString()) ||
+                      _networkFilterPanel.CachedRegex.IsMatch(entry.Headers ?? "") ||
+                      _networkFilterPanel.CachedRegex.IsMatch(entry.Send ?? "") ||
+                      _networkFilterPanel.CachedRegex.IsMatch(entry.Content ?? "") ||
+                      _networkFilterPanel.CachedRegex.IsMatch(entry.Message ?? "")))
                     return false;
             }
             else
@@ -375,12 +375,12 @@ public partial class MainForm
             }
         }
 
-        var method = _cmbMethod.SelectedItem as string;
+        var method = _networkFilterPanel.Filter1Value;
         if (method != Language.All && !string.IsNullOrEmpty(method) &&
             !string.Equals(entry.Method, method, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        var statusFilter = _cmbStatusCode.SelectedItem as string;
+        var statusFilter = _networkFilterPanel.Filter2Value;
         if (statusFilter != Language.All && !string.IsNullOrEmpty(statusFilter))
         {
             if (statusFilter == "0" && entry.Code != 0) return false;

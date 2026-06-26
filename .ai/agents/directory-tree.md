@@ -52,7 +52,7 @@ LogViewer/                            ← 项目根目录
 │   ├── DeviceConnection.cs                 ← 单设备连接+协议解析+ArrayPool+异步Pong回复+LastActiveTime
 │   └── LogcatReader.cs                     ← adb logcat进程流式读取+正则解析threadtime格式
 │
-├── UI/                                     ← 界面层（19 .cs + 1 .resx）
+├── UI/                                     ← 界面层（21 .cs + 1 .resx）
 │   ├── MainForm.cs                         ← 主窗口共用字段/构造函数/跨功能方法/服务器事件/窗口生命周期
 │   ├── MainForm.NetworkLogs.cs             ← 网络日志配置/过滤/显示/右键菜单/导出（partial class）
 │   ├── MainForm.Preview.cs                 ← JSON预览面板初始化/视图切换/详情显示（partial class）
@@ -61,6 +61,8 @@ LogViewer/                            ← 项目根目录
 │   ├── MainForm.Designer.cs                ← 主窗口设计器控件树（支持设计器拖动）
 │   ├── BufferedListView.cs                 ← ListView 双缓冲/精确顶部索引/滚动恢复辅助
 │   ├── ClipboardTextHelper.cs              ← 剪贴板安全写入辅助（统一规避 null/empty 复制崩溃）
+│   ├── FilterPanel.cs                      ← 过滤面板用户组件（Keyword+Regex+双ComboBox，回调事件驱动）
+│   ├── FilterPanel.Designer.cs             ← 过滤面板设计器控件树（TableLayoutPanel单行布局）
 │   ├── EmbeddedWindowHost.cs               ← scrcpy内嵌窗口宿主（Win32 API嵌入外部进程窗口）
 │   ├── JsonDetailForm.cs                   ← JSON详情窗口手写逻辑（加载/切换/搜索）
 │   ├── JsonDetailForm.Designer.cs          ← JSON详情窗口设计器控件树（左右分栏+工具栏）

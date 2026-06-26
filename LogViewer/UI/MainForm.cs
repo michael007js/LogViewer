@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 using LogViewer.Models;
 using LogViewer.Network;
 using LogViewer.Static;
@@ -79,29 +78,11 @@ public partial class MainForm : Form
     /// <summary>系统日志 Tab 页。</summary>
     private TabPage _tabSystem;
 
-    private System.Windows.Forms.Panel _pnlNetworkFilter;
+    private FilterPanel _networkFilterPanel;
 
-    private System.Windows.Forms.TextBox _txtNetworkKeyword;
+    private FilterPanel _systemFilterPanel;
 
-    private System.Windows.Forms.Button _btnNetworkRegex;
-
-    /// <summary>网络日志正则模式是否启用。</summary>
-    private bool _networkRegexMode;
-
-    /// <summary>系统日志正则模式是否启用。</summary>
-    private bool _systemRegexMode;
-
-    /// <summary>网络日志缓存的已编译正则，关键字或模式切换时更新。</summary>
-    private Regex? _networkCachedRegex;
-
-    /// <summary>系统日志缓存的已编译正则，关键字或模式切换时更新。</summary>
-    private Regex? _systemCachedRegex;
-
-    /// <summary>HTTP 方法过滤下拉框（ALL/GET/POST/PUT/DELETE/PATCH）。</summary>
-    private ComboBox _cmbMethod;
-
-    /// <summary>HTTP 状态码范围过滤下拉框（ALL/2xx/3xx/4xx/5xx/0）。</summary>
-    private ComboBox _cmbStatusCode;
+    private System.Windows.Forms.Panel _systemActionBar;
 
     private System.Windows.Forms.Button _btnScrollToTop;
 
@@ -113,20 +94,7 @@ public partial class MainForm : Form
 
     private System.Windows.Forms.ListView _lstSystemLogs;
 
-    private System.Windows.Forms.Panel _pnlSystemFilter;
 
-    private System.Windows.Forms.Panel _systemActionBar;
-
-    /// <summary>系统日志关键字搜索输入框。</summary>
-    private TextBox _txtSystemKeyword;
-
-    private System.Windows.Forms.Button _btnSystemRegex;
-
-    /// <summary>系统日志级别过滤下拉框（ALL/V/D/I/W/E/F）。</summary>
-    private ComboBox _cmbLogLevel;
-
-    /// <summary>系统日志 Tag 过滤下拉框，选项动态刷新。</summary>
-    private ComboBox _cmbLogTag;
 
     private System.Windows.Forms.Button _btnSystemScrollToTop;
 
@@ -266,10 +234,8 @@ public partial class MainForm : Form
         _btnSystemScrollToTop.Text = Language.ScrollToTop;
         _btnSystemScrollToBottom.Text = Language.ScrollToBottom;
         _btnSystemPauseResume.Text = Language.Pause;
-        _txtNetworkKeyword.PlaceholderText = Language.KeywordPlaceholder;
-        _btnNetworkRegex.Text = Language.RegexMode;
-        _txtSystemKeyword.PlaceholderText = Language.KeywordPlaceholder;
-        _btnSystemRegex.Text = Language.RegexMode;
+        _networkFilterPanel.ApplyLanguage(Language.KeywordPlaceholder, Language.RegexMode);
+        _systemFilterPanel.ApplyLanguage(Language.KeywordPlaceholder, Language.RegexMode);
         _tabHeaders.Text = Language.Headers;
         _tabRequestBody.Text = Language.RequestBody;
         _tabResponseBody.Text = Language.ResponseBody;
@@ -287,14 +253,10 @@ public partial class MainForm : Form
         _lblAdbStatus.Text = Language.AdbNotDetected;
         _lblLogcatStatus.Text = Language.LogcatCount(0);
 
-        _cmbMethod.Items.Clear();
-        _cmbMethod.Items.AddRange([Language.All, "GET", "POST", "PUT", "DELETE", "PATCH"]);
-        _cmbStatusCode.Items.Clear();
-        _cmbStatusCode.Items.AddRange([Language.All, "2xx", "3xx", "4xx", "5xx", "0"]);
-        _cmbLogLevel.Items.Clear();
-        _cmbLogLevel.Items.AddRange([Language.All, "V", "D", "I", "W", "E", "F"]);
-        _cmbLogTag.Items.Clear();
-        _cmbLogTag.Items.Add(Language.All);
+        _networkFilterPanel.SetFilter1Items([Language.All, "GET", "POST", "PUT", "DELETE", "PATCH"]);
+        _networkFilterPanel.SetFilter2Items([Language.All, "2xx", "3xx", "4xx", "5xx", "0"]);
+        _systemFilterPanel.SetFilter1Items([Language.All, "V", "D", "I", "W", "E", "F"]);
+        _systemFilterPanel.SetFilter2Items([Language.All]);
     }
 
     /// <summary>
@@ -331,17 +293,9 @@ public partial class MainForm : Form
 
             UpdateLogCount();
         };
-        _txtNetworkKeyword.TextChanged += OnNetworkFilterChanged;
-        _txtNetworkKeyword.TextChanged += (s, e) => { if (_networkRegexMode) UpdateNetworkCachedRegex(); };
-        _btnNetworkRegex.Click += OnNetworkRegexClick;
-        _cmbMethod.SelectedIndexChanged += OnNetworkFilterChanged;
-        _cmbStatusCode.SelectedIndexChanged += OnNetworkFilterChanged;
-        _txtSystemKeyword.TextChanged += OnSystemFilterChanged;
-        _txtSystemKeyword.TextChanged += (s, e) => { if (_systemRegexMode) UpdateSystemCachedRegex(); };
-        _btnSystemRegex.Click += OnSystemRegexClick;
-        _cmbLogLevel.SelectedIndexChanged += OnSystemFilterChanged;
-        _cmbLogTag.SelectedIndexChanged += OnSystemFilterChanged;
-        _cmbLogTag.DropDown += (s, e) => RefreshSystemTagOptions();
+        _networkFilterPanel.FilterChanged += OnNetworkFilterChanged;
+        _systemFilterPanel.FilterChanged += OnSystemFilterChanged;
+        _systemFilterPanel.Filter2DropDown += (s, e) => RefreshSystemTagOptions();
         _btnScrollToTop.Click += (s, e) =>
         {
             _networkAutoScrollEnabled = false;
@@ -518,10 +472,10 @@ public partial class MainForm : Form
         _jsonHeadersView?.SetFont(font);
         _jsonRequestBodyView?.SetFont(font);
         _jsonResponseBodyView?.SetFont(font);
-        if (_cmbMethod.SelectedIndex < 0 && _cmbMethod.Items.Count > 0) _cmbMethod.SelectedIndex = 0;
-        if (_cmbStatusCode.SelectedIndex < 0 && _cmbStatusCode.Items.Count > 0) _cmbStatusCode.SelectedIndex = 0;
-        if (_cmbLogLevel.SelectedIndex < 0 && _cmbLogLevel.Items.Count > 0) _cmbLogLevel.SelectedIndex = 0;
-        if (_cmbLogTag.SelectedIndex < 0 && _cmbLogTag.Items.Count > 0) _cmbLogTag.SelectedIndex = 0;
+        _networkFilterPanel.NotifyRegexError = _settings.NotifyRegexError;
+        _systemFilterPanel.NotifyRegexError = _settings.NotifyRegexError;
+        _networkFilterPanel.EnsureDefaultSelections();
+        _systemFilterPanel.EnsureDefaultSelections();
         UpdateLogCount();
         RefreshMirrorPanelState();
     }
@@ -1088,64 +1042,6 @@ public partial class MainForm : Form
     #region Filter
 
     // 网络日志/系统日志过滤逻辑见各自的 partial class 文件
-
-    private void OnNetworkRegexClick(object? sender, EventArgs e)
-    {
-        _networkRegexMode = !_networkRegexMode;
-        _btnNetworkRegex.BackColor = _networkRegexMode ? Color.LightSkyBlue : DefaultBackColor;
-        UpdateNetworkCachedRegex();
-        RefreshNetworkFilter();
-    }
-
-    private void OnSystemRegexClick(object? sender, EventArgs e)
-    {
-        _systemRegexMode = !_systemRegexMode;
-        _btnSystemRegex.BackColor = _systemRegexMode ? Color.LightSkyBlue : DefaultBackColor;
-        UpdateSystemCachedRegex();
-        RequestSystemSnapshotRefresh(200);
-    }
-
-    private void UpdateNetworkCachedRegex()
-    {
-        _networkCachedRegex = null;
-        if (!_networkRegexMode) return;
-        var kw = _txtNetworkKeyword.Text.Trim();
-        if (string.IsNullOrEmpty(kw)) return;
-        try
-        {
-            _networkCachedRegex = new Regex(kw, RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(500));
-        }
-        catch (ArgumentException ex)
-        {
-            _networkRegexMode = false;
-            _btnNetworkRegex.BackColor = DefaultBackColor;
-            if (_settings.NotifyRegexError)
-            {
-                MessageBox.Show(ex.Message, Language.RegexErrorTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-        }
-    }
-
-    private void UpdateSystemCachedRegex()
-    {
-        _systemCachedRegex = null;
-        if (!_systemRegexMode) return;
-        var kw = _txtSystemKeyword.Text.Trim();
-        if (string.IsNullOrEmpty(kw)) return;
-        try
-        {
-            _systemCachedRegex = new Regex(kw, RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(500));
-        }
-        catch (ArgumentException ex)
-        {
-            _systemRegexMode = false;
-            _btnSystemRegex.BackColor = DefaultBackColor;
-            if (_settings.NotifyRegexError)
-            {
-                MessageBox.Show(ex.Message, Language.RegexErrorTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-        }
-    }
 
     #endregion
 

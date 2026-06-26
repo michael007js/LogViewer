@@ -257,7 +257,7 @@ public partial class MainForm
                     continue;
                 }
 
-                if (_systemCachedRegex != null && await _systemLogStore.MatchesKeywordAsync(record, query.Keyword, token, _systemCachedRegex).ConfigureAwait(false))
+                if (_systemFilterPanel.CachedRegex != null && await _systemLogStore.MatchesKeywordAsync(record, query.Keyword, token, _systemFilterPanel.CachedRegex).ConfigureAwait(false))
                 {
                     filtered.Add(record);
                 }
@@ -593,21 +593,10 @@ public partial class MainForm
             return;
         }
 
-        var selected = _cmbLogTag.SelectedItem as string ?? Language.All;
+        var selected = _systemFilterPanel.Filter2Value ?? Language.All;
         var ordered =
             _systemLogStore.GetOrderedTags(_systemLogSnapshot.DeviceId, _systemLogSnapshot.MaxSequenceInclusive);
-        if (_cmbLogTag.Items.Count == ordered.Length &&
-            ordered.SequenceEqual(_cmbLogTag.Items.Cast<string>(), StringComparer.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        _cmbLogTag.BeginUpdate();
-        _cmbLogTag.Items.Clear();
-        _cmbLogTag.Items.AddRange(ordered);
-        _cmbLogTag.SelectedItem =
-            ordered.Contains(selected, StringComparer.OrdinalIgnoreCase) ? selected : Language.All;
-        _cmbLogTag.EndUpdate();
+        _systemFilterPanel.UpdateFilter2Items(ordered, selected);
     }
 
     /// <summary>
@@ -834,9 +823,9 @@ public partial class MainForm
     /// <returns>当前查询参数结构体。</returns>
     private SystemLogQuery CaptureSystemLogQuery()
     {
-        var keyword = _txtSystemKeyword.Text.Trim();
-        var level = NormalizeSystemFilterValue(_cmbLogLevel.SelectedItem as string);
-        var tag = NormalizeSystemFilterValue(_cmbLogTag.SelectedItem as string);
+        var keyword = _systemFilterPanel.Keyword;
+        var level = NormalizeSystemFilterValue(_systemFilterPanel.Filter1Value);
+        var tag = NormalizeSystemFilterValue(_systemFilterPanel.Filter2Value);
         var maxSequenceInclusive = _systemLogPaused ? _systemFreezeSequenceId : _systemLogStore.LastSequenceId;
 
         return new SystemLogQuery(
@@ -846,7 +835,7 @@ public partial class MainForm
             tag,
             maxSequenceInclusive,
             _systemLogStore.StructureVersion,
-            _systemRegexMode);
+            _systemFilterPanel.RegexMode);
     }
 
     /// <summary>
@@ -901,9 +890,9 @@ public partial class MainForm
 
         if (query.IsRegex)
         {
-            if (_systemCachedRegex == null) return true;
+            if (_systemFilterPanel.CachedRegex == null) return true;
             var combined = $"{entry.LevelShort} {entry.Tag} {entry.Message} {entry.ProcessId} {entry.ThreadId}";
-            return _systemCachedRegex.IsMatch(combined);
+            return _systemFilterPanel.CachedRegex.IsMatch(combined);
         }
 
         return (entry.LevelShort?.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) == true) ||
