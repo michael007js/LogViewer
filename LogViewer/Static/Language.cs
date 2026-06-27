@@ -30,6 +30,9 @@ public static class Language
     /// <summary>系统日志 Tab 页标题。</summary>
     public const string SystemLogs = "系统日志";
 
+    /// <summary>普通日志 Tab 页标题。</summary>
+    public const string NormalLogs = "普通日志";
+
     /// <summary>"置顶"滚动按钮文本。</summary>
     public const string ScrollToTop = "置顶";
 
@@ -186,6 +189,9 @@ public static class Language
     /// <summary>系统日志列表列标题：消息正文。</summary>
     public const string MessageColumn = "消息";
 
+    /// <summary>普通日志列表列标题：内容。</summary>
+    public const string NormalLogMessageColumn = "内容";
+
     /// <summary>右键菜单：复制请求 URL。</summary>
     public const string CopyUrl = "复制 URL";
 
@@ -203,6 +209,9 @@ public static class Language
 
     /// <summary>右键菜单：复制 URL 和响应体。</summary>
     public const string CopyUrlResponseBody = "复制 URL 和响应体";
+
+    /// <summary>右键菜单：复制日志内容。</summary>
+    public const string CopyNormalLogMessage = "复制日志内容";
 
     /// <summary>右键菜单：查看日志详情。</summary>
     public const string ViewDetail = "查看详情";

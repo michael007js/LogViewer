@@ -262,18 +262,19 @@ LogViewer/
 ├── Program.cs                          入口
 ├── LogViewer.csproj                    .NET 8 WinForms
 ├── Models/                             数据模型层（零UI依赖）
-│   ├── LogEntry.cs                     网络日志13字段模型+预览属性
+│   ├── LogEntry.cs                     网络/普通日志15字段模型+IsNormalLog/IsNetworkLog+预览属性
 │   ├── SystemLogEntry.cs               系统日志模型+Level着色
 │   ├── DeviceInfo.cs                   设备注册信息模型
 │   ├── AppSettings.cs                  设置+Properties.Settings持久化
 │   └── RingBuffer.cs                   O(1)高性能环形缓冲区
 ├── Network/                            通信层（零UI依赖）
 │   ├── LogServer.cs                    TCP Server，AcceptLoop多设备，20s超时检测
-│   ├── DeviceConnection.cs             单设备连接+协议解析+ArrayPool+异步Pong回复
+│   ├── DeviceConnection.cs             单设备连接+协议解析+按type分发网络/普通日志+ArrayPool+异步Pong回复
 │   └── LogcatReader.cs                 adb logcat进程流式读取+正则解析
 ├── UI/                                 界面层
 │   ├── MainForm.cs                     主窗口共用字段/构造函数/服务器事件/窗口生命周期
 │   ├── MainForm.NetworkLogs.cs         网络日志配置/过滤/显示/右键菜单/导出
+│   ├── MainForm.NormalLogs.cs          普通日志配置/过滤/显示/右键菜单/Level着色
 │   ├── MainForm.Preview.cs             JSON预览面板初始化/视图切换/详情显示
 │   ├── MainForm.Scrcpy.cs              scrcpy投屏生命周期/状态同步/截图
 │   ├── MainForm.SystemLogs.cs          系统日志快照/过滤/Pause/Resume

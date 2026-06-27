@@ -10,7 +10,7 @@ namespace LogViewer.Network;
 /// <summary>
 /// 单设备 TCP 连接管理器，负责与 Android 设备建立 TCP 连接并解析协议帧。
 /// 协议格式：[4字节大端int=长度][1字节消息类型][UTF-8 JSON字节]
-/// 支持设备注册（0x01）、网络日志（0x02）、心跳保活（0x03 Ping / 0x04 Pong）四种消息类型。
+/// 支持设备注册（0x01）、网络/普通日志（0x02，按 type 字段区分）、心跳保活（0x03 Ping / 0x04 Pong）四种消息类型。
 /// </summary>
 public class DeviceConnection
 {
@@ -37,8 +37,11 @@ public class DeviceConnection
     /// <summary>设备注册事件，当收到 0x01 消息时触发。</summary>
     public event EventHandler<DeviceInfo>? Registered;
 
-    /// <summary>日志接收事件，当收到 0x02 消息时触发。</summary>
+    /// <summary>日志接收事件，当收到 0x02 消息且 type 为网络日志时触发。</summary>
     public event EventHandler<LogEntry>? LogReceived;
+
+    /// <summary>普通日志接收事件，当收到 0x02 消息且 type 为普通日志时触发。</summary>
+    public event EventHandler<LogEntry>? NormalLogReceived;
 
     /// <summary>连接断开事件，当 TCP 连接关闭或异常时触发。</summary>
     public event EventHandler? Disconnected;
@@ -109,8 +112,15 @@ public class DeviceConnection
                         var entry = JsonSerializer.Deserialize<LogEntry>(jsonStr, JsonOptions);
                         if (entry != null)
                         {
-                            entry.Content = TryDecodeGzipJsonContent(entry.Content);
-                            LogReceived?.Invoke(this, entry);
+                            if (entry.IsNormalLog)
+                            {
+                                NormalLogReceived?.Invoke(this, entry);
+                            }
+                            else
+                            {
+                                entry.Content = TryDecodeGzipJsonContent(entry.Content);
+                                LogReceived?.Invoke(this, entry);
+                            }
                         }
 
                         break;

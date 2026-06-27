@@ -41,20 +41,21 @@ LogViewer/                            ← 项目根目录
 │       └── domain/                         ← 领域扩展技能
 │
 ├── Models/                                 ← 数据模型层（5 .cs，零UI依赖）
-│   ├── LogEntry.cs                         ← 网络日志13字段模型+预览属性（Url/Method/Code等）
+│   ├── LogEntry.cs                         ← 网络/普通日志15字段模型（原13+Type+Level）+IsNormalLog/IsNetworkLog+预览属性
 │   ├── SystemLogEntry.cs                   ← 系统日志模型+Level着色+SequenceId/SourceDeviceId
 │   ├── DeviceInfo.cs                       ← 设备注册信息模型（deviceId/deviceModel/androidVersion等）
-│   ├── AppSettings.cs                      ← 设置模型+Properties.Settings持久化（ADB/scrcpy/左栏宽度）
+│   ├── AppSettings.cs                      ← 设置模型+Properties.Settings持久化（ADB/scrcpy/左栏宽度/普通日志容量）
 │   └── RingBuffer.cs                       ← O(1)高性能环形缓冲区（非线程安全，UI线程专用）
 │
 ├── Network/                                ← 通信层（3 .cs，零UI依赖）
 │   ├── LogServer.cs                        ← TCP Server，AcceptLoop多设备，20s超时检测，REPLACE竞态防护
-│   ├── DeviceConnection.cs                 ← 单设备连接+协议解析+ArrayPool+异步Pong回复+LastActiveTime
+│   ├── DeviceConnection.cs                 ← 单设备连接+协议解析+按type分发网络/普通日志+ArrayPool+异步Pong回复+LastActiveTime
 │   └── LogcatReader.cs                     ← adb logcat进程流式读取+正则解析threadtime格式
 │
-├── UI/                                     ← 界面层（21 .cs + 1 .resx）
+├── UI/                                     ← 界面层（22 .cs + 1 .resx）
 │   ├── MainForm.cs                         ← 主窗口共用字段/构造函数/跨功能方法/服务器事件/窗口生命周期
 │   ├── MainForm.NetworkLogs.cs             ← 网络日志配置/过滤/显示/右键菜单/导出（partial class）
+│   ├── MainForm.NormalLogs.cs              ← 普通日志配置/过滤/显示/右键菜单/Level着色（partial class）
 │   ├── MainForm.Preview.cs                 ← JSON预览面板初始化/视图切换/详情显示（partial class）
 │   ├── MainForm.Scrcpy.cs                  ← scrcpy投屏生命周期/状态同步/截图（partial class）
 │   ├── MainForm.SystemLogs.cs              ← System Logs 快照/过滤/Pause/Resume 运行时逻辑

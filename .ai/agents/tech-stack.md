@@ -47,7 +47,7 @@
 | 类型码 | 名称 | 方向 | 数据结构 |
 |--------|------|------|----------|
 | `0x01` | 设备注册 | Android→PC | `DeviceRegisterInfo` |
-| `0x02` | 网络日志 | Android→PC | `LogData` |
+| `0x02` | 网络日志/普通日志 | Android→PC | `LogData`（type=1网络日志，type=2普通日志，type缺失/0视为网络日志） |
 | `0x03` | Ping | Android→PC | 空 JSON `{}` |
 | `0x04` | Pong | PC→Android | 空 JSON `{}` |
 
@@ -81,7 +81,7 @@ adb -s {serial} logcat -v threadtime {filter}
 
 | 名称 | 路径 | 说明 |
 |------|------|------|
-| LogEntry | `Models/LogEntry.cs` | 网络日志 13 字段模型 + 预览属性 |
+| LogEntry | `Models/LogEntry.cs` | 网络/普通日志 15 字段模型（原13+Type+Level）+ IsNormalLog/IsNetworkLog 便捷属性 + 预览属性 |
 | SystemLogEntry | `Models/SystemLogEntry.cs` | 系统日志模型 + Level→Color 着色 |
 | DeviceInfo | `Models/DeviceInfo.cs` | 设备注册信息模型 |
 | AppSettings | `Models/AppSettings.cs` | 设置读写 + Properties.Settings 持久化 |

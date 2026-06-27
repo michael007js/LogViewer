@@ -40,6 +40,9 @@ public class LogServer
     /// <summary>日志接收事件，当设备发送网络日志时触发，参数为 (deviceId, LogEntry)。</summary>
     public event EventHandler<(string deviceId, LogEntry entry)>? LogReceived;
 
+    /// <summary>普通日志接收事件，当设备发送普通日志时触发，参数为 (deviceId, LogEntry)。</summary>
+    public event EventHandler<(string deviceId, LogEntry entry)>? NormalLogReceived;
+
     /// <summary>当前所有活跃设备连接的只读字典。</summary>
     public IReadOnlyDictionary<string, DeviceConnection> Connections => _connections;
 
@@ -101,6 +104,7 @@ public class LogServer
                 var connection = new DeviceConnection(tcpClient, ct);
                 connection.Registered += OnDeviceRegistered;
                 connection.LogReceived += OnLogReceived;
+                connection.NormalLogReceived += OnNormalLogReceived;
                 connection.Disconnected += OnDeviceDisconnected;
 
                 _ = connection.StartReceivingAsync();
@@ -167,6 +171,13 @@ public class LogServer
         LogReceived?.Invoke(this, (conn.DeviceId ?? "", entry));
     }
 
+    private void OnNormalLogReceived(object? sender, LogEntry entry)
+    {
+        if (sender is not DeviceConnection conn) return;
+        entry.SourceDeviceId = conn.DeviceId;
+        NormalLogReceived?.Invoke(this, (conn.DeviceId ?? "", entry));
+    }
+
     /// <summary>
     /// 处理设备断开事件，从连接字典移除并触发 DeviceDisconnected。
     /// 通过引用比较 (existing == conn) 防止 REPLACE 竞态：
@@ -187,6 +198,7 @@ public class LogServer
 
         conn.Registered -= OnDeviceRegistered;
         conn.LogReceived -= OnLogReceived;
+        conn.NormalLogReceived -= OnNormalLogReceived;
         conn.Disconnected -= OnDeviceDisconnected;
     }
 

@@ -229,6 +229,10 @@ rtk git diff                                                # Git 差异
 | 左侧设备区已升级为 scrcpy 宿主 | DevicePanel 不再只是设备下拉框；设备选择与日志 scope 共用一个选择器，选择 `All` 时左侧只显示占位提示，不启动镜像 |
 | scrcpy 自动部署优先 | 保持项目零 NuGet 依赖；启动时自动从官方 GitHub Releases 部署到 LocalAppData，本地路径输入只作为高级覆盖/修复兜底 |
 | 切换设备前先停旧 scrcpy | 内嵌镜像与当前设备强绑定；切换设备必须先停旧实例，再起新实例，避免窗口错绑和孤儿进程 |
+| Normal Logs 复用 0x02 消息类型+type字段区分 | 不新增协议消息类型，通过 LogEntry.Type（type=1网络/type=2普通）在 DeviceConnection switch 0x02 内分发。旧版不发 type 字段时 Type=0 走 LogReceived（向后兼容）。type 扩展到 3~4 种尚可接受，超过 5 种考虑新增消息类型 |
+| Normal Logs 独立 RingBuffer 双写 | `_deviceNormalLogs[id]` + `_allNormalLogs` 必须同时写入（和 Network Logs 双写模式一致）。OnDeleteDevice 不重建 `_allNormalLogs`（RingBuffer 追加写入无法安全删除中间条目） |
+| Normal Logs 高频防抖必须和 Network 一致 | ScheduleNormalRefresh 使用 Task.Run + Task.Delay 防抖（80ms），不使用 Timer。对照 ScheduleNetworkRefresh |
+| Normal Logs ForeColor 着色 | 使用 ForeColor（和 System Logs 一致），不用 BackColor 避免深浅色主题对比度问题 |
 
 ---
 

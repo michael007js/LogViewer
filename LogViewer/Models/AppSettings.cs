@@ -18,6 +18,12 @@ public class AppSettings
     /// <summary>所有设备最大缓存日志条目总数。</summary>
     public int MaxLogEntriesAll { get; set; } = 10000;
 
+    /// <summary>普通日志每台设备最大缓存条目数。</summary>
+    public int MaxNormalLogEntriesPerDevice { get; set; } = 10000;
+
+    /// <summary>普通日志所有设备最大缓存条目总数。</summary>
+    public int MaxNormalLogEntries { get; set; } = 20000;
+
     /// <summary>系统日志（logcat）最大缓存条目数。</summary>
     public int MaxSystemLogEntries { get; set; } = 10000;
 
@@ -63,6 +69,8 @@ public class AppSettings
         s.ServerPort = ServerPort;
         s.MaxLogEntriesPerDevice = MaxLogEntriesPerDevice;
         s.MaxLogEntriesAll = MaxLogEntriesAll;
+        s.MaxNormalLogEntriesPerDevice = MaxNormalLogEntriesPerDevice;
+        s.MaxNormalLogEntries = MaxNormalLogEntries;
         s.MaxSystemLogEntries = MaxSystemLogEntries;
         s.AndroidQueueSize = AndroidQueueSize;
         s.MaxBodySizeKb = MaxBodySizeKb;
@@ -89,6 +97,8 @@ public class AppSettings
             ServerPort = s.ServerPort,
             MaxLogEntriesPerDevice = s.MaxLogEntriesPerDevice,
             MaxLogEntriesAll = s.MaxLogEntriesAll,
+            MaxNormalLogEntriesPerDevice = s.MaxNormalLogEntriesPerDevice,
+            MaxNormalLogEntries = s.MaxNormalLogEntries,
             MaxSystemLogEntries = s.MaxSystemLogEntries,
             AndroidQueueSize = s.AndroidQueueSize,
             MaxBodySizeKb = s.MaxBodySizeKb,

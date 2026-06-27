@@ -438,14 +438,26 @@ public partial class MainForm
     /// </summary>
     private void OnExportJson(object? sender, EventArgs e)
     {
-        using var dlg = new SaveFileDialog { Filter = "JSON|*.json", FileName = "network_logs.json" };
-        if (dlg.ShowDialog() != DialogResult.OK) return;
+        if (_showingNormalLog)
+        {
+            using var dlg = new SaveFileDialog { Filter = "JSON|*.json", FileName = "normal_logs.json" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            var buf = GetCurrentNormalLogBuffer();
+            var entries = new List<LogEntry>();
+            for (int i = 0; i < buf.Count; i++) entries.Add(buf.Get(i));
+            var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(dlg.FileName, json);
+            return;
+        }
 
-        var buf = GetCurrentLogBuffer();
-        var entries = new List<LogEntry>();
-        for (int i = 0; i < buf.Count; i++) entries.Add(buf.Get(i));
-        var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(dlg.FileName, json);
+        using var dlg2 = new SaveFileDialog { Filter = "JSON|*.json", FileName = "network_logs.json" };
+        if (dlg2.ShowDialog() != DialogResult.OK) return;
+
+        var buf2 = GetCurrentLogBuffer();
+        var entries2 = new List<LogEntry>();
+        for (int i = 0; i < buf2.Count; i++) entries2.Add(buf2.Get(i));
+        var json2 = JsonSerializer.Serialize(entries2, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(dlg2.FileName, json2);
     }
 
     /// <summary>
@@ -453,23 +465,38 @@ public partial class MainForm
     /// </summary>
     private void OnExportTxt(object? sender, EventArgs e)
     {
-        using var dlg = new SaveFileDialog { Filter = "Text|*.txt", FileName = "network_logs.txt" };
-        if (dlg.ShowDialog() != DialogResult.OK) return;
-
-        var buf = GetCurrentLogBuffer();
-        using var writer = new StreamWriter(dlg.FileName);
-        for (int i = 0; i < buf.Count; i++)
+        if (_showingNormalLog)
         {
-            var entry = buf.Get(i);
-            writer.WriteLine($"--- Log #{i + 1} ---");
-            writer.WriteLine($"Method: {entry.Method}");
-            writer.WriteLine($"URL: {entry.Url}");
-            writer.WriteLine($"Code: {entry.Code}");
-            writer.WriteLine($"Duration: {entry.Duration}ms");
-            writer.WriteLine($"Successful: {entry.IsSuccessStatusCode}");
-            if (!string.IsNullOrEmpty(entry.Send)) writer.WriteLine($"Request Body: {entry.Send}");
-            if (!string.IsNullOrEmpty(entry.Content)) writer.WriteLine($"Response: {entry.Content}");
-            writer.WriteLine();
+            using var dlg = new SaveFileDialog { Filter = "Text|*.txt", FileName = "normal_logs.txt" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            var buf = GetCurrentNormalLogBuffer();
+            using var writer = new StreamWriter(dlg.FileName);
+            for (int i = 0; i < buf.Count; i++)
+            {
+                var entry = buf.Get(i);
+                var timeStr = entry.SendTime > 0 ? entry.SendTimeDt.ToString("HH:mm:ss.fff") : "";
+                writer.WriteLine($"[{timeStr}] [{LevelToDisplayText(entry.Level)}] [{entry.Method}] {entry.Message}");
+            }
+            return;
+        }
+
+        using var dlg2 = new SaveFileDialog { Filter = "Text|*.txt", FileName = "network_logs.txt" };
+        if (dlg2.ShowDialog() != DialogResult.OK) return;
+
+        var buf2 = GetCurrentLogBuffer();
+        using var writer2 = new StreamWriter(dlg2.FileName);
+        for (int i = 0; i < buf2.Count; i++)
+        {
+            var entry = buf2.Get(i);
+            writer2.WriteLine($"--- Log #{i + 1} ---");
+            writer2.WriteLine($"Method: {entry.Method}");
+            writer2.WriteLine($"URL: {entry.Url}");
+            writer2.WriteLine($"Code: {entry.Code}");
+            writer2.WriteLine($"Duration: {entry.Duration}ms");
+            writer2.WriteLine($"Successful: {entry.IsSuccessStatusCode}");
+            if (!string.IsNullOrEmpty(entry.Send)) writer2.WriteLine($"Request Body: {entry.Send}");
+            if (!string.IsNullOrEmpty(entry.Content)) writer2.WriteLine($"Response: {entry.Content}");
+            writer2.WriteLine();
         }
     }
 }

@@ -25,6 +25,16 @@ namespace LogViewer.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("10000")]
+        public int MaxNormalLogEntriesPerDevice { get { return ((int)(this["MaxNormalLogEntriesPerDevice"])); } set { this["MaxNormalLogEntriesPerDevice"] = value; } }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("20000")]
+        public int MaxNormalLogEntries { get { return ((int)(this["MaxNormalLogEntries"])); } set { this["MaxNormalLogEntries"] = value; } }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("10000")]
         public int MaxSystemLogEntries { get { return ((int)(this["MaxSystemLogEntries"])); } set { this["MaxSystemLogEntries"] = value; } }
 
         [global::System.Configuration.UserScopedSettingAttribute()]

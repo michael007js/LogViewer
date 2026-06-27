@@ -40,6 +40,12 @@ public partial class MainForm : Form
     /// <summary>所有设备合并的网络日志缓冲区。</summary>
     private readonly RingBuffer<LogEntry> _allLogs;
 
+    /// <summary>每台设备的普通日志缓冲区，key 为 deviceId。</summary>
+    private readonly Dictionary<string, RingBuffer<LogEntry>> _deviceNormalLogs = new();
+
+    /// <summary>所有设备合并的普通日志缓冲区。</summary>
+    private readonly RingBuffer<LogEntry> _allNormalLogs;
+
     /// <summary>ADB 序列号到 deviceId 的映射表。</summary>
     private readonly Dictionary<string, string> _adbSerialToDeviceId = new();
 
@@ -58,8 +64,14 @@ public partial class MainForm : Form
     /// <summary>当前选中的设备 deviceId。</summary>
     private string? _currentDeviceId;
 
-    /// <summary>当前是否显示系统日志（true=系统日志，false=网络日志）。</summary>
+    /// <summary>当前是否显示系统日志（true=系统日志，false=网络/普通日志）。</summary>
     private bool _showingSystemLog;
+
+    /// <summary>当前是否显示普通日志。</summary>
+    private bool _showingNormalLog;
+
+    /// <summary>普通日志自动滚动是否启用。</summary>
+    private bool _normalAutoScrollEnabled = true;
 
     /// <summary>系统日志自动滚动是否启用。</summary>
     private bool _systemAutoScrollEnabled = true;
@@ -77,6 +89,23 @@ public partial class MainForm : Form
 
     /// <summary>系统日志 Tab 页。</summary>
     private TabPage _tabSystem;
+
+    /// <summary>普通日志 Tab 页。</summary>
+    private TabPage _tabNormal;
+
+    private Panel _normalTabContainer;
+
+    private ListView _lstNormalLogs;
+
+    private Panel _normalActionBar;
+
+    private FilterPanel _normalFilterPanel;
+
+    private Button _btnNormalScrollToTop;
+
+    private Button _btnNormalScrollToBottom;
+
+    private Label _lblNormalLogCount;
 
     private FilterPanel _networkFilterPanel;
 
@@ -187,6 +216,7 @@ public partial class MainForm : Form
     {
         _settings = AppSettings.Load();
         _allLogs = new RingBuffer<LogEntry>(_settings.MaxLogEntriesAll);
+        _allNormalLogs = new RingBuffer<LogEntry>(_settings.MaxNormalLogEntries);
         InitializeComponent();
         Icon = new Icon(Path.Combine(AppContext.BaseDirectory, "icon.ico"));
         ApplyLanguage();
@@ -228,13 +258,17 @@ public partial class MainForm : Form
         _settingsMenuItem.Text = Language.SettingsMenu;
         _btnAdbReverse.Text = Language.AdbReverse;
         _tabNetwork.Text = Language.NetworkLogs;
+        _tabNormal.Text = Language.NormalLogs;
         _tabSystem.Text = Language.SystemLogs;
         _btnScrollToTop.Text = Language.ScrollToTop;
         _btnScrollToBottom.Text = Language.ScrollToBottom;
+        _btnNormalScrollToTop.Text = Language.ScrollToTop;
+        _btnNormalScrollToBottom.Text = Language.ScrollToBottom;
         _btnSystemScrollToTop.Text = Language.ScrollToTop;
         _btnSystemScrollToBottom.Text = Language.ScrollToBottom;
         _btnSystemPauseResume.Text = Language.Pause;
         _networkFilterPanel.ApplyLanguage(Language.KeywordPlaceholder, Language.RegexMode);
+        _normalFilterPanel.ApplyLanguage(Language.KeywordPlaceholder, Language.RegexMode);
         _systemFilterPanel.ApplyLanguage(Language.KeywordPlaceholder, Language.RegexMode);
         _tabHeaders.Text = Language.Headers;
         _tabRequestBody.Text = Language.RequestBody;
@@ -255,6 +289,8 @@ public partial class MainForm : Form
 
         _networkFilterPanel.SetFilter1Items([Language.All, "GET", "POST", "PUT", "DELETE", "PATCH"]);
         _networkFilterPanel.SetFilter2Items([Language.All, "2xx", "3xx", "4xx", "5xx", "0"]);
+        _normalFilterPanel.SetFilter1Items([Language.All, "V", "D", "I", "W", "E", "F"]);
+        _normalFilterPanel.SetFilter2Items([Language.All]);
         _systemFilterPanel.SetFilter1Items([Language.All, "V", "D", "I", "W", "E", "F"]);
         _systemFilterPanel.SetFilter2Items([Language.All]);
     }
@@ -269,6 +305,7 @@ public partial class MainForm : Form
         _server.DeviceConnected += OnDeviceConnected;
         _server.DeviceDisconnected += OnDeviceDisconnected;
         _server.LogReceived += OnLogReceived;
+        _server.NormalLogReceived += OnNormalLogReceived;
         _btnAdbReverse.DropDownOpening += OnAdbReverseOpening;
         _devicePanel.DeviceSelected += OnDeviceSelected;
         _devicePanel.RefreshAdbRequested += OnRefreshAdbDevices;
@@ -281,10 +318,15 @@ public partial class MainForm : Form
         _devicePanel.MirrorLayoutChanged += OnMirrorLayoutChanged;
         _tabLogType.SelectedIndexChanged += (s, e) =>
         {
-            _showingSystemLog = _tabLogType.SelectedIndex == 1;
+            _showingNormalLog = _tabLogType.SelectedTab == _tabNormal;
+            _showingSystemLog = _tabLogType.SelectedTab == _tabSystem;
             if (_showingSystemLog)
             {
                 RefreshSystemLogList(preferBackground: true);
+            }
+            else if (_showingNormalLog)
+            {
+                RefreshNormalFilter();
             }
             else
             {
@@ -294,6 +336,7 @@ public partial class MainForm : Form
             UpdateLogCount();
         };
         _networkFilterPanel.FilterChanged += OnNetworkFilterChanged;
+        _normalFilterPanel.FilterChanged += OnNormalFilterChanged;
         _systemFilterPanel.FilterChanged += OnSystemFilterChanged;
         _systemFilterPanel.Filter2DropDown += (s, e) => RefreshSystemTagOptions();
         _btnScrollToTop.Click += (s, e) =>
@@ -320,10 +363,24 @@ public partial class MainForm : Form
             ScrollToBottom(_lstSystemLogs);
             UpdateLogCount();
         };
+        _btnNormalScrollToTop.Click += (s, e) =>
+        {
+            _normalAutoScrollEnabled = false;
+            ScrollToTop(_lstNormalLogs);
+            UpdateLogCount();
+        };
+        _btnNormalScrollToBottom.Click += (s, e) =>
+        {
+            _normalAutoScrollEnabled = true;
+            ScrollToBottom(_lstNormalLogs);
+            UpdateLogCount();
+        };
         _btnSystemPauseResume.Click += OnSystemPauseResumeClick;
         ConfigureLogLists();
+        ConfigureNormalLogList();
         ConfigureSystemLogList();
         RefreshNetworkFilter();
+        RefreshNormalFilter();
         RefreshSystemLogList();
         UpdateSystemLogUiState();
         _lstNetworkLogs.SelectedIndexChanged += OnNetworkLogSelected;
@@ -333,6 +390,14 @@ public partial class MainForm : Form
         _lstNetworkLogs.ContextMenuStrip = CreateNetworkLogMenu();
         _lstSystemLogs.MouseWheel += OnSystemLogsMouseWheel;
         _lstSystemLogs.ContextMenuStrip = CreateSystemLogMenu();
+        _lstNormalLogs.KeyUp += (s, e) =>
+        {
+            if (e.Control && e.KeyCode == Keys.C)
+            {
+                var entry = GetSelectedNormalEntry();
+                ClipboardTextHelper.TrySetText(entry?.Message);
+            }
+        };
         _btnJsonSearch.Click += (s, e) => GetActiveJsonView()?.SearchAndHighlight(_txtJsonSearch.Text);
         _btnExpandAll.Click += (s, e) => GetActiveJsonView()?.ExpandAll();
         _btnCollapseAll.Click += (s, e) => GetActiveJsonView()?.CollapseAll();
@@ -468,13 +533,16 @@ public partial class MainForm : Form
     {
         var font = new Font("Consolas", _settings.FontSize);
         _lstNetworkLogs.Font = font;
+        _lstNormalLogs.Font = font;
         _lstSystemLogs.Font = font;
         _jsonHeadersView?.SetFont(font);
         _jsonRequestBodyView?.SetFont(font);
         _jsonResponseBodyView?.SetFont(font);
         _networkFilterPanel.NotifyRegexError = _settings.NotifyRegexError;
+        _normalFilterPanel.NotifyRegexError = _settings.NotifyRegexError;
         _systemFilterPanel.NotifyRegexError = _settings.NotifyRegexError;
         _networkFilterPanel.EnsureDefaultSelections();
+        _normalFilterPanel.EnsureDefaultSelections();
         _systemFilterPanel.EnsureDefaultSelections();
         UpdateLogCount();
         RefreshMirrorPanelState();
@@ -502,6 +570,11 @@ public partial class MainForm : Form
             if (!_deviceLogs.ContainsKey(id))
             {
                 _deviceLogs[id] = new RingBuffer<LogEntry>(_settings.MaxLogEntriesPerDevice);
+            }
+
+            if (!_deviceNormalLogs.ContainsKey(id))
+            {
+                _deviceNormalLogs[id] = new RingBuffer<LogEntry>(_settings.MaxNormalLogEntriesPerDevice);
             }
 
             TryMatchAdbSerial(info);
@@ -562,6 +635,16 @@ public partial class MainForm : Form
             }
 
             _deviceLogs.Remove(adbSerial);
+        }
+
+        if (_deviceNormalLogs.TryGetValue(adbSerial, out var serialNormalLogs))
+        {
+            if (!_deviceNormalLogs.ContainsKey(deviceId))
+            {
+                _deviceNormalLogs[deviceId] = serialNormalLogs;
+            }
+
+            _deviceNormalLogs.Remove(adbSerial);
         }
 
         if (IsSystemLogRuntimeReady())
@@ -659,6 +742,71 @@ public partial class MainForm : Form
             }
         }));
     }
+
+    private void OnNormalLogReceived(object? sender, (string deviceId, LogEntry entry) args)
+    {
+        this.BeginInvoke(new Action(() =>
+        {
+            var (deviceId, entry) = args;
+            var showingCurrentNormal =
+                _showingNormalLog && (_currentDeviceId == deviceId || _currentDeviceId == null);
+            var activeViewCountBeforeAdd = 0;
+            var activeViewWasFull = false;
+
+            if (showingCurrentNormal)
+            {
+                if (_currentDeviceId == null)
+                {
+                    activeViewCountBeforeAdd = _allNormalLogs.Count;
+                    activeViewWasFull = _allNormalLogs.Count >= _allNormalLogs.Capacity;
+                }
+                else if (_deviceNormalLogs.TryGetValue(deviceId, out var activeDeviceBuf))
+                {
+                    activeViewCountBeforeAdd = activeDeviceBuf.Count;
+                    activeViewWasFull = activeDeviceBuf.Count >= activeDeviceBuf.Capacity;
+                }
+            }
+
+            if (_deviceNormalLogs.TryGetValue(deviceId, out var deviceBuf))
+            {
+                deviceBuf.Add(entry);
+            }
+
+            _allNormalLogs.Add(entry);
+
+            if (showingCurrentNormal)
+            {
+                var incrementalUpdated =
+                    TryAppendNormalLogIncrementally(entry, activeViewCountBeforeAdd, activeViewWasFull);
+                if (_normalAutoScrollEnabled)
+                {
+                    var wasAtBottom = IsAtBottom(_lstNormalLogs);
+                    if (!incrementalUpdated)
+                    {
+                        RefreshNormalFilter();
+                    }
+                    else
+                    {
+                        RefreshNormalLogList();
+                        UpdateLogCount();
+                    }
+
+                    if (wasAtBottom) ScrollToBottom(_lstNormalLogs);
+                }
+                else
+                {
+                    _normalRefreshNeedsFullFilter |= !incrementalUpdated;
+                    ScheduleNormalRefresh();
+                }
+            }
+        }));
+    }
+
+    #endregion
+
+    #region Normal Log List
+
+    // 普通日志的配置、过滤、显示、交互逻辑见 MainForm.NormalLogs.cs（partial class）
 
     #endregion
 
@@ -833,6 +981,9 @@ public partial class MainForm : Form
             if (!_deviceLogs.ContainsKey(dev.Serial))
                 _deviceLogs[dev.Serial] = new RingBuffer<LogEntry>(_settings.MaxLogEntriesPerDevice);
 
+            if (!_deviceNormalLogs.ContainsKey(dev.Serial))
+                _deviceNormalLogs[dev.Serial] = new RingBuffer<LogEntry>(_settings.MaxNormalLogEntriesPerDevice);
+
             var mappedDeviceId = _adbSerialToDeviceId.TryGetValue(dev.Serial, out var existingDeviceId) &&
                                  !string.IsNullOrEmpty(existingDeviceId)
                 ? existingDeviceId
@@ -919,6 +1070,7 @@ public partial class MainForm : Form
     {
         _currentDeviceId = deviceId;
         RefreshNetworkFilter();
+        RefreshNormalFilter();
         RefreshSystemLogList();
         _selectedLogEntry = null;
         ShowLogDetail(null);
@@ -947,6 +1099,7 @@ public partial class MainForm : Form
         }
 
         _deviceLogs.Remove(deviceId);
+        _deviceNormalLogs.Remove(deviceId);
         if (IsSystemLogRuntimeReady())
         {
             _systemLogStore.ClearDevice(deviceId);
@@ -1097,18 +1250,38 @@ public partial class MainForm : Form
     /// </summary>
     private void UpdateLogCount()
     {
-        var buf = GetCurrentLogBuffer();
-        var total = buf.Count;
-        var filtered = _filteredNetworkIndices.Count;
-        var max = _currentDeviceId == null ? _settings.MaxLogEntriesAll : _settings.MaxLogEntriesPerDevice;
-        var pct = (double)total / max;
-        var countText = Language.LogsCount(filtered, total);
-        var isPaused = !(_networkAutoScrollEnabled && IsAtBottom(_lstNetworkLogs));
-        _lblLogCount.Text = Language.LogsCountWithMax(countText, max, isPaused);
-        _lblLogCount.ForeColor = pct >= 1.0 ? Color.Red : pct >= 0.8 ? Color.Orange : DefaultForeColor;
+        if (_showingNormalLog)
+        {
+            var buf = GetCurrentNormalLogBuffer();
+            var total = buf.Count;
+            var filtered = _filteredNormalIndices.Count;
+            var max = _currentDeviceId == null ? _settings.MaxNormalLogEntries : _settings.MaxNormalLogEntriesPerDevice;
+            var pct = (double)total / max;
+            var countText = Language.LogsCount(filtered, total);
+            var isPaused = !(_normalAutoScrollEnabled && IsAtBottom(_lstNormalLogs));
+            _lblNormalLogCount.Text = Language.LogsCountWithMax(countText, max, isPaused);
+            _lblNormalLogCount.ForeColor = pct >= 1.0 ? Color.Red : pct >= 0.8 ? Color.Orange : DefaultForeColor;
+        }
+        else if (_showingSystemLog)
+        {
+            // System Logs has its own count logic handled elsewhere
+        }
+        else
+        {
+            var buf = GetCurrentLogBuffer();
+            var total = buf.Count;
+            var filtered = _filteredNetworkIndices.Count;
+            var max = _currentDeviceId == null ? _settings.MaxLogEntriesAll : _settings.MaxLogEntriesPerDevice;
+            var pct = (double)total / max;
+            var countText = Language.LogsCount(filtered, total);
+            var isPaused = !(_networkAutoScrollEnabled && IsAtBottom(_lstNetworkLogs));
+            _lblLogCount.Text = Language.LogsCountWithMax(countText, max, isPaused);
+            _lblLogCount.ForeColor = pct >= 1.0 ? Color.Red : pct >= 0.8 ? Color.Orange : DefaultForeColor;
+        }
 
-        _btnScrollToBottom.BackColor = _networkAutoScrollEnabled ? Color.LightSkyBlue : DefaultBackColor;
-        _btnSystemScrollToBottom.BackColor = _systemAutoScrollEnabled ? Color.LightSkyBlue : DefaultBackColor;
+        _btnScrollToBottom.BackColor = _networkAutoScrollEnabled && !_showingSystemLog && !_showingNormalLog ? Color.LightSkyBlue : DefaultBackColor;
+        _btnNormalScrollToBottom.BackColor = _normalAutoScrollEnabled && _showingNormalLog ? Color.LightSkyBlue : DefaultBackColor;
+        _btnSystemScrollToBottom.BackColor = _systemAutoScrollEnabled && _showingSystemLog ? Color.LightSkyBlue : DefaultBackColor;
     }
 
     /// <summary>
@@ -1140,6 +1313,7 @@ public partial class MainForm : Form
         if (_currentDeviceId != null)
         {
             if (_deviceLogs.TryGetValue(_currentDeviceId, out var buf)) buf.Clear();
+            if (_deviceNormalLogs.TryGetValue(_currentDeviceId, out var nBuf)) nBuf.Clear();
             if (IsSystemLogRuntimeReady())
             {
                 _systemLogStore.ClearDevice(_currentDeviceId);
@@ -1149,6 +1323,8 @@ public partial class MainForm : Form
         {
             foreach (var buf in _deviceLogs.Values) buf.Clear();
             _allLogs.Clear();
+            foreach (var nBuf in _deviceNormalLogs.Values) nBuf.Clear();
+            _allNormalLogs.Clear();
             if (IsSystemLogRuntimeReady())
             {
                 _systemLogStore.RotateSession();
@@ -1156,9 +1332,11 @@ public partial class MainForm : Form
         }
 
         _filteredNetworkIndices.Clear();
+        _filteredNormalIndices.Clear();
         _selectedLogEntry = null;
         ShowLogDetail(null);
         RefreshNetworkFilter();
+        RefreshNormalFilter();
         RefreshSystemLogList();
         RefreshMirrorPanelState();
     }
@@ -1186,7 +1364,13 @@ public partial class MainForm : Form
                 kvp.Value.Resize(_settings.MaxLogEntriesPerDevice);
             }
 
+            foreach (var kvp in _deviceNormalLogs)
+            {
+                kvp.Value.Resize(_settings.MaxNormalLogEntriesPerDevice);
+            }
+
             _allLogs.Resize(_settings.MaxLogEntriesAll);
+            _allNormalLogs.Resize(_settings.MaxNormalLogEntries);
             if (IsSystemLogRuntimeReady())
             {
                 _systemLogStore.UpdateHotCapacity(_settings.MaxSystemLogEntries);
@@ -1243,6 +1427,11 @@ public partial class MainForm : Form
             {
                 _systemAutoScrollEnabled = true;
                 ScrollToBottom(_lstSystemLogs);
+            }
+            else if (_showingNormalLog)
+            {
+                _normalAutoScrollEnabled = true;
+                ScrollToBottom(_lstNormalLogs);
             }
             else
             {
