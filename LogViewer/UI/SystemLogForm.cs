@@ -131,6 +131,34 @@ public partial class SystemLogForm : Form
             ScheduleSystemUiRefresh(scopeChanged && !_systemLogPaused);
     }
 
+    public void OnStoreAppended(List<SystemLogEntry> entries)
+    {
+        if (!IsRuntimeReady()) return;
+
+        var selectedDeviceId = _getCurrentDeviceId();
+        var scopeChanged = false;
+
+        foreach (var entry in entries)
+        {
+            var serial = entry.SourceDeviceSerial ?? string.Empty;
+            var deviceId = _adbSerialToDeviceId.TryGetValue(serial, out var mappedDeviceId)
+                ? mappedDeviceId
+                : serial;
+            entry.SourceDeviceId = deviceId;
+
+            if (!string.IsNullOrEmpty(selectedDeviceId) &&
+                !string.Equals(deviceId, selectedDeviceId, StringComparison.Ordinal))
+                continue;
+
+            scopeChanged = true;
+            if (_systemLogPaused)
+                Interlocked.Increment(ref _systemPausedBacklog);
+        }
+
+        if (scopeChanged || _systemLogPaused)
+            ScheduleSystemUiRefresh(scopeChanged && !_systemLogPaused);
+    }
+
     public void HandleEndKey()
     {
         _systemAutoScrollEnabled = true;

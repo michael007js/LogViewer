@@ -26,6 +26,7 @@ public class AdbDevice
 public class AdbHelper
 {
     private string? _adbPath;
+    private volatile bool _serverStarted;
 
     /// <summary>程序目录下捆绑的 adb.exe 路径。</summary>
     private static string BundledAdbPath => Path.Combine(AppContext.BaseDirectory, "adb.exe");
@@ -187,16 +188,15 @@ public class AdbHelper
     /// </summary>
     public void EnsureServerStarted()
     {
+        if (_serverStarted) return;
         var adbPath = GetAdbPath();
         if (adbPath == null) return;
         EnsureServerStarted(adbPath);
     }
 
-    /// <summary>
-    /// 确保 ADB 服务器已启动（内部方法）。
-    /// </summary>
     private void EnsureServerStarted(string adbPath)
     {
+        if (_serverStarted) return;
         try
         {
             var psi = new ProcessStartInfo
@@ -210,6 +210,7 @@ public class AdbHelper
             };
             using var proc = Process.Start(psi);
             proc?.WaitForExit(5000);
+            _serverStarted = true;
         }
         catch
         {

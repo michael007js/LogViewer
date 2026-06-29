@@ -71,27 +71,42 @@ public partial class MainForm : Form
     private Button _btnExportJson;
     private Button _btnExportTxt;
 
+    private static void BootLog(string msg)
+    {
+        var line = $"[BOOT] {msg}";
+        Debug.WriteLine(line);
+        try { File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "boot.log"), $"{DateTime.Now:HH:mm:ss.fff} {line}\n"); } catch { }
+    }
+
     public MainForm()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         _settings = AppSettings.Load();
         _allLogs = new RingBuffer<LogEntry>(_settings.MaxLogEntriesAll);
         _allNormalLogs = new RingBuffer<LogEntry>(_settings.MaxNormalLogEntries);
+        BootLog($"Settings+Buffers: {sw.ElapsedMilliseconds}");
         InitializeComponent();
+        BootLog($"InitializeComponent: {sw.ElapsedMilliseconds}");
         Icon = new Icon(Path.Combine(AppContext.BaseDirectory, "icon.ico"));
 
         if (IsDesignTimeMode()) return;
 
         CreateAndEmbedLogForms();
+        BootLog($"CreateAndEmbedLogForms: {sw.ElapsedMilliseconds}");
         ApplyLanguage();
         InitializeJsonTreeViewsRuntime();
+        BootLog($"Language+JsonViews: {sw.ElapsedMilliseconds}");
         WireComponentEvents();
         ApplySettings();
+        BootLog($"Wire+Settings: {sw.ElapsedMilliseconds}");
 
         if (_adbHelper.IsAdbAvailable())
         {
             Task.Run(() =>
             {
+                BootLog("EnsureServerStarted begin");
                 _adbHelper.EnsureServerStarted();
+                BootLog("EnsureServerStarted done");
                 if (IsHandleCreated) BeginInvoke(StartAdbScanLoop);
             });
         }
@@ -102,6 +117,34 @@ public partial class MainForm : Form
         }
 
         AutoStartServer();
+        BootLog($"Total: {sw.ElapsedMilliseconds}");
+
+        StartBootDiag();
+    }
+
+    private System.Windows.Forms.Timer? _bootDiagTimer;
+    private int _bootDiagCount;
+    private long _uiBusyMs;
+    private System.Diagnostics.Stopwatch _uiBusySw = System.Diagnostics.Stopwatch.StartNew();
+
+    private void StartBootDiag()
+    {
+        Application.Idle += OnBootUiIdle;
+        _bootDiagTimer = new System.Windows.Forms.Timer { Interval = 50 };
+        _bootDiagTimer.Tick += (s, e) =>
+        {
+            _bootDiagCount++;
+            var busy = _uiBusySw.ElapsedMilliseconds;
+            if (busy > 100) BootLog($"UI-BUSY {busy}ms (tick #{_bootDiagCount})");
+            _uiBusySw.Restart();
+            if (_bootDiagCount >= 80) { _bootDiagTimer.Stop(); _bootDiagTimer.Dispose(); Application.Idle -= OnBootUiIdle; }
+        };
+        _bootDiagTimer.Start();
+    }
+
+    private void OnBootUiIdle(object? s, EventArgs e)
+    {
+        _uiBusySw.Restart();
     }
 
     private void CreateAndEmbedLogForms()
@@ -113,8 +156,8 @@ public partial class MainForm : Form
         _systemLogForm = new SystemLogForm(_systemLogStore, _settings, () => _currentDeviceId, _adbSerialToDeviceId, () => _showingSystemLog);
 
         EmbedFormInTab(_networkLogForm, _tabNetwork);
-        EmbedFormInTab(_normalLogForm, _tabNormal);
-        EmbedFormInTab(_systemLogForm, _tabSystem);
+        EmbedFormInTabLazy(_normalLogForm, _tabNormal);
+        EmbedFormInTabLazy(_systemLogForm, _tabSystem);
     }
 
     private void EmbedFormInTab(Form form, TabPage tab)
@@ -125,6 +168,23 @@ public partial class MainForm : Form
         tab.Controls.Clear();
         tab.Controls.Add(form);
         form.Show();
+    }
+
+    private void EmbedFormInTabLazy(Form form, TabPage tab)
+    {
+        form.TopLevel = false;
+        form.FormBorderStyle = FormBorderStyle.None;
+        form.Dock = DockStyle.Fill;
+        tab.Controls.Clear();
+        tab.Controls.Add(form);
+        if (tab == _tabLogType.SelectedTab)
+            form.Show();
+    }
+
+    private void EnsureFormVisible(Form? form)
+    {
+        if (form != null && !form.IsHandleCreated)
+            form.Show();
     }
 
     private void ApplyLanguage()
@@ -176,6 +236,7 @@ public partial class MainForm : Form
         {
             _showingNormalLog = _tabLogType.SelectedTab == _tabNormal;
             _showingSystemLog = _tabLogType.SelectedTab == _tabSystem;
+            EnsureFormVisible(_showingNormalLog ? _normalLogForm : _showingSystemLog ? _systemLogForm : null);
             if (_showingSystemLog)
                 _systemLogForm.RefreshSystemLogList(preferBackground: true);
             else if (_showingNormalLog)
@@ -227,8 +288,6 @@ public partial class MainForm : Form
         _systemLogForm.LogCountChanged += UpdateLogCount;
 
         _networkLogForm.RebuildFilter();
-        _normalLogForm.RebuildFilter();
-        _systemLogForm.RefreshSystemLogList();
 
         _jsonDetailToolbar.SearchClicked += (s, e) => GetActiveJsonView()?.SearchAndHighlight(_jsonDetailToolbar.SearchText);
         _jsonDetailToolbar.ExpandAllClicked += (s, e) => GetActiveJsonView()?.ExpandAll();
@@ -300,9 +359,13 @@ public partial class MainForm : Form
 
     private async Task OnMainFormShownAsync()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         _ = ValidateBundledToolsAsync();
-        await PrimeAdbDeviceListAsync();
-        await EnsureScrcpyReadyAsync(forceDeploy: false, reportToMirrorPanel: false);
+        BootLog($"ValidateBundledToolsAsync dispatched: {sw.ElapsedMilliseconds}");
+        _ = PrimeAdbDeviceListAsync();
+        BootLog($"PrimeAdbDeviceListAsync dispatched: {sw.ElapsedMilliseconds}");
+        _ = EnsureScrcpyReadyAsync(forceDeploy: false, reportToMirrorPanel: false);
+        BootLog($"EnsureScrcpyReadyAsync dispatched: {sw.ElapsedMilliseconds}");
     }
 
     private async Task ValidateBundledToolsAsync()
@@ -350,40 +413,51 @@ public partial class MainForm : Form
     {
         this.BeginInvoke(new Action(() =>
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var id = info.DeviceId ?? "";
             if (!_deviceLogs.ContainsKey(id))
                 _deviceLogs[id] = new RingBuffer<LogEntry>(_settings.MaxLogEntriesPerDevice);
             if (!_deviceNormalLogs.ContainsKey(id))
                 _deviceNormalLogs[id] = new RingBuffer<LogEntry>(_settings.MaxNormalLogEntriesPerDevice);
-            TryMatchAdbSerial(info);
+            BootLog($"  OnDeviceConnected.Buffers: {sw.ElapsedMilliseconds}");
             _devicePanel.AddOrUpdateDevice(info, 0);
+            BootLog($"  OnDeviceConnected.AddOrUpdate: {sw.ElapsedMilliseconds}");
             UpdateDeviceCountStatus();
             RefreshMirrorPanelState();
+            BootLog($"  OnDeviceConnected.RefreshMirror: {sw.ElapsedMilliseconds}");
             if (_settings.AutoStartLogcat && _adbHelper.IsAdbAvailable())
             {
                 var adbPath = _adbHelper.GetAdbPath();
                 if (adbPath != null && !string.IsNullOrEmpty(info.AdbSerial))
                     StartLogcat(adbPath, info.AdbSerial, id, _settings.LogcatFilter);
             }
+            BootLog($"  OnDeviceConnected.Logcat: {sw.ElapsedMilliseconds}");
+
+            _ = TryMatchAdbSerialAsync(info);
+            BootLog($"  OnDeviceConnected.Total: {sw.ElapsedMilliseconds}");
         }));
     }
 
-    private void TryMatchAdbSerial(DeviceInfo info)
+    private async Task TryMatchAdbSerialAsync(DeviceInfo info)
     {
         if (!_adbHelper.IsAdbAvailable()) return;
-        var adbDevices = _adbHelper.GetDevices();
-        var model = info.DeviceModel ?? "";
-        foreach (var dev in adbDevices)
+        var adbDevices = await Task.Run(() => _adbHelper.GetDevices());
+        if (IsDisposed || !IsHandleCreated) return;
+        BeginInvoke(new Action(() =>
         {
-            if (!string.IsNullOrEmpty(dev.Model) && dev.Model.Equals(model, StringComparison.OrdinalIgnoreCase))
+            var model = info.DeviceModel ?? "";
+            foreach (var dev in adbDevices)
             {
-                info.AdbSerial = dev.Serial;
-                _adbSerialToDeviceId[dev.Serial] = info.DeviceId ?? "";
-                RebindAdbBackedState(dev.Serial, info.DeviceId ?? "");
-                _devicePanel.MergeTcpDevice(dev.Serial, info, 0);
-                break;
+                if (!string.IsNullOrEmpty(dev.Model) && dev.Model.Equals(model, StringComparison.OrdinalIgnoreCase))
+                {
+                    info.AdbSerial = dev.Serial;
+                    _adbSerialToDeviceId[dev.Serial] = info.DeviceId ?? "";
+                    RebindAdbBackedState(dev.Serial, info.DeviceId ?? "");
+                    _devicePanel.MergeTcpDevice(dev.Serial, info, 0);
+                    break;
+                }
             }
-        }
+        }));
     }
 
     private void RebindAdbBackedState(string adbSerial, string deviceId)
@@ -522,8 +596,18 @@ public partial class MainForm : Form
             }
 
             if (!_systemLogForm.IsRuntimeReady()) continue;
-            if (IsDisposed || !IsHandleCreated) return;
-            BeginInvoke(new Action(() => _systemLogForm.ProcessPendingLogs(entries)));
+            if (IsDisposed) return;
+
+            foreach (var entry in entries)
+                _systemLogStore.Append(entry);
+
+            BeginInvoke(new Action(() =>
+            {
+                if (IsDisposed) return;
+                _systemLogForm.OnStoreAppended(entries);
+            }));
+
+            if (!IsHandleCreated) return;
         }
     }
 
@@ -533,15 +617,18 @@ public partial class MainForm : Form
 
     private void AutoStartServer()
     {
+        BootLog("AutoStartServer start");
         var port = _settings.ServerPort;
         Task.Run(() =>
         {
             try
             {
                 _server.Start(port);
+                BootLog("Server.Start done");
                 if (IsHandleCreated)
                     BeginInvoke(() =>
                     {
+                        BootLog("Server UI update");
                         _lblStatus.Text = $"\u25CF {Language.Running}";
                         _lblStatus.ForeColor = Color.Green;
                         _lblServerStatus.Text = Language.ServerPort(port);
@@ -637,8 +724,10 @@ public partial class MainForm : Form
 
     private void ApplyAdbDevices(List<AdbDevice> adbDevices)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var currentSerials = new HashSet<string>(adbDevices.Select(d => d.Serial));
         _devicePanel.RemoveMissingAdbDevices(currentSerials);
+        BootLog($"  ApplyAdbDevices.RemoveMissing: {sw.ElapsedMilliseconds}");
         var adbPath = _adbHelper.GetAdbPath();
         var newAdbSerials = new List<string>();
 
@@ -663,6 +752,8 @@ public partial class MainForm : Form
             }
         }
 
+        BootLog($"  ApplyAdbDevices.Loop: {sw.ElapsedMilliseconds}");
+
         if (newAdbSerials.Count > 0 && adbPath != null && _settings.AutoAdbReverse)
         {
             Task.Run(() =>
@@ -673,10 +764,12 @@ public partial class MainForm : Form
         }
 
         UpdateDeviceCountStatus();
+        BootLog($"  ApplyAdbDevices.Total: {sw.ElapsedMilliseconds}");
     }
 
     private void StartAdbScanLoop()
     {
+        BootLog("StartAdbScanLoop");
         StopAdbScanLoop();
         _adbScanCts = new CancellationTokenSource();
         _ = ScanLoopAsync(_adbScanCts.Token);
@@ -1007,5 +1100,10 @@ public partial class MainForm : Form
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    private void OnMainFormLoad(object? sender, EventArgs e) => RefreshMirrorPanelState();
+    private void OnMainFormLoad(object? sender, EventArgs e)
+    {
+        BootLog("OnMainFormLoad start");
+        RefreshMirrorPanelState();
+        BootLog("OnMainFormLoad end");
+    }
 }
