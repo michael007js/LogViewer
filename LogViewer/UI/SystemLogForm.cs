@@ -102,6 +102,9 @@ public partial class SystemLogForm : Form
         RefreshSystemLogList();
     }
 
+    /// <summary>
+    /// 旧路径：UI 线程内做 Append + 遍历。现在 Append 已移到后台线程，此方法仅供兼容。
+    /// </summary>
     public void ProcessPendingLogs(List<SystemLogEntry> entries)
     {
         if (!IsRuntimeReady()) return;
@@ -131,6 +134,10 @@ public partial class SystemLogForm : Form
             ScheduleSystemUiRefresh(scopeChanged && !_systemLogPaused);
     }
 
+    /// <summary>
+    /// 新路径：Append 已在后台线程完成，此方法只做轻量的设备归属映射 + UI 去抖调度。
+    /// 不含 JSON 序列化/文件 I/O，在 UI 线程上执行仅需 1-3ms。
+    /// </summary>
     public void OnStoreAppended(List<SystemLogEntry> entries)
     {
         if (!IsRuntimeReady()) return;

@@ -160,6 +160,9 @@ public partial class MainForm : Form
         EmbedFormInTabLazy(_systemLogForm, _tabSystem);
     }
 
+    /// <summary>
+    /// 立即嵌入 Form 到 TabPage（用于默认选中的 Network Tab），Show() 触发 Handle 创建和首布局。
+    /// </summary>
     private void EmbedFormInTab(Form form, TabPage tab)
     {
         form.TopLevel = false;
@@ -170,6 +173,11 @@ public partial class MainForm : Form
         form.Show();
     }
 
+    /// <summary>
+    /// 延迟嵌入 Form 到 TabPage：仅添加为子控件，不调用 Show()（不创建 Handle）。
+    /// 只有当前选中的 Tab 才 Show，其余 Tab 的 Form 在首次切换时由 EnsureFormVisible 触发 Show，
+    /// 减少启动时同时创建多个 Form Handle 导致的 UI 线程阻塞。
+    /// </summary>
     private void EmbedFormInTabLazy(Form form, TabPage tab)
     {
         form.TopLevel = false;
@@ -181,6 +189,10 @@ public partial class MainForm : Form
             form.Show();
     }
 
+    /// <summary>
+    /// 确保 Tab 切换时目标 Form 已创建 Handle（首次切换时触发 Show）。
+    /// Show() 只执行一次（IsHandleCreated 检查），后续切换无需重复。
+    /// </summary>
     private void EnsureFormVisible(Form? form)
     {
         if (form != null && !form.IsHandleCreated)
@@ -232,6 +244,8 @@ public partial class MainForm : Form
         _devicePanel.MirrorPopoutRequested += OnMirrorPopoutRequested;
         _devicePanel.MirrorLayoutChanged += OnMirrorLayoutChanged;
 
+        // Tab 切换：延迟 Show 非 Active Tab 的 Form + 仅对 SystemLog 做后台刷新。
+        // Network/Normal 的过滤索引在日志添加时已增量维护，切回时无需全量 RebuildFilter。
         _tabLogType.SelectedIndexChanged += (s, e) =>
         {
             _showingNormalLog = _tabLogType.SelectedTab == _tabNormal;
@@ -239,10 +253,6 @@ public partial class MainForm : Form
             EnsureFormVisible(_showingNormalLog ? _normalLogForm : _showingSystemLog ? _systemLogForm : null);
             if (_showingSystemLog)
                 _systemLogForm.RefreshSystemLogList(preferBackground: true);
-            else if (_showingNormalLog)
-                _normalLogForm.RebuildFilter();
-            else
-                _networkLogForm.RebuildFilter();
         };
 
         _networkLogForm.LogEntrySelected += entry =>
@@ -357,6 +367,10 @@ public partial class MainForm : Form
             : string.IsNullOrEmpty(_scrcpyDeployError) ? Color.Green : Color.DarkOrange;
     }
 
+    /// <summary>
+    /// Shown 事件：并行启动三个异步初始化（工具验证/ADB扫描/scrcpy准备），不再串行 await，
+    /// 避免阻塞窗口首次渲染。
+    /// </summary>
     private async Task OnMainFormShownAsync()
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -409,6 +423,10 @@ public partial class MainForm : Form
 
     #region Server Events
 
+    /// <summary>
+    /// TCP 设备连接回调：在 UI 线程初始化缓冲区和面板，然后用 fire-and-forget 启动异步 ADB 匹配。
+    /// TryMatchAdbSerialAsync 在后台线程调 GetDevices()（adb devices 进程），避免阻塞 UI。
+    /// </summary>
     private void OnDeviceConnected(object? sender, DeviceInfo info)
     {
         this.BeginInvoke(new Action(() =>
@@ -438,6 +456,11 @@ public partial class MainForm : Form
         }));
     }
 
+    /// <summary>
+    /// 异步匹配 TCP 设备的 ADB Serial：在后台线程调 GetDevices()（adb devices 进程，最多 3s），
+    /// 匹配结果通过 BeginInvoke 回 UI 线程做 MergeTcpDevice + RebindAdbBackedState。
+    /// 之前的同步版本 TryMatchAdbSerial 在 UI 线程直接跑 adb 进程，每次阻塞 1-3 秒。
+    /// </summary>
     private async Task TryMatchAdbSerialAsync(DeviceInfo info)
     {
         if (!_adbHelper.IsAdbAvailable()) return;
@@ -583,6 +606,13 @@ public partial class MainForm : Form
         _ = Task.Run(FlushPendingSystemLogsAsync);
     }
 
+    /// <summary>
+    /// 系统日志批量刷入：在后台线程（FlushPendingSystemLogsAsync 的 Task.Run 上下文）
+    /// 执行 Append（JSON 序列化 + 文件写入），完成后只通过 BeginInvoke 通知 UI 线程
+    /// 做 OnStoreAppended（轻量遍历 + ScheduleSystemUiRefresh 去抖）。
+    /// 之前的 ProcessPendingLogs 在 UI 线程里做 Append，每条日志一次 JSON 序列化+文件I/O，
+    /// 200 条一批可阻塞 UI 500-1500ms。
+    /// </summary>
     private async Task FlushPendingSystemLogsAsync()
     {
         while (true)

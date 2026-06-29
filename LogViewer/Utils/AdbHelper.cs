@@ -185,6 +185,9 @@ public class AdbHelper
 
     /// <summary>
     /// 确保 ADB 服务器已启动。
+    /// <summary>
+    /// 确保 ADB 服务器已启动。使用 volatile 缓存标志，只执行一次 adb start-server，
+    /// 后续调用直接跳过，避免每次 GetDevices() 都重复启动（5s 超时）阻塞线程。
     /// </summary>
     public void EnsureServerStarted()
     {
@@ -194,6 +197,9 @@ public class AdbHelper
         EnsureServerStarted(adbPath);
     }
 
+    /// <summary>
+    /// 内部方法：执行 adb start-server 并设置缓存标志。volatile 确保跨线程可见。
+    /// </summary>
     private void EnsureServerStarted(string adbPath)
     {
         if (_serverStarted) return;
