@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text.Json;
 using LogViewer.Models;
 using LogViewer.Network;
 using LogViewer.Static;
@@ -7,211 +8,69 @@ using LogViewer.Utils;
 
 namespace LogViewer.UI;
 
-/// <summary>
-/// 主窗口，负责日志列表展示、详情查看、设备管理和设置配置。
-/// 支持网络日志和系统日志两种类型，通过 TabControl 切换显示。
-/// </summary>
 public partial class MainForm : Form
 {
-    /// <summary>TCP 服务器实例，用于接收 Android 设备的网络日志。</summary>
     private readonly LogServer _server = new();
-
-    /// <summary>ADB 辅助类，用于设备检测、验证和端口映射。</summary>
     private readonly AdbHelper _adbHelper = new();
-
-    /// <summary>scrcpy 管理器，用于投屏功能。</summary>
     private readonly ScrcpyManager _scrcpyManager = new();
-
-    /// <summary>每台设备的 logcat 读取器，key 为 deviceId。</summary>
     private readonly Dictionary<string, LogcatReader> _logcatReaders = new();
-
-    /// <summary>应用设置实例。</summary>
     private AppSettings _settings;
-
-    /// <summary>ADB 设备扫描的取消令牌源。</summary>
     private CancellationTokenSource? _adbScanCts;
-
-    /// <summary>scrcpy 启动的取消令牌源。</summary>
     private CancellationTokenSource? _scrcpyStartCts;
-
-    /// <summary>每台设备的网络日志缓冲区，key 为 deviceId。</summary>
     private readonly Dictionary<string, RingBuffer<LogEntry>> _deviceLogs = new();
-
-    /// <summary>所有设备合并的网络日志缓冲区。</summary>
     private readonly RingBuffer<LogEntry> _allLogs;
-
-    /// <summary>每台设备的普通日志缓冲区，key 为 deviceId。</summary>
     private readonly Dictionary<string, RingBuffer<LogEntry>> _deviceNormalLogs = new();
-
-    /// <summary>所有设备合并的普通日志缓冲区。</summary>
     private readonly RingBuffer<LogEntry> _allNormalLogs;
-
-    /// <summary>ADB 序列号到 deviceId 的映射表。</summary>
     private readonly Dictionary<string, string> _adbSerialToDeviceId = new();
-
-    /// <summary>待处理的系统日志队列（线程安全）。</summary>
     private readonly Queue<SystemLogEntry> _pendingSystemLogs = new();
-
-    /// <summary>待处理系统日志队列的锁对象。</summary>
     private readonly object _pendingSystemLogsLock = new();
-
-    /// <summary>系统日志刷新是否已调度。</summary>
     private bool _systemLogFlushScheduled;
-
-    /// <summary>ADB 是否已验证可用。</summary>
     private bool _adbValidated;
-
-    /// <summary>当前选中的设备 deviceId。</summary>
     private string? _currentDeviceId;
-
-    /// <summary>当前是否显示系统日志（true=系统日志，false=网络/普通日志）。</summary>
     private bool _showingSystemLog;
-
-    /// <summary>当前是否显示普通日志。</summary>
     private bool _showingNormalLog;
+    private LogEntry? _selectedLogEntry;
+    private SystemLogSessionStore _systemLogStore = null!;
 
-    /// <summary>普通日志自动滚动是否启用。</summary>
-    private bool _normalAutoScrollEnabled = true;
+    private NetworkLogForm _networkLogForm = null!;
+    private NormalLogForm _normalLogForm = null!;
+    private SystemLogForm _systemLogForm = null!;
 
-    /// <summary>系统日志自动滚动是否启用。</summary>
-    private bool _systemAutoScrollEnabled = true;
-
-    private System.Windows.Forms.SplitContainer _outerSplit;
-
-    private System.Windows.Forms.SplitContainer _innerSplit;
-
-    private LogViewer.UI.DevicePanel _devicePanel;
-
-    private System.Windows.Forms.TabControl _tabLogType;
-
-    /// <summary>网络日志 Tab 页。</summary>
+    private SplitContainer _outerSplit;
+    private SplitContainer _innerSplit;
+    private DevicePanel _devicePanel;
+    private TabControl _tabLogType;
     private TabPage _tabNetwork;
-
-    /// <summary>系统日志 Tab 页。</summary>
-    private TabPage _tabSystem;
-
-    /// <summary>普通日志 Tab 页。</summary>
     private TabPage _tabNormal;
-
-    private Panel _normalTabContainer;
-
-    private ListView _lstNormalLogs;
-
-    private Panel _normalActionBar;
-
-    private FilterPanel _normalFilterPanel;
-
-    private Button _btnNormalScrollToTop;
-
-    private Button _btnNormalScrollToBottom;
-
-    private Label _lblNormalLogCount;
-
-    private FilterPanel _networkFilterPanel;
-
-    private FilterPanel _systemFilterPanel;
-
-    private System.Windows.Forms.Panel _systemActionBar;
-
-    private System.Windows.Forms.Button _btnScrollToTop;
-
-    private System.Windows.Forms.Button _btnScrollToBottom;
-
-    private System.Windows.Forms.Label _lblLogCount;
-
-    private System.Windows.Forms.ListView _lstNetworkLogs;
-
-    private System.Windows.Forms.ListView _lstSystemLogs;
-
-
-
-    private System.Windows.Forms.Button _btnSystemScrollToTop;
-
-    private System.Windows.Forms.Button _btnSystemScrollToBottom;
-
-    private System.Windows.Forms.Button _btnSystemPauseResume;
-
-    private System.Windows.Forms.Label _lblSystemBacklog;
-
-    private System.Windows.Forms.TabControl _tabDetail;
-
-    /// <summary>请求头 Tab 页。</summary>
-    private TabPage _tabHeaders;
-
-    /// <summary>请求体 Tab 页。</summary>
-    private TabPage _tabRequestBody;
-
-    /// <summary>响应体 Tab 页。</summary>
-    private TabPage _tabResponseBody;
-
+    private TabPage _tabSystem;
+    private JsonDetailToolbar _jsonDetailToolbar;
     private System.Windows.Forms.Panel _jsonHeaders;
-
-    /// <summary>请求体 JSON 折叠视图容器面板。</summary>
     private Panel _jsonRequestBody;
-
-    /// <summary>响应体 JSON 折叠视图容器面板。</summary>
     private Panel _jsonResponseBody;
-
-    /// <summary>Headers JSON 折叠+语法高亮 TreeView。</summary>
     private JsonTreeView? _jsonHeadersView;
-
-    /// <summary>请求体 JSON 折叠+语法高亮 TreeView。</summary>
     private JsonTreeView? _jsonRequestBodyView;
-
-    /// <summary>响应体 JSON 折叠+语法高亮 TreeView。</summary>
     private JsonTreeView? _jsonResponseBodyView;
-
     private System.Windows.Forms.TextBox _rawHeaders;
-
-    /// <summary>请求体原始 JSON 文本框（Raw 视图）。</summary>
     private TextBox _rawRequestBody;
-
-    /// <summary>响应体原始 JSON 文本框（Raw 视图）。</summary>
     private TextBox _rawResponseBody;
-
-    /// <summary>顶部工具栏，包含服务器状态和 ADB Reverse 按钮。</summary>
+    private System.Windows.Forms.TabControl _tabDetail;
+    private TabPage _tabHeaders;
+    private TabPage _tabRequestBody;
+    private TabPage _tabResponseBody;
     private ToolStrip _toolStrip;
-
-    /// <summary>ADB Reverse 下拉按钮，动态列出可执行 Reverse 的设备。</summary>
     private ToolStripDropDownButton _btnAdbReverse;
-
-    /// <summary>工具栏服务器运行状态标签（Running/Error）。</summary>
     private ToolStripLabel _lblStatus;
-
-    private System.Windows.Forms.MenuStrip _menuStrip;
-
-    /// <summary>底部状态栏。</summary>
+    private MenuStrip _menuStrip;
     private StatusStrip _statusStrip;
-
-    /// <summary>状态栏：服务器端口/错误信息。</summary>
     private ToolStripStatusLabel _lblServerStatus;
-
-    /// <summary>状态栏：已连接设备数量。</summary>
     private ToolStripStatusLabel _lblDeviceCountStatus;
-
-    /// <summary>状态栏：ADB/scrcpy 就绪状态。</summary>
     private ToolStripStatusLabel _lblAdbStatus;
-
-    /// <summary>状态栏：正在运行的 Logcat 进程数量。</summary>
     private ToolStripStatusLabel _lblLogcatStatus;
-
-    private System.Windows.Forms.FlowLayoutPanel _pnlBottomBar;
-
-    /// <summary>清空当前日志按钮。</summary>
+    private FlowLayoutPanel _pnlBottomBar;
     private Button _btnClear;
-
-    /// <summary>导出为 JSON 文件按钮。</summary>
     private Button _btnExportJson;
-
-    /// <summary>导出为纯文本文件按钮。</summary>
     private Button _btnExportTxt;
 
-    /// <summary>当前选中的网络日志条目，用于详情面板展示。</summary>
-    private LogEntry? _selectedLogEntry;
-
-    /// <summary>
-    /// 初始化主窗口，加载设置并配置组件。
-    /// </summary>
     public MainForm()
     {
         _settings = AppSettings.Load();
@@ -219,25 +78,21 @@ public partial class MainForm : Form
         _allNormalLogs = new RingBuffer<LogEntry>(_settings.MaxNormalLogEntries);
         InitializeComponent();
         Icon = new Icon(Path.Combine(AppContext.BaseDirectory, "icon.ico"));
+
+        if (IsDesignTimeMode()) return;
+
+        CreateAndEmbedLogForms();
         ApplyLanguage();
-
-        if (IsDesignTimeMode())
-        {
-            return;
-        }
-
         InitializeJsonTreeViewsRuntime();
         WireComponentEvents();
         ApplySettings();
 
         if (_adbHelper.IsAdbAvailable())
         {
-            // 后台启动 ADB server，完成后再启动扫描循环，避免首次扫描时 ADB 未就绪。
             Task.Run(() =>
             {
                 _adbHelper.EnsureServerStarted();
-                if (IsHandleCreated)
-                    BeginInvoke(StartAdbScanLoop);
+                if (IsHandleCreated) BeginInvoke(StartAdbScanLoop);
             });
         }
         else
@@ -245,12 +100,33 @@ public partial class MainForm : Form
             Shown += OnMissingAdbPromptShown;
             StartAdbScanLoop();
         }
+
         AutoStartServer();
     }
 
-    /// <summary>
-    /// 应用界面语言，从 Language 类加载所有 UI 文本。
-    /// </summary>
+    private void CreateAndEmbedLogForms()
+    {
+        InitializeSystemLogRuntime();
+
+        _networkLogForm = new NetworkLogForm(_deviceLogs, _allLogs, _settings, () => _currentDeviceId);
+        _normalLogForm = new NormalLogForm(_deviceNormalLogs, _allNormalLogs, _settings, () => _currentDeviceId);
+        _systemLogForm = new SystemLogForm(_systemLogStore, _settings, () => _currentDeviceId, _adbSerialToDeviceId, () => _showingSystemLog);
+
+        EmbedFormInTab(_networkLogForm, _tabNetwork);
+        EmbedFormInTab(_normalLogForm, _tabNormal);
+        EmbedFormInTab(_systemLogForm, _tabSystem);
+    }
+
+    private void EmbedFormInTab(Form form, TabPage tab)
+    {
+        form.TopLevel = false;
+        form.FormBorderStyle = FormBorderStyle.None;
+        form.Dock = DockStyle.Fill;
+        tab.Controls.Clear();
+        tab.Controls.Add(form);
+        form.Show();
+    }
+
     private void ApplyLanguage()
     {
         Text = Language.AppTitle;
@@ -260,24 +136,10 @@ public partial class MainForm : Form
         _tabNetwork.Text = Language.NetworkLogs;
         _tabNormal.Text = Language.NormalLogs;
         _tabSystem.Text = Language.SystemLogs;
-        _btnScrollToTop.Text = Language.ScrollToTop;
-        _btnScrollToBottom.Text = Language.ScrollToBottom;
-        _btnNormalScrollToTop.Text = Language.ScrollToTop;
-        _btnNormalScrollToBottom.Text = Language.ScrollToBottom;
-        _btnSystemScrollToTop.Text = Language.ScrollToTop;
-        _btnSystemScrollToBottom.Text = Language.ScrollToBottom;
-        _btnSystemPauseResume.Text = Language.Pause;
-        _networkFilterPanel.ApplyLanguage(Language.KeywordPlaceholder, Language.RegexMode);
-        _normalFilterPanel.ApplyLanguage(Language.KeywordPlaceholder, Language.RegexMode);
-        _systemFilterPanel.ApplyLanguage(Language.KeywordPlaceholder, Language.RegexMode);
         _tabHeaders.Text = Language.Headers;
         _tabRequestBody.Text = Language.RequestBody;
         _tabResponseBody.Text = Language.ResponseBody;
-        _txtJsonSearch.PlaceholderText = Language.SearchJsonPlaceholder;
-        _btnExpandAll.Text = Language.Expand;
-        _btnCollapseAll.Text = Language.Collapse;
-        _btnCollapseTo2.Text = Language.CollapseLevel2;
-        _btnToggleView.Text = Language.Raw;
+        _jsonDetailToolbar.ApplyLanguage();
         _btnClear.Text = Language.Clear;
         _btnExportJson.Text = Language.ExportJson;
         _btnExportTxt.Text = Language.ExportTxt;
@@ -287,20 +149,13 @@ public partial class MainForm : Form
         _lblAdbStatus.Text = Language.AdbNotDetected;
         _lblLogcatStatus.Text = Language.LogcatCount(0);
 
-        _networkFilterPanel.SetFilter1Items([Language.All, "GET", "POST", "PUT", "DELETE", "PATCH"]);
-        _networkFilterPanel.SetFilter2Items([Language.All, "2xx", "3xx", "4xx", "5xx", "0"]);
-        _normalFilterPanel.SetFilter1Items([Language.All, "V", "D", "I", "W", "E", "F"]);
-        _normalFilterPanel.SetFilter2Items([Language.All]);
-        _systemFilterPanel.SetFilter1Items([Language.All, "V", "D", "I", "W", "E", "F"]);
-        _systemFilterPanel.SetFilter2Items([Language.All]);
+        _networkLogForm.ApplyLanguage();
+        _normalLogForm.ApplyLanguage();
+        _systemLogForm.ApplyLanguage();
     }
 
-    /// <summary>
-    /// 连接所有组件事件，绑定 UI 交互逻辑。
-    /// </summary>
     private void WireComponentEvents()
     {
-        InitializeSystemLogRuntime();
         _settingsMenuItem.Click += OnSettingsClick;
         _server.DeviceConnected += OnDeviceConnected;
         _server.DeviceDisconnected += OnDeviceDisconnected;
@@ -316,93 +171,70 @@ public partial class MainForm : Form
         _devicePanel.MirrorScreenshotRequested += OnMirrorScreenshotRequested;
         _devicePanel.MirrorPopoutRequested += OnMirrorPopoutRequested;
         _devicePanel.MirrorLayoutChanged += OnMirrorLayoutChanged;
+
         _tabLogType.SelectedIndexChanged += (s, e) =>
         {
             _showingNormalLog = _tabLogType.SelectedTab == _tabNormal;
             _showingSystemLog = _tabLogType.SelectedTab == _tabSystem;
             if (_showingSystemLog)
-            {
-                RefreshSystemLogList(preferBackground: true);
-            }
+                _systemLogForm.RefreshSystemLogList(preferBackground: true);
             else if (_showingNormalLog)
-            {
-                RefreshNormalFilter();
-            }
+                _normalLogForm.RebuildFilter();
             else
-            {
-                RefreshNetworkFilter();
-            }
+                _networkLogForm.RebuildFilter();
+        };
 
-            UpdateLogCount();
-        };
-        _networkFilterPanel.FilterChanged += OnNetworkFilterChanged;
-        _normalFilterPanel.FilterChanged += OnNormalFilterChanged;
-        _systemFilterPanel.FilterChanged += OnSystemFilterChanged;
-        _systemFilterPanel.Filter2DropDown += (s, e) => RefreshSystemTagOptions();
-        _btnScrollToTop.Click += (s, e) =>
+        _networkLogForm.LogEntrySelected += entry =>
         {
-            _networkAutoScrollEnabled = false;
-            ScrollToTop(_lstNetworkLogs);
-            UpdateLogCount();
+            if (ReferenceEquals(_selectedLogEntry, entry)) return;
+            _selectedLogEntry = entry;
+            ShowLogDetail(entry);
         };
-        _btnScrollToBottom.Click += (s, e) =>
+        _networkLogForm.LogEntryDoubleClicked += entry =>
         {
-            _networkAutoScrollEnabled = true;
-            ScrollToBottom(_lstNetworkLogs);
-            UpdateLogCount();
+            if (entry != null) new JsonDetailForm(entry, _networkLogForm.Font).Show(this);
         };
-        _btnSystemScrollToTop.Click += (s, e) =>
+        _networkLogForm.ScrollStateChanged += UpdateLogCount;
+        _networkLogForm.LogCountChanged += UpdateLogCount;
+
+        _normalLogForm.NormalLogEntryDoubleClicked += entry =>
         {
-            _systemAutoScrollEnabled = false;
-            ScrollToTop(_lstSystemLogs);
-            UpdateLogCount();
-        };
-        _btnSystemScrollToBottom.Click += (s, e) =>
-        {
-            _systemAutoScrollEnabled = true;
-            ScrollToBottom(_lstSystemLogs);
-            UpdateLogCount();
-        };
-        _btnNormalScrollToTop.Click += (s, e) =>
-        {
-            _normalAutoScrollEnabled = false;
-            ScrollToTop(_lstNormalLogs);
-            UpdateLogCount();
-        };
-        _btnNormalScrollToBottom.Click += (s, e) =>
-        {
-            _normalAutoScrollEnabled = true;
-            ScrollToBottom(_lstNormalLogs);
-            UpdateLogCount();
-        };
-        _btnSystemPauseResume.Click += OnSystemPauseResumeClick;
-        ConfigureLogLists();
-        ConfigureNormalLogList();
-        ConfigureSystemLogList();
-        RefreshNetworkFilter();
-        RefreshNormalFilter();
-        RefreshSystemLogList();
-        UpdateSystemLogUiState();
-        _lstNetworkLogs.SelectedIndexChanged += OnNetworkLogSelected;
-        _lstNetworkLogs.DoubleClick += OnNetworkLogDoubleClick;
-        _lstNetworkLogs.MouseUp += OnNetworkLogMouseUp;
-        _lstNetworkLogs.MouseWheel += OnNetworkLogsMouseWheel;
-        _lstNetworkLogs.ContextMenuStrip = CreateNetworkLogMenu();
-        _lstSystemLogs.MouseWheel += OnSystemLogsMouseWheel;
-        _lstSystemLogs.ContextMenuStrip = CreateSystemLogMenu();
-        _lstNormalLogs.KeyUp += (s, e) =>
-        {
-            if (e.Control && e.KeyCode == Keys.C)
+            if (entry == null) return;
+            var msgPreview = (entry.Message ?? "").Length > 20 ? (entry.Message ?? "")[..20] + "..." : entry.Message ?? "";
+            var form = new Form
             {
-                var entry = GetSelectedNormalEntry();
-                ClipboardTextHelper.TrySetText(entry?.Message);
-            }
+                Text = $"[{entry.Method ?? ""}] {msgPreview}",
+                Size = new Size(800, 500),
+                StartPosition = FormStartPosition.CenterParent
+            };
+            var txt = new TextBox
+            {
+                Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical,
+                ReadOnly = true, Text = entry.Message ?? "", Font = new Font("Consolas", _settings.FontSize),
+                BackColor = Color.White
+            };
+            var btnCopy = new Button { Dock = DockStyle.Bottom, Text = Language.CopyNormalLogMessage, Height = 30 };
+            btnCopy.Click += (_, _) => ClipboardTextHelper.TrySetText(entry.Message);
+            form.Controls.Add(txt);
+            form.Controls.Add(btnCopy);
+            form.Show(this);
         };
-        _btnJsonSearch.Click += (s, e) => GetActiveJsonView()?.SearchAndHighlight(_txtJsonSearch.Text);
-        _btnExpandAll.Click += (s, e) => GetActiveJsonView()?.ExpandAll();
-        _btnCollapseAll.Click += (s, e) => GetActiveJsonView()?.CollapseAll();
-        _btnCollapseTo2.Click += (s, e) => GetActiveJsonView()?.CollapseToLevel(2);
-        _btnToggleView.Click += OnToggleDetailView;
+        _normalLogForm.ScrollStateChanged += UpdateLogCount;
+        _normalLogForm.LogCountChanged += UpdateLogCount;
+
+        _systemLogForm.ScrollStateChanged += UpdateLogCount;
+        _systemLogForm.SystemLogPausedChanged += UpdateLogCount;
+        _systemLogForm.LogCountChanged += UpdateLogCount;
+
+        _networkLogForm.RebuildFilter();
+        _normalLogForm.RebuildFilter();
+        _systemLogForm.RefreshSystemLogList();
+
+        _jsonDetailToolbar.SearchClicked += (s, e) => GetActiveJsonView()?.SearchAndHighlight(_jsonDetailToolbar.SearchText);
+        _jsonDetailToolbar.ExpandAllClicked += (s, e) => GetActiveJsonView()?.ExpandAll();
+        _jsonDetailToolbar.CollapseAllClicked += (s, e) => GetActiveJsonView()?.CollapseAll();
+        _jsonDetailToolbar.CollapseTo2Clicked += (s, e) => GetActiveJsonView()?.CollapseToLevel(2);
+        _jsonDetailToolbar.ViewToggled += (s, e) => SyncDetailViewVisibility();
         _tabDetail.SelectedIndexChanged += (s, e) => SyncDetailViewVisibility();
         _btnClear.Click += OnClear;
         _btnExportJson.Click += OnExportJson;
@@ -422,36 +254,17 @@ public partial class MainForm : Form
         };
     }
 
-    /// <summary>
-    /// ADB 缺失时首次显示提示，询问用户是否打开设置对话框配置 ADB 路径。
-    /// </summary>
     private void OnMissingAdbPromptShown(object? sender, EventArgs e)
     {
         Shown -= OnMissingAdbPromptShown;
-
-        var result = MessageBox.Show(
-            Language.MissingAdbMessage,
-            Language.MissingAdbTitle,
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question);
-        if (result == DialogResult.Yes)
-        {
-            OnSettingsClick(this, EventArgs.Empty);
-        }
+        var result = MessageBox.Show(Language.MissingAdbMessage, Language.MissingAdbTitle,
+            MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (result == DialogResult.Yes) OnSettingsClick(this, EventArgs.Empty);
     }
 
-    /// <summary>
-    /// 判断当前是否处于设计时模式（Visual Studio/Rider 设计器宿主进程），
-    /// 避免在设计期执行运行时逻辑（如网络连接、进程启动）。
-    /// </summary>
-    /// <returns>true 表示处于设计时模式，应跳过运行时初始化。</returns>
     private static bool IsDesignTimeMode()
     {
-        if (LicenseManager.UsageMode == LicenseUsageMode.Designtime)
-        {
-            return true;
-        }
-
+        if (LicenseManager.UsageMode == LicenseUsageMode.Designtime) return true;
         var processName = Process.GetCurrentProcess().ProcessName;
         var commandLine = Environment.CommandLine;
         return processName.Contains("devenv", StringComparison.OrdinalIgnoreCase) ||
@@ -463,9 +276,6 @@ public partial class MainForm : Form
                commandLine.Contains("WinFormsDesigner", StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// 更新底部状态栏的 ADB 和 scrcpy 就绪状态文本及颜色。
-    /// </summary>
     private void UpdateAdbStatus()
     {
         var adbPath = _adbHelper.GetAdbPath();
@@ -485,14 +295,9 @@ public partial class MainForm : Form
         _lblAdbStatus.Text = $"{adbText} | {scrcpyText}";
         _lblAdbStatus.ForeColor = adbPath == null
             ? Color.Red
-            : string.IsNullOrEmpty(_scrcpyDeployError)
-                ? Color.Green
-                : Color.DarkOrange;
+            : string.IsNullOrEmpty(_scrcpyDeployError) ? Color.Green : Color.DarkOrange;
     }
 
-    /// <summary>
-    /// 窗口首次显示后执行异步初始化：验证 ADB/scrcpy 工具、预加载设备列表、部署 scrcpy。
-    /// </summary>
     private async Task OnMainFormShownAsync()
     {
         _ = ValidateBundledToolsAsync();
@@ -500,23 +305,14 @@ public partial class MainForm : Form
         await EnsureScrcpyReadyAsync(forceDeploy: false, reportToMirrorPanel: false);
     }
 
-    /// <summary>
-    /// 异步验证捆绑的 ADB 和 scrcpy 工具是否可用，通过后台线程执行验证后切回 UI 线程更新状态。
-    /// </summary>
     private async Task ValidateBundledToolsAsync()
     {
         var adbPath = _adbHelper.GetAdbPath();
         var scrcpyPath = _scrcpyManager.GetScrcpyPath();
-
         var adbValid = !string.IsNullOrEmpty(adbPath) && await Task.Run(() => _adbHelper.ValidateAdb(adbPath));
         var scrcpyValid = !string.IsNullOrEmpty(scrcpyPath) &&
                           await Task.Run(() => _scrcpyManager.ValidateScrcpy(scrcpyPath));
-
-        if (IsDisposed || !IsHandleCreated)
-        {
-            return;
-        }
-
+        if (IsDisposed || !IsHandleCreated) return;
         BeginInvoke(new Action(() =>
         {
             _adbValidated = adbValid;
@@ -526,31 +322,22 @@ public partial class MainForm : Form
         }));
     }
 
-    /// <summary>
-    /// 应用设置到 UI 组件，包括字体大小和过滤器默认值。
-    /// </summary>
     private void ApplySettings()
     {
         var font = new Font("Consolas", _settings.FontSize);
-        _lstNetworkLogs.Font = font;
-        _lstNormalLogs.Font = font;
-        _lstSystemLogs.Font = font;
+        _networkLogForm.ApplyFont(font);
+        _normalLogForm.ApplyFont(font);
+        _systemLogForm.ApplyFont(font);
         _jsonHeadersView?.SetFont(font);
         _jsonRequestBodyView?.SetFont(font);
         _jsonResponseBodyView?.SetFont(font);
-        _networkFilterPanel.NotifyRegexError = _settings.NotifyRegexError;
-        _normalFilterPanel.NotifyRegexError = _settings.NotifyRegexError;
-        _systemFilterPanel.NotifyRegexError = _settings.NotifyRegexError;
-        _networkFilterPanel.EnsureDefaultSelections();
-        _normalFilterPanel.EnsureDefaultSelections();
-        _systemFilterPanel.EnsureDefaultSelections();
+        _networkLogForm.ApplySettings(_settings);
+        _normalLogForm.ApplySettings(_settings);
+        _systemLogForm.ApplySettings(_settings);
         UpdateLogCount();
         RefreshMirrorPanelState();
     }
 
-    /// <summary>
-    /// 获取当前设备的日志缓冲区，如果未选中设备则返回合并缓冲区。
-    /// </summary>
     private RingBuffer<LogEntry> GetCurrentLogBuffer()
     {
         if (_currentDeviceId == null) return _allLogs;
@@ -559,43 +346,28 @@ public partial class MainForm : Form
 
     #region Server Events
 
-    /// <summary>
-    /// 处理设备连接事件，创建设备日志缓冲区并启动 logcat。
-    /// </summary>
     private void OnDeviceConnected(object? sender, DeviceInfo info)
     {
         this.BeginInvoke(new Action(() =>
         {
             var id = info.DeviceId ?? "";
             if (!_deviceLogs.ContainsKey(id))
-            {
                 _deviceLogs[id] = new RingBuffer<LogEntry>(_settings.MaxLogEntriesPerDevice);
-            }
-
             if (!_deviceNormalLogs.ContainsKey(id))
-            {
                 _deviceNormalLogs[id] = new RingBuffer<LogEntry>(_settings.MaxNormalLogEntriesPerDevice);
-            }
-
             TryMatchAdbSerial(info);
             _devicePanel.AddOrUpdateDevice(info, 0);
             UpdateDeviceCountStatus();
             RefreshMirrorPanelState();
-
             if (_settings.AutoStartLogcat && _adbHelper.IsAdbAvailable())
             {
                 var adbPath = _adbHelper.GetAdbPath();
                 if (adbPath != null && !string.IsNullOrEmpty(info.AdbSerial))
-                {
                     StartLogcat(adbPath, info.AdbSerial, id, _settings.LogcatFilter);
-                }
             }
         }));
     }
 
-    /// <summary>
-    /// 尝试匹配设备的 ADB 序列号，通过设备型号在 ADB 设备列表中查找。
-    /// </summary>
     private void TryMatchAdbSerial(DeviceInfo info)
     {
         if (!_adbHelper.IsAdbAvailable()) return;
@@ -614,43 +386,25 @@ public partial class MainForm : Form
         }
     }
 
-    /// <summary>
-    /// 将 ADB serial 索引的日志缓冲区、logcat 读取器和当前设备 ID 重新绑定到 TCP deviceId，
-    /// 确保设备身份从 ADB serial 过渡到 deviceId 后数据不丢失。
-    /// </summary>
-    /// <param name="adbSerial">ADB 序列号。</param>
-    /// <param name="deviceId">TCP 协议中的设备 ID。</param>
     private void RebindAdbBackedState(string adbSerial, string deviceId)
     {
-        if (string.IsNullOrEmpty(adbSerial) || string.IsNullOrEmpty(deviceId) || adbSerial == deviceId)
-        {
-            return;
-        }
-
+        if (string.IsNullOrEmpty(adbSerial) || string.IsNullOrEmpty(deviceId) || adbSerial == deviceId) return;
         if (_deviceLogs.TryGetValue(adbSerial, out var serialLogs))
         {
-            if (!_deviceLogs.ContainsKey(deviceId))
-            {
-                _deviceLogs[deviceId] = serialLogs;
-            }
-
+            if (!_deviceLogs.ContainsKey(deviceId)) _deviceLogs[deviceId] = serialLogs;
             _deviceLogs.Remove(adbSerial);
         }
 
         if (_deviceNormalLogs.TryGetValue(adbSerial, out var serialNormalLogs))
         {
-            if (!_deviceNormalLogs.ContainsKey(deviceId))
-            {
-                _deviceNormalLogs[deviceId] = serialNormalLogs;
-            }
-
+            if (!_deviceNormalLogs.ContainsKey(deviceId)) _deviceNormalLogs[deviceId] = serialNormalLogs;
             _deviceNormalLogs.Remove(adbSerial);
         }
 
-        if (IsSystemLogRuntimeReady())
+        if (_systemLogForm.IsRuntimeReady())
         {
             _systemLogStore.RemapDevice(adbSerial, deviceId);
-            RefreshSystemLogList();
+            _systemLogForm.RefreshSystemLogList();
         }
 
         if (_logcatReaders.TryGetValue(adbSerial, out var reader))
@@ -659,15 +413,9 @@ public partial class MainForm : Form
             _logcatReaders[deviceId] = reader;
         }
 
-        if (_currentDeviceId == adbSerial)
-        {
-            _currentDeviceId = deviceId;
-        }
+        if (_currentDeviceId == adbSerial) _currentDeviceId = deviceId;
     }
 
-    /// <summary>
-    /// 处理设备断开连接事件，标记设备离线并请求 ADB 重新扫描。
-    /// </summary>
     private void OnDeviceDisconnected(object? sender, string deviceId)
     {
         this.BeginInvoke(new Action(() =>
@@ -679,10 +427,6 @@ public partial class MainForm : Form
         }));
     }
 
-    /// <summary>
-    /// 处理网络日志接收事件，将日志写入设备缓冲区和合并缓冲区，
-    /// 根据当前视图和自动滚动状态决定增量刷新或延迟刷新。
-    /// </summary>
     private void OnLogReceived(object? sender, (string deviceId, LogEntry entry) args)
     {
         this.BeginInvoke(new Action(() =>
@@ -716,30 +460,7 @@ public partial class MainForm : Form
             _allLogs.Add(entry);
 
             if (showingCurrentNetwork)
-            {
-                var incrementalUpdated =
-                    TryAppendNetworkLogIncrementally(entry, activeViewCountBeforeAdd, activeViewWasFull);
-                if (_networkAutoScrollEnabled)
-                {
-                    var wasAtBottom = IsAtBottom(_lstNetworkLogs);
-                    if (!incrementalUpdated)
-                    {
-                        RefreshNetworkFilter();
-                    }
-                    else
-                    {
-                        RefreshNetworkLogList();
-                        UpdateLogCount();
-                    }
-
-                    if (wasAtBottom) ScrollToBottom(_lstNetworkLogs);
-                }
-                else
-                {
-                    _networkRefreshNeedsFullFilter |= !incrementalUpdated;
-                    ScheduleNetworkRefresh();
-                }
-            }
+                _networkLogForm.OnLogAdded(entry, true, activeViewCountBeforeAdd, activeViewWasFull);
         }));
     }
 
@@ -768,65 +489,48 @@ public partial class MainForm : Form
             }
 
             if (_deviceNormalLogs.TryGetValue(deviceId, out var deviceBuf))
-            {
                 deviceBuf.Add(entry);
-            }
-
             _allNormalLogs.Add(entry);
 
             if (showingCurrentNormal)
-            {
-                var incrementalUpdated =
-                    TryAppendNormalLogIncrementally(entry, activeViewCountBeforeAdd, activeViewWasFull);
-                if (_normalAutoScrollEnabled)
-                {
-                    var wasAtBottom = IsAtBottom(_lstNormalLogs);
-                    if (!incrementalUpdated)
-                    {
-                        RefreshNormalFilter();
-                    }
-                    else
-                    {
-                        RefreshNormalLogList();
-                        UpdateLogCount();
-                    }
-
-                    if (wasAtBottom) ScrollToBottom(_lstNormalLogs);
-                }
-                else
-                {
-                    _normalRefreshNeedsFullFilter |= !incrementalUpdated;
-                    ScheduleNormalRefresh();
-                }
-            }
+                _normalLogForm.OnNormalLogAdded(entry, true, activeViewCountBeforeAdd, activeViewWasFull);
         }));
     }
 
-    #endregion
+    private void OnSystemLogReceived(object? sender, SystemLogEntry entry)
+    {
+        lock (_pendingSystemLogsLock)
+        {
+            _pendingSystemLogs.Enqueue(entry);
+            if (_systemLogFlushScheduled) return;
+            _systemLogFlushScheduled = true;
+        }
 
-    #region Normal Log List
+        _ = Task.Run(FlushPendingSystemLogsAsync);
+    }
 
-    // 普通日志的配置、过滤、显示、交互逻辑见 MainForm.NormalLogs.cs（partial class）
+    private async Task FlushPendingSystemLogsAsync()
+    {
+        while (true)
+        {
+            var entries = new List<SystemLogEntry>();
+            lock (_pendingSystemLogsLock)
+            {
+                while (_pendingSystemLogs.Count > 0 && entries.Count < 200)
+                    entries.Add(_pendingSystemLogs.Dequeue());
+                if (entries.Count == 0) { _systemLogFlushScheduled = false; return; }
+            }
 
-    #endregion
-
-    #region Network Log List
-
-    // 网络日志列表的配置、过滤、显示、交互逻辑见 MainForm.NetworkLogs.cs（partial class）
-
-    #endregion
-
-    #region System Log List
-
-    // 系统日志快照、过滤、Pause/Resume 运行时逻辑见 MainForm.SystemLogs.cs（partial class）
+            if (!_systemLogForm.IsRuntimeReady()) continue;
+            if (IsDisposed || !IsHandleCreated) return;
+            BeginInvoke(new Action(() => _systemLogForm.ProcessPendingLogs(entries)));
+        }
+    }
 
     #endregion
 
     #region Toolbar Actions
 
-    /// <summary>
-    /// 自动启动 TCP 服务器，监听指定端口。
-    /// </summary>
     private void AutoStartServer()
     {
         var port = _settings.ServerPort;
@@ -851,17 +555,13 @@ public partial class MainForm : Form
                         _lblStatus.Text = $"\u25CB {Language.Error}";
                         _lblStatus.ForeColor = Color.Red;
                         _lblServerStatus.Text = Language.ServerError(ex.Message);
-                        MessageBox.Show(Language.FailedToStartServer(ex.Message), Language.Error, MessageBoxButtons.OK,
-                            MessageBoxIcon.Error);
+                        MessageBox.Show(Language.FailedToStartServer(ex.Message), Language.Error,
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
                     });
             }
         });
     }
 
-    /// <summary>
-    /// ADB Reverse 下拉菜单展开时动态填充设备列表，
-    /// 每个设备一个 Reverse 项，最后附加"全部 Reverse"选项。
-    /// </summary>
     private void OnAdbReverseOpening(object? sender, EventArgs e)
     {
         _btnAdbReverse.DropDownItems.Clear();
@@ -910,66 +610,35 @@ public partial class MainForm : Form
 
     #region Device Panel Events
 
-    /// <summary>
-    /// 处理刷新 ADB 设备请求。
-    /// </summary>
-    private void OnRefreshAdbDevices(object? sender, EventArgs e)
-    {
-        RequestAdbScan();
-    }
+    private void OnRefreshAdbDevices(object? sender, EventArgs e) => RequestAdbScan();
 
-    /// <summary>
-    /// 请求扫描 ADB 设备列表。
-    /// </summary>
     private void RequestAdbScan()
     {
         if (!_adbHelper.IsAdbAvailable()) return;
         Task.Run(() =>
         {
             var devices = _adbHelper.GetDevices();
-            if (IsHandleCreated)
-                BeginInvoke(() => ApplyAdbDevices(devices));
+            if (IsHandleCreated) BeginInvoke(() => ApplyAdbDevices(devices));
         });
     }
 
-    /// <summary>
-    /// 预加载 ADB 设备列表，尝试多次扫描直到发现设备。
-    /// </summary>
     private async Task PrimeAdbDeviceListAsync()
     {
-        if (!_adbHelper.IsAdbAvailable())
-        {
-            return;
-        }
-
+        if (!_adbHelper.IsAdbAvailable()) return;
         for (int attempt = 0; attempt < 4 && !IsDisposed; attempt++)
         {
             var devices = await Task.Run(() => _adbHelper.GetDevices());
-            if (IsDisposed)
-            {
-                return;
-            }
-
+            if (IsDisposed) return;
             ApplyAdbDevices(devices);
-            if (devices.Count > 0)
-            {
-                return;
-            }
-
+            if (devices.Count > 0) return;
             await Task.Delay(1000);
         }
     }
 
-    /// <summary>
-    /// 应用 ADB 扫描发现的设备列表：移除离线设备、为新设备创建日志缓冲区、
-    /// 自动启动 Logcat、对新增设备执行 adb reverse 端口映射。
-    /// </summary>
-    /// <param name="adbDevices">当前 ADB 扫描发现的设备列表。</param>
     private void ApplyAdbDevices(List<AdbDevice> adbDevices)
     {
         var currentSerials = new HashSet<string>(adbDevices.Select(d => d.Serial));
         _devicePanel.RemoveMissingAdbDevices(currentSerials);
-
         var adbPath = _adbHelper.GetAdbPath();
         var newAdbSerials = new List<string>();
 
@@ -977,10 +646,8 @@ public partial class MainForm : Form
         {
             var isNew = _devicePanel.AddAdbDevice(dev.Serial, dev.Model);
             if (isNew) newAdbSerials.Add(dev.Serial);
-
             if (!_deviceLogs.ContainsKey(dev.Serial))
                 _deviceLogs[dev.Serial] = new RingBuffer<LogEntry>(_settings.MaxLogEntriesPerDevice);
-
             if (!_deviceNormalLogs.ContainsKey(dev.Serial))
                 _deviceNormalLogs[dev.Serial] = new RingBuffer<LogEntry>(_settings.MaxNormalLogEntriesPerDevice);
 
@@ -992,8 +659,7 @@ public partial class MainForm : Form
             if (!_logcatReaders.ContainsKey(mappedDeviceId) && !_logcatReaders.ContainsKey(dev.Serial) &&
                 _settings.AutoStartLogcat)
             {
-                if (adbPath != null)
-                    StartLogcat(adbPath, dev.Serial, mappedDeviceId, _settings.LogcatFilter);
+                if (adbPath != null) StartLogcat(adbPath, dev.Serial, mappedDeviceId, _settings.LogcatFilter);
             }
         }
 
@@ -1002,18 +668,13 @@ public partial class MainForm : Form
             Task.Run(() =>
             {
                 foreach (var serial in newAdbSerials)
-                {
                     _adbHelper.ReversePort(adbPath, new AdbDevice { Serial = serial }, _settings.ServerPort);
-                }
             });
         }
 
         UpdateDeviceCountStatus();
     }
 
-    /// <summary>
-    /// 启动 ADB 设备定时扫描循环，先取消旧循环再创建新的 CancellationTokenSource。
-    /// </summary>
     private void StartAdbScanLoop()
     {
         StopAdbScanLoop();
@@ -1021,11 +682,6 @@ public partial class MainForm : Form
         _ = ScanLoopAsync(_adbScanCts.Token);
     }
 
-    /// <summary>
-    /// ADB 设备扫描循环，按配置间隔定时扫描设备列表并通过 BeginInvoke 更新 UI。
-    /// 出错时延长等待时间避免频繁重试。
-    /// </summary>
-    /// <param name="token">取消令牌，用于终止扫描循环。</param>
     private async Task ScanLoopAsync(CancellationToken token)
     {
         while (!token.IsCancellationRequested)
@@ -1041,20 +697,11 @@ public partial class MainForm : Form
 
                 await Task.Delay(_settings.AdbScanIntervalMs, token);
             }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch
-            {
-                await Task.Delay(10000, token);
-            }
+            catch (OperationCanceledException) { break; }
+            catch { await Task.Delay(10000, token); }
         }
     }
 
-    /// <summary>
-    /// 停止 ADB 设备扫描循环，取消并释放 CancellationTokenSource。
-    /// </summary>
     private void StopAdbScanLoop()
     {
         _adbScanCts?.Cancel();
@@ -1062,16 +709,12 @@ public partial class MainForm : Form
         _adbScanCts = null;
     }
 
-    /// <summary>
-    /// 处理设备选择变更事件，切换当前设备 ID、刷新日志视图和详情面板，
-    /// 并根据设置决定是否自动启动 scrcpy 投屏。
-    /// </summary>
     private void OnDeviceSelected(object? sender, string? deviceId)
     {
         _currentDeviceId = deviceId;
-        RefreshNetworkFilter();
-        RefreshNormalFilter();
-        RefreshSystemLogList();
+        _networkLogForm.RebuildFilter();
+        _normalLogForm.RebuildFilter();
+        _systemLogForm.RefreshSystemLogList();
         _selectedLogEntry = null;
         ShowLogDetail(null);
         _scrcpyRotationIndex = 0;
@@ -1084,10 +727,6 @@ public partial class MainForm : Form
         }
     }
 
-    /// <summary>
-    /// 处理删除设备事件，停止该设备的 logcat、清理缓冲区和系统日志存储、
-    /// 从面板移除设备，若删除的是当前选中设备则重置视图。
-    /// </summary>
     private void OnDeleteDevice(object? sender, string deviceId)
     {
         if (_logcatReaders.TryGetValue(deviceId, out var reader))
@@ -1100,11 +739,7 @@ public partial class MainForm : Form
 
         _deviceLogs.Remove(deviceId);
         _deviceNormalLogs.Remove(deviceId);
-        if (IsSystemLogRuntimeReady())
-        {
-            _systemLogStore.ClearDevice(deviceId);
-        }
-
+        if (_systemLogForm.IsRuntimeReady()) _systemLogStore.ClearDevice(deviceId);
         _devicePanel.RemoveDevice(deviceId);
         if (_currentDeviceId == deviceId)
         {
@@ -1114,14 +749,11 @@ public partial class MainForm : Form
             StopMirror(clearStatusOnly: true);
         }
 
-        RefreshNetworkFilter();
-        RefreshSystemLogList();
+        _networkLogForm.RebuildFilter();
+        _systemLogForm.RefreshSystemLogList();
         RefreshMirrorPanelState();
     }
 
-    /// <summary>
-    /// 对指定设备执行 ADB Reverse 端口映射，将服务端口映射到 Android 端。
-    /// </summary>
     private void OnAdbReverseForDevice(object? sender, string deviceId)
     {
         var adbPath = _adbHelper.GetAdbPath();
@@ -1131,13 +763,10 @@ public partial class MainForm : Form
         var serial = info?.AdbSerial ?? _devicePanel.GetAdbSerialForKey(deviceId) ?? deviceId;
         var dev = new AdbDevice { Serial = serial };
         var (ok, output) = _adbHelper.ReversePort(adbPath, dev, port);
-        MessageBox.Show(ok ? $"ADB Reverse OK for {serial}" : $"Failed: {output}", "ADB Reverse", MessageBoxButtons.OK,
-            ok ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+        MessageBox.Show(ok ? $"ADB Reverse OK for {serial}" : $"Failed: {output}", "ADB Reverse",
+            MessageBoxButtons.OK, ok ? MessageBoxIcon.Information : MessageBoxIcon.Error);
     }
 
-    /// <summary>
-    /// 切换指定设备的 Logcat 读取状态：运行中则停止，已停止则重新启动。
-    /// </summary>
     private void OnLogcatToggle(object? sender, string deviceId)
     {
         if (_logcatReaders.TryGetValue(deviceId, out var reader) && reader.IsRunning)
@@ -1153,14 +782,10 @@ public partial class MainForm : Form
             var info = _server.GetDeviceInfo(deviceId);
             var serial = info?.AdbSerial ?? _devicePanel.GetAdbSerialForKey(deviceId) ?? deviceId;
             if (adbPath != null && !string.IsNullOrEmpty(serial))
-            {
                 StartLogcat(adbPath, serial, deviceId, _settings.LogcatFilter);
-            }
             else
-            {
-                MessageBox.Show(Language.CannotStartLogcat, Language.LogcatTitle, MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-            }
+                MessageBox.Show(Language.CannotStartLogcat, Language.LogcatTitle,
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         UpdateLogcatStatus();
@@ -1170,9 +795,6 @@ public partial class MainForm : Form
 
     #region Logcat
 
-    /// <summary>
-    /// 启动指定设备的 logcat 日志读取。
-    /// </summary>
     private void StartLogcat(string adbPath, string serial, string deviceId, string filter)
     {
         if (_logcatReaders.ContainsKey(deviceId)) return;
@@ -1192,109 +814,29 @@ public partial class MainForm : Form
 
     #endregion
 
-    #region Filter
-
-    // 网络日志/系统日志过滤逻辑见各自的 partial class 文件
-
-    #endregion
-
     #region Scroll & Count
 
-    /// <summary>
-    /// 判断列表视图是否在底部位置。
-    /// </summary>
-    private static bool IsAtBottom(ListView lv)
-    {
-        if (lv.VirtualListSize == 0) return true;
-        var topIndex = lv.TopItem?.Index ?? 0;
-        var visibleCount = Math.Max(1, lv.ClientSize.Height / Math.Max(1, lv.Font.Height + 6));
-        return topIndex + visibleCount >= lv.VirtualListSize;
-    }
-
-    /// <summary>
-    /// 滚动列表视图到底部。
-    /// </summary>
-    private static void ScrollToBottom(ListView lv)
-    {
-        if (lv.VirtualListSize > 0)
-        {
-            try
-            {
-                lv.EnsureVisible(lv.VirtualListSize - 1);
-            }
-            catch
-            {
-            }
-        }
-    }
-
-    /// <summary>
-    /// 滚动列表视图到顶部。
-    /// </summary>
-    private static void ScrollToTop(ListView lv)
-    {
-        if (lv.VirtualListSize > 0)
-        {
-            try
-            {
-                lv.EnsureVisible(0);
-            }
-            catch
-            {
-            }
-        }
-    }
-
-    /// <summary>
-    /// 更新日志计数显示，包括总数、过滤数和容量百分比。
-    /// </summary>
     private void UpdateLogCount()
     {
         if (_showingNormalLog)
         {
-            var buf = GetCurrentNormalLogBuffer();
-            var total = buf.Count;
-            var filtered = _filteredNormalIndices.Count;
-            var max = _currentDeviceId == null ? _settings.MaxNormalLogEntries : _settings.MaxNormalLogEntriesPerDevice;
-            var pct = (double)total / max;
-            var countText = Language.LogsCount(filtered, total);
-            var isPaused = !(_normalAutoScrollEnabled && IsAtBottom(_lstNormalLogs));
-            _lblNormalLogCount.Text = Language.LogsCountWithMax(countText, max, isPaused);
-            _lblNormalLogCount.ForeColor = pct >= 1.0 ? Color.Red : pct >= 0.8 ? Color.Orange : DefaultForeColor;
+            // Count handled by NormalLogForm internally
         }
         else if (_showingSystemLog)
         {
-            // System Logs has its own count logic handled elsewhere
+            // Count handled by SystemLogForm internally
         }
         else
         {
-            var buf = GetCurrentLogBuffer();
-            var total = buf.Count;
-            var filtered = _filteredNetworkIndices.Count;
-            var max = _currentDeviceId == null ? _settings.MaxLogEntriesAll : _settings.MaxLogEntriesPerDevice;
-            var pct = (double)total / max;
-            var countText = Language.LogsCount(filtered, total);
-            var isPaused = !(_networkAutoScrollEnabled && IsAtBottom(_lstNetworkLogs));
-            _lblLogCount.Text = Language.LogsCountWithMax(countText, max, isPaused);
-            _lblLogCount.ForeColor = pct >= 1.0 ? Color.Red : pct >= 0.8 ? Color.Orange : DefaultForeColor;
+            // Count handled by NetworkLogForm internally
         }
-
-        _btnScrollToBottom.BackColor = _networkAutoScrollEnabled && !_showingSystemLog && !_showingNormalLog ? Color.LightSkyBlue : DefaultBackColor;
-        _btnNormalScrollToBottom.BackColor = _normalAutoScrollEnabled && _showingNormalLog ? Color.LightSkyBlue : DefaultBackColor;
-        _btnSystemScrollToBottom.BackColor = _systemAutoScrollEnabled && _showingSystemLog ? Color.LightSkyBlue : DefaultBackColor;
     }
 
-    /// <summary>
-    /// 更新设备数量状态显示。
-    /// </summary>
     private void UpdateDeviceCountStatus()
     {
         _lblDeviceCountStatus.Text = Language.DevicesCount(_deviceLogs.Count);
     }
 
-    /// <summary>
-    /// 更新 logcat 运行状态显示。
-    /// </summary>
     private void UpdateLogcatStatus()
     {
         var running = _logcatReaders.Values.Count(r => r.IsRunning);
@@ -1305,19 +847,13 @@ public partial class MainForm : Form
 
     #region Bottom Bar Actions
 
-    /// <summary>
-    /// 清除当前设备或所有设备的日志。
-    /// </summary>
     private void OnClear(object? sender, EventArgs e)
     {
         if (_currentDeviceId != null)
         {
             if (_deviceLogs.TryGetValue(_currentDeviceId, out var buf)) buf.Clear();
             if (_deviceNormalLogs.TryGetValue(_currentDeviceId, out var nBuf)) nBuf.Clear();
-            if (IsSystemLogRuntimeReady())
-            {
-                _systemLogStore.ClearDevice(_currentDeviceId);
-            }
+            if (_systemLogForm.IsRuntimeReady()) _systemLogStore.ClearDevice(_currentDeviceId);
         }
         else
         {
@@ -1325,29 +861,86 @@ public partial class MainForm : Form
             _allLogs.Clear();
             foreach (var nBuf in _deviceNormalLogs.Values) nBuf.Clear();
             _allNormalLogs.Clear();
-            if (IsSystemLogRuntimeReady())
-            {
-                _systemLogStore.RotateSession();
-            }
+            if (_systemLogForm.IsRuntimeReady()) _systemLogStore.RotateSession();
         }
 
-        _filteredNetworkIndices.Clear();
-        _filteredNormalIndices.Clear();
         _selectedLogEntry = null;
         ShowLogDetail(null);
-        RefreshNetworkFilter();
-        RefreshNormalFilter();
-        RefreshSystemLogList();
+        _networkLogForm.ClearFilterAndRefresh();
+        _normalLogForm.ClearFilterAndRefresh();
+        _systemLogForm.RefreshSystemLogList();
         RefreshMirrorPanelState();
     }
+
+    private void OnExportJson(object? sender, EventArgs e)
+    {
+        if (_showingNormalLog)
+        {
+            using var dlg = new SaveFileDialog { Filter = "JSON|*.json", FileName = "normal_logs.json" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            var buf = _normalLogForm.GetCurrentNormalLogBuffer();
+            var entries = new List<LogEntry>();
+            for (int i = 0; i < buf.Count; i++) entries.Add(buf.Get(i));
+            var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(dlg.FileName, json);
+            return;
+        }
+
+        using var dlg2 = new SaveFileDialog { Filter = "JSON|*.json", FileName = "network_logs.json" };
+        if (dlg2.ShowDialog() != DialogResult.OK) return;
+        var buf2 = _networkLogForm.GetCurrentLogBuffer();
+        var entries2 = new List<LogEntry>();
+        for (int i = 0; i < buf2.Count; i++) entries2.Add(buf2.Get(i));
+        var json2 = JsonSerializer.Serialize(entries2, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(dlg2.FileName, json2);
+    }
+
+    private void OnExportTxt(object? sender, EventArgs e)
+    {
+        if (_showingNormalLog)
+        {
+            using var dlg = new SaveFileDialog { Filter = "Text|*.txt", FileName = "normal_logs.txt" };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            var buf = _normalLogForm.GetCurrentNormalLogBuffer();
+            using var writer = new StreamWriter(dlg.FileName);
+            for (int i = 0; i < buf.Count; i++)
+            {
+                var entry = buf.Get(i);
+                var timeStr = entry.SendTime > 0 ? entry.SendTimeDt.ToString("HH:mm:ss.fff") : "";
+                writer.WriteLine($"[{timeStr}] [{LevelToDisplayText(entry.Level)}] [{entry.Method}] {entry.Message}");
+            }
+
+            return;
+        }
+
+        using var dlg2 = new SaveFileDialog { Filter = "Text|*.txt", FileName = "network_logs.txt" };
+        if (dlg2.ShowDialog() != DialogResult.OK) return;
+        var buf2 = _networkLogForm.GetCurrentLogBuffer();
+        using var writer2 = new StreamWriter(dlg2.FileName);
+        for (int i = 0; i < buf2.Count; i++)
+        {
+            var entry = buf2.Get(i);
+            writer2.WriteLine($"--- Log #{i + 1} ---");
+            writer2.WriteLine($"Method: {entry.Method}");
+            writer2.WriteLine($"URL: {entry.Url}");
+            writer2.WriteLine($"Code: {entry.Code}");
+            writer2.WriteLine($"Duration: {entry.Duration}ms");
+            writer2.WriteLine($"Successful: {entry.IsSuccessStatusCode}");
+            if (!string.IsNullOrEmpty(entry.Send)) writer2.WriteLine($"Request Body: {entry.Send}");
+            if (!string.IsNullOrEmpty(entry.Content)) writer2.WriteLine($"Response: {entry.Content}");
+            writer2.WriteLine();
+        }
+    }
+
+    private static string LevelToDisplayText(int level) => level switch
+    {
+        2 => "V", 3 => "D", 4 => "I", 5 => "W", 6 => "E", 7 => "F", _ => "?"
+    };
 
     #endregion
 
     #region Settings
 
-    /// <summary>
-    /// 打开设置对话框，应用新的设置。
-    /// </summary>
     private void OnSettingsClick(object? sender, EventArgs e)
     {
         using var dlg = new SettingsDialog(_settings, _adbHelper);
@@ -1355,26 +948,16 @@ public partial class MainForm : Form
         {
             _settings = AppSettings.Load();
             ApplySettings();
-
             _scrcpyDeployError = null;
             _scrcpyDeployStatus = null;
-
-            foreach (var kvp in _deviceLogs)
-            {
-                kvp.Value.Resize(_settings.MaxLogEntriesPerDevice);
-            }
-
-            foreach (var kvp in _deviceNormalLogs)
-            {
-                kvp.Value.Resize(_settings.MaxNormalLogEntriesPerDevice);
-            }
-
+            foreach (var kvp in _deviceLogs) kvp.Value.Resize(_settings.MaxLogEntriesPerDevice);
+            foreach (var kvp in _deviceNormalLogs) kvp.Value.Resize(_settings.MaxNormalLogEntriesPerDevice);
             _allLogs.Resize(_settings.MaxLogEntriesAll);
             _allNormalLogs.Resize(_settings.MaxNormalLogEntries);
-            if (IsSystemLogRuntimeReady())
+            if (_systemLogForm.IsRuntimeReady())
             {
                 _systemLogStore.UpdateHotCapacity(_settings.MaxSystemLogEntries);
-                RefreshSystemLogList();
+                _systemLogForm.RefreshSystemLogList();
             }
 
             UpdateAdbStatus();
@@ -1384,9 +967,13 @@ public partial class MainForm : Form
 
     #endregion
 
-    /// <summary>
-    /// 窗口关闭前清理所有资源。
-    /// </summary>
+    private void InitializeSystemLogRuntime()
+    {
+        _systemLogStore = new SystemLogSessionStore(_settings.MaxSystemLogEntries);
+    }
+
+    private bool IsSystemLogRuntimeReady() => _systemLogStore != null;
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         StopAdbScanLoop();
@@ -1395,61 +982,30 @@ public partial class MainForm : Form
         _scrcpyStartCts?.Dispose();
         _mirrorRestartTimer?.Stop();
         _mirrorRestartTimer?.Dispose();
-        foreach (var session in _externalScrcpySessions.ToArray())
-        {
-            session.Dispose();
-        }
-
+        foreach (var session in _externalScrcpySessions.ToArray()) session.Dispose();
         _externalScrcpySessions.Clear();
         foreach (var reader in _logcatReaders.Values) reader.Stop();
-        _systemSnapshotCts?.Cancel();
-        _systemSnapshotCts?.Dispose();
-        _systemPrefetchCts?.Cancel();
-        _systemPrefetchCts?.Dispose();
-        if (_systemLogStore is not null)
-        {
-            _systemLogStore.Dispose();
-        }
-
+        _systemLogForm.CancelAsyncOperations();
+        if (_systemLogStore is not null) _systemLogStore.Dispose();
+        _networkLogForm.Dispose();
+        _normalLogForm.Dispose();
+        _systemLogForm.Dispose();
         _server.Stop();
         base.OnFormClosing(e);
     }
 
-    /// <summary>
-    /// 处理快捷键，End 键切换到底部并启用自动滚动。
-    /// </summary>
-    /// <returns>true 表示已处理该快捷键，不再传递。</returns>
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (keyData == Keys.End)
         {
-            if (_showingSystemLog)
-            {
-                _systemAutoScrollEnabled = true;
-                ScrollToBottom(_lstSystemLogs);
-            }
-            else if (_showingNormalLog)
-            {
-                _normalAutoScrollEnabled = true;
-                ScrollToBottom(_lstNormalLogs);
-            }
-            else
-            {
-                _networkAutoScrollEnabled = true;
-                ScrollToBottom(_lstNetworkLogs);
-            }
-
+            if (_showingSystemLog) _systemLogForm.HandleEndKey();
+            else if (_showingNormalLog) _normalLogForm.HandleEndKey();
+            else _networkLogForm.HandleEndKey();
             return true;
         }
 
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    /// <summary>
-    /// 窗口 Load 事件处理，初始化 scrcpy 镜像面板状态。
-    /// </summary>
-    private void OnMainFormLoad(object? sender, EventArgs e)
-    {
-        RefreshMirrorPanelState();
-    }
+    private void OnMainFormLoad(object? sender, EventArgs e) => RefreshMirrorPanelState();
 }

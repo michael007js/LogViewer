@@ -52,14 +52,19 @@ LogViewer/                            ← 项目根目录
 │   ├── DeviceConnection.cs                 ← 单设备连接+协议解析+按type分发网络/普通日志+ArrayPool+异步Pong回复+LastActiveTime
 │   └── LogcatReader.cs                     ← adb logcat进程流式读取+正则解析threadtime格式
 │
-├── UI/                                     ← 界面层（22 .cs + 1 .resx）
-│   ├── MainForm.cs                         ← 主窗口共用字段/构造函数/跨功能方法/服务器事件/窗口生命周期
-│   ├── MainForm.NetworkLogs.cs             ← 网络日志配置/过滤/显示/右键菜单/导出（partial class）
-│   ├── MainForm.NormalLogs.cs              ← 普通日志配置/过滤/显示/右键菜单/Level着色（partial class）
-│   ├── MainForm.Preview.cs                 ← JSON预览面板初始化/视图切换/详情显示（partial class）
+├── UI/                                     ← 界面层（26 .cs + 1 .resx）
+│   ├── MainForm.cs                         ← 主窗口共用字段/构造函数/Form嵌入/服务器事件/窗口生命周期
+│   ├── MainForm.Preview.cs                 ← JSON预览面板初始化/视图切换/详情显示+ShowLogDetail（partial class）
 │   ├── MainForm.Scrcpy.cs                  ← scrcpy投屏生命周期/状态同步/截图（partial class）
-│   ├── MainForm.SystemLogs.cs              ← System Logs 快照/过滤/Pause/Resume 运行时逻辑
-│   ├── MainForm.Designer.cs                ← 主窗口设计器控件树（支持设计器拖动）
+│   ├── MainForm.Designer.cs                ← 主窗口设计器控件树（TabPage保留，内部控件已迁移至各Form）
+│   ├── NetworkLogForm.cs                   ← 网络日志Form手写逻辑（过滤/显示/右键菜单/导出/事件通知）
+│   ├── NetworkLogForm.Designer.cs          ← 网络日志Form设计器控件树（FilterPanel+ListView+ActionBar）
+│   ├── NormalLogForm.cs                    ← 普通日志Form手写逻辑（过滤/显示/Level着色/右键菜单/事件通知）
+│   ├── NormalLogForm.Designer.cs           ← 普通日志Form设计器控件树（FilterPanel+ListView+ActionBar）
+│   ├── SystemLogForm.cs                    ← 系统日志Form手写逻辑（快照/过滤/Pause/Resume/预取/事件通知）
+│   ├── SystemLogForm.Designer.cs           ← 系统日志Form设计器控件树（FilterPanel+ListView+ActionBar+Pause）
+│   ├── JsonDetailToolbar.cs                ← JSON详情工具栏UserControl（搜索/展开/折叠/层级/视图切换）
+│   ├── JsonDetailToolbar.Designer.cs       ← JSON详情工具栏设计器控件树（TextBox+5 Button）
 │   ├── BufferedListView.cs                 ← ListView 双缓冲/精确顶部索引/滚动恢复辅助
 │   ├── ClipboardTextHelper.cs              ← 剪贴板安全写入辅助（统一规避 null/empty 复制崩溃）
 │   ├── FilterPanel.cs                      ← 过滤面板用户组件（Keyword+Regex+双ComboBox，回调事件驱动）

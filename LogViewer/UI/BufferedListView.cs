@@ -103,6 +103,35 @@ internal static class BufferedListViewHelper
     /// <param name="wParam">消息参数1。</param>
     /// <param name="lParam">消息参数2。</param>
     /// <returns>消息处理结果。</returns>
+    public static bool IsAtBottom(ListView lv)
+    {
+        if (lv.VirtualListSize == 0) return true;
+        var topIndex = lv.TopItem?.Index ?? 0;
+        var visibleCount = Math.Max(1, lv.ClientSize.Height / Math.Max(1, lv.Font.Height + 6));
+        return topIndex + visibleCount >= lv.VirtualListSize;
+    }
+
+    public static void ScrollToBottom(ListView lv)
+    {
+        if (lv.VirtualListSize > 0)
+        {
+            try { lv.EnsureVisible(lv.VirtualListSize - 1); } catch { }
+        }
+    }
+
+    public static void ScrollToTop(ListView lv)
+    {
+        if (lv.VirtualListSize > 0)
+        {
+            try { lv.EnsureVisible(0); } catch { }
+        }
+    }
+
+    public static int GetApproxVisibleRowCount(ListView listView)
+    {
+        return Math.Max(1, listView.ClientSize.Height / Math.Max(1, listView.Font.Height + 6));
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 }

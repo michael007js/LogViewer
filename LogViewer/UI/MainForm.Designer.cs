@@ -6,9 +6,6 @@ public partial class MainForm
     private System.ComponentModel.IContainer? components = null;
     private System.Windows.Forms.ToolStripMenuItem _settingsMenuItem;
     private System.Windows.Forms.Panel _logPanel;
-    private System.Windows.Forms.Panel _networkTabContainer;
-    private System.Windows.Forms.Panel _networkActionBar;
-    private System.Windows.Forms.Panel _systemTabContainer;
     private System.Windows.Forms.Panel _detailPanel;
 
     /// <summary>
@@ -29,30 +26,8 @@ public partial class MainForm
         _logPanel = new System.Windows.Forms.Panel();
         _tabLogType = new System.Windows.Forms.TabControl();
         _tabNetwork = new System.Windows.Forms.TabPage();
-        _networkTabContainer = new System.Windows.Forms.Panel();
-        _lstNetworkLogs = new System.Windows.Forms.ListView();
-        _networkActionBar = new System.Windows.Forms.Panel();
-        _btnScrollToBottom = new System.Windows.Forms.Button();
-        _btnScrollToTop = new System.Windows.Forms.Button();
-        _lblLogCount = new System.Windows.Forms.Label();
-        _networkFilterPanel = new LogViewer.UI.FilterPanel();
         _tabNormal = new System.Windows.Forms.TabPage();
-        _normalTabContainer = new System.Windows.Forms.Panel();
-        _lstNormalLogs = new System.Windows.Forms.ListView();
-        _normalActionBar = new System.Windows.Forms.Panel();
-        _btnNormalScrollToBottom = new System.Windows.Forms.Button();
-        _btnNormalScrollToTop = new System.Windows.Forms.Button();
-        _lblNormalLogCount = new System.Windows.Forms.Label();
-        _normalFilterPanel = new LogViewer.UI.FilterPanel();
         _tabSystem = new System.Windows.Forms.TabPage();
-        _systemTabContainer = new System.Windows.Forms.Panel();
-        _lstSystemLogs = new System.Windows.Forms.ListView();
-        _systemActionBar = new System.Windows.Forms.Panel();
-        _lblSystemBacklog = new System.Windows.Forms.Label();
-        _btnSystemPauseResume = new System.Windows.Forms.Button();
-        _btnSystemScrollToBottom = new System.Windows.Forms.Button();
-        _btnSystemScrollToTop = new System.Windows.Forms.Button();
-        _systemFilterPanel = new LogViewer.UI.FilterPanel();
         _detailPanel = new System.Windows.Forms.Panel();
         _tabDetail = new System.Windows.Forms.TabControl();
         _tabHeaders = new System.Windows.Forms.TabPage();
@@ -64,13 +39,7 @@ public partial class MainForm
         _tabResponseBody = new System.Windows.Forms.TabPage();
         _rawResponseBody = new System.Windows.Forms.TextBox();
         _jsonResponseBody = new System.Windows.Forms.Panel();
-        _pnlJsonToolbar = new System.Windows.Forms.Panel();
-        _txtJsonSearch = new System.Windows.Forms.TextBox();
-        _btnJsonSearch = new System.Windows.Forms.Button();
-        _btnExpandAll = new System.Windows.Forms.Button();
-        _btnCollapseAll = new System.Windows.Forms.Button();
-        _btnCollapseTo2 = new System.Windows.Forms.Button();
-        _btnToggleView = new System.Windows.Forms.Button();
+        _jsonDetailToolbar = new LogViewer.UI.JsonDetailToolbar();
         _pnlBottomBar = new System.Windows.Forms.FlowLayoutPanel();
         _btnClear = new System.Windows.Forms.Button();
         _btnExportJson = new System.Windows.Forms.Button();
@@ -92,21 +61,11 @@ public partial class MainForm
         _innerSplit.SuspendLayout();
         _logPanel.SuspendLayout();
         _tabLogType.SuspendLayout();
-        _tabNetwork.SuspendLayout();
-        _networkTabContainer.SuspendLayout();
-        _networkActionBar.SuspendLayout();
-        _tabNormal.SuspendLayout();
-        _normalTabContainer.SuspendLayout();
-        _normalActionBar.SuspendLayout();
-        _tabSystem.SuspendLayout();
-        _systemTabContainer.SuspendLayout();
-        _systemActionBar.SuspendLayout();
         _detailPanel.SuspendLayout();
         _tabDetail.SuspendLayout();
         _tabHeaders.SuspendLayout();
         _tabRequestBody.SuspendLayout();
         _tabResponseBody.SuspendLayout();
-        _pnlJsonToolbar.SuspendLayout();
         _pnlBottomBar.SuspendLayout();
         _statusStrip.SuspendLayout();
         SuspendLayout();
@@ -171,7 +130,7 @@ public partial class MainForm
         // _outerSplit.Panel2
         // 
         _outerSplit.Panel2.Controls.Add(_innerSplit);
-        _outerSplit.Size = new System.Drawing.Size(1264, 368);
+        _outerSplit.Size = new System.Drawing.Size(1264, 372);
         _outerSplit.SplitterDistance = 273;
         _outerSplit.TabIndex = 0;
         // 
@@ -183,7 +142,7 @@ public partial class MainForm
         _devicePanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _devicePanel.Name = "_devicePanel";
         _devicePanel.Padding = new System.Windows.Forms.Padding(8, 2, 8, 2);
-        _devicePanel.Size = new System.Drawing.Size(273, 368);
+        _devicePanel.Size = new System.Drawing.Size(273, 372);
         _devicePanel.TabIndex = 0;
         // 
         // _innerSplit
@@ -201,7 +160,7 @@ public partial class MainForm
         // _innerSplit.Panel2
         // 
         _innerSplit.Panel2.Controls.Add(_detailPanel);
-        _innerSplit.Size = new System.Drawing.Size(987, 368);
+        _innerSplit.Size = new System.Drawing.Size(987, 372);
         _innerSplit.SplitterDistance = 614;
         _innerSplit.TabIndex = 0;
         // 
@@ -212,7 +171,7 @@ public partial class MainForm
         _logPanel.Location = new System.Drawing.Point(0, 0);
         _logPanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _logPanel.Name = "_logPanel";
-        _logPanel.Size = new System.Drawing.Size(614, 368);
+        _logPanel.Size = new System.Drawing.Size(614, 372);
         _logPanel.TabIndex = 0;
         // 
         // _tabLogType
@@ -225,330 +184,51 @@ public partial class MainForm
         _tabLogType.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabLogType.Name = "_tabLogType";
         _tabLogType.SelectedIndex = 0;
-        _tabLogType.Size = new System.Drawing.Size(614, 368);
+        _tabLogType.Size = new System.Drawing.Size(614, 372);
         _tabLogType.TabIndex = 0;
         // 
         // _tabNetwork
         // 
-        _tabNetwork.Controls.Add(_networkTabContainer);
         _tabNetwork.Location = new System.Drawing.Point(4, 23);
         _tabNetwork.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabNetwork.Name = "_tabNetwork";
         _tabNetwork.Padding = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _tabNetwork.Size = new System.Drawing.Size(606, 341);
+        _tabNetwork.Size = new System.Drawing.Size(606, 345);
         _tabNetwork.TabIndex = 0;
         _tabNetwork.Text = "Network Logs";
         _tabNetwork.UseVisualStyleBackColor = true;
         // 
-        // _networkTabContainer
-        // 
-        _networkTabContainer.Controls.Add(_lstNetworkLogs);
-        _networkTabContainer.Controls.Add(_networkActionBar);
-        _networkTabContainer.Controls.Add(_networkFilterPanel);
-        _networkTabContainer.Dock = System.Windows.Forms.DockStyle.Fill;
-        _networkTabContainer.Location = new System.Drawing.Point(3, 2);
-        _networkTabContainer.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _networkTabContainer.Name = "_networkTabContainer";
-        _networkTabContainer.Size = new System.Drawing.Size(600, 337);
-        _networkTabContainer.TabIndex = 0;
-        // 
-        // _lstNetworkLogs
-        // 
-        _lstNetworkLogs.Dock = System.Windows.Forms.DockStyle.Fill;
-        _lstNetworkLogs.FullRowSelect = true;
-        _lstNetworkLogs.GridLines = true;
-        _lstNetworkLogs.Location = new System.Drawing.Point(0, 49);
-        _lstNetworkLogs.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _lstNetworkLogs.MultiSelect = false;
-        _lstNetworkLogs.Name = "_lstNetworkLogs";
-        _lstNetworkLogs.Size = new System.Drawing.Size(600, 288);
-        _lstNetworkLogs.TabIndex = 0;
-        _lstNetworkLogs.UseCompatibleStateImageBehavior = false;
-        _lstNetworkLogs.View = System.Windows.Forms.View.Details;
-        _lstNetworkLogs.VirtualMode = true;
-        // 
-        // _networkActionBar
-        // 
-        _networkActionBar.Controls.Add(_btnScrollToBottom);
-        _networkActionBar.Controls.Add(_btnScrollToTop);
-        _networkActionBar.Controls.Add(_lblLogCount);
-        _networkActionBar.Dock = System.Windows.Forms.DockStyle.Top;
-        _networkActionBar.Location = new System.Drawing.Point(0, 28);
-        _networkActionBar.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _networkActionBar.Name = "_networkActionBar";
-        _networkActionBar.Size = new System.Drawing.Size(600, 21);
-        _networkActionBar.TabIndex = 1;
-        // 
-        // _btnScrollToBottom
-        // 
-        _btnScrollToBottom.AutoSize = true;
-        _btnScrollToBottom.Dock = System.Windows.Forms.DockStyle.Left;
-        _btnScrollToBottom.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnScrollToBottom.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnScrollToBottom.Location = new System.Drawing.Point(109, 0);
-        _btnScrollToBottom.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnScrollToBottom.Name = "_btnScrollToBottom";
-        _btnScrollToBottom.Size = new System.Drawing.Size(127, 21);
-        _btnScrollToBottom.TabIndex = 1;
-        _btnScrollToBottom.Text = "⬇ Scroll to Bottom";
-        // 
-        // _btnScrollToTop
-        // 
-        _btnScrollToTop.AutoSize = true;
-        _btnScrollToTop.Dock = System.Windows.Forms.DockStyle.Left;
-        _btnScrollToTop.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnScrollToTop.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnScrollToTop.Location = new System.Drawing.Point(0, 0);
-        _btnScrollToTop.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnScrollToTop.Name = "_btnScrollToTop";
-        _btnScrollToTop.Size = new System.Drawing.Size(109, 21);
-        _btnScrollToTop.TabIndex = 0;
-        _btnScrollToTop.Text = "↑ Scroll to Top";
-        // 
-        // _lblLogCount
-        // 
-        _lblLogCount.Dock = System.Windows.Forms.DockStyle.Right;
-        _lblLogCount.Location = new System.Drawing.Point(450, 0);
-        _lblLogCount.Name = "_lblLogCount";
-        _lblLogCount.Size = new System.Drawing.Size(150, 21);
-        _lblLogCount.TabIndex = 1;
-        _lblLogCount.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-        // 
-        // _networkFilterPanel
-        // 
-        _networkFilterPanel.Dock = System.Windows.Forms.DockStyle.Top;
-        _networkFilterPanel.Filter1SelectedIndex = -1;
-        _networkFilterPanel.Filter2SelectedIndex = -1;
-        _networkFilterPanel.Font = new System.Drawing.Font("Consolas", 9F);
-        _networkFilterPanel.Location = new System.Drawing.Point(0, 0);
-        _networkFilterPanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _networkFilterPanel.Name = "_networkFilterPanel";
-        _networkFilterPanel.NotifyRegexError = false;
-        _networkFilterPanel.Size = new System.Drawing.Size(600, 28);
-        _networkFilterPanel.TabIndex = 2;
-        // 
         // _tabNormal
         // 
-        _tabNormal.Controls.Add(_normalTabContainer);
-        _tabNormal.Location = new System.Drawing.Point(4, 23);
+        _tabNormal.Location = new System.Drawing.Point(4, 26);
         _tabNormal.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabNormal.Name = "_tabNormal";
         _tabNormal.Padding = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _tabNormal.Size = new System.Drawing.Size(606, 341);
+        _tabNormal.Size = new System.Drawing.Size(606, 273);
         _tabNormal.TabIndex = 1;
         _tabNormal.Text = "Normal Logs";
         _tabNormal.UseVisualStyleBackColor = true;
         // 
-        // _normalTabContainer
-        // 
-        _normalTabContainer.Controls.Add(_lstNormalLogs);
-        _normalTabContainer.Controls.Add(_normalActionBar);
-        _normalTabContainer.Controls.Add(_normalFilterPanel);
-        _normalTabContainer.Dock = System.Windows.Forms.DockStyle.Fill;
-        _normalTabContainer.Location = new System.Drawing.Point(3, 2);
-        _normalTabContainer.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _normalTabContainer.Name = "_normalTabContainer";
-        _normalTabContainer.Size = new System.Drawing.Size(600, 337);
-        _normalTabContainer.TabIndex = 0;
-        // 
-        // _lstNormalLogs
-        // 
-        _lstNormalLogs.Dock = System.Windows.Forms.DockStyle.Fill;
-        _lstNormalLogs.FullRowSelect = true;
-        _lstNormalLogs.GridLines = true;
-        _lstNormalLogs.Location = new System.Drawing.Point(0, 49);
-        _lstNormalLogs.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _lstNormalLogs.MultiSelect = false;
-        _lstNormalLogs.Name = "_lstNormalLogs";
-        _lstNormalLogs.Size = new System.Drawing.Size(600, 288);
-        _lstNormalLogs.TabIndex = 0;
-        _lstNormalLogs.UseCompatibleStateImageBehavior = false;
-        _lstNormalLogs.View = System.Windows.Forms.View.Details;
-        _lstNormalLogs.VirtualMode = true;
-        // 
-        // _normalActionBar
-        // 
-        _normalActionBar.Controls.Add(_btnNormalScrollToBottom);
-        _normalActionBar.Controls.Add(_btnNormalScrollToTop);
-        _normalActionBar.Controls.Add(_lblNormalLogCount);
-        _normalActionBar.Dock = System.Windows.Forms.DockStyle.Top;
-        _normalActionBar.Location = new System.Drawing.Point(0, 28);
-        _normalActionBar.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _normalActionBar.Name = "_normalActionBar";
-        _normalActionBar.Size = new System.Drawing.Size(600, 21);
-        _normalActionBar.TabIndex = 1;
-        // 
-        // _btnNormalScrollToBottom
-        // 
-        _btnNormalScrollToBottom.AutoSize = true;
-        _btnNormalScrollToBottom.Dock = System.Windows.Forms.DockStyle.Left;
-        _btnNormalScrollToBottom.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnNormalScrollToBottom.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnNormalScrollToBottom.Location = new System.Drawing.Point(109, 0);
-        _btnNormalScrollToBottom.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnNormalScrollToBottom.Name = "_btnNormalScrollToBottom";
-        _btnNormalScrollToBottom.Size = new System.Drawing.Size(127, 21);
-        _btnNormalScrollToBottom.TabIndex = 1;
-        _btnNormalScrollToBottom.Text = "⬇ Scroll to Bottom";
-        // 
-        // _btnNormalScrollToTop
-        // 
-        _btnNormalScrollToTop.AutoSize = true;
-        _btnNormalScrollToTop.Dock = System.Windows.Forms.DockStyle.Left;
-        _btnNormalScrollToTop.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnNormalScrollToTop.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnNormalScrollToTop.Location = new System.Drawing.Point(0, 0);
-        _btnNormalScrollToTop.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnNormalScrollToTop.Name = "_btnNormalScrollToTop";
-        _btnNormalScrollToTop.Size = new System.Drawing.Size(109, 21);
-        _btnNormalScrollToTop.TabIndex = 0;
-        _btnNormalScrollToTop.Text = "↑ Scroll to Top";
-        // 
-        // _lblNormalLogCount
-        // 
-        _lblNormalLogCount.Dock = System.Windows.Forms.DockStyle.Right;
-        _lblNormalLogCount.Location = new System.Drawing.Point(450, 0);
-        _lblNormalLogCount.Name = "_lblNormalLogCount";
-        _lblNormalLogCount.Size = new System.Drawing.Size(150, 21);
-        _lblNormalLogCount.TabIndex = 1;
-        _lblNormalLogCount.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-        // 
-        // _normalFilterPanel
-        // 
-        _normalFilterPanel.Dock = System.Windows.Forms.DockStyle.Top;
-        _normalFilterPanel.Filter1SelectedIndex = -1;
-        _normalFilterPanel.Filter2SelectedIndex = -1;
-        _normalFilterPanel.Font = new System.Drawing.Font("Consolas", 9F);
-        _normalFilterPanel.Location = new System.Drawing.Point(0, 0);
-        _normalFilterPanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _normalFilterPanel.Name = "_normalFilterPanel";
-        _normalFilterPanel.NotifyRegexError = false;
-        _normalFilterPanel.Size = new System.Drawing.Size(600, 28);
-        _normalFilterPanel.TabIndex = 2;
-        // 
         // _tabSystem
         // 
-        _tabSystem.Controls.Add(_systemTabContainer);
         _tabSystem.Location = new System.Drawing.Point(4, 26);
         _tabSystem.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabSystem.Name = "_tabSystem";
         _tabSystem.Padding = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _tabSystem.Size = new System.Drawing.Size(606, 292);
+        _tabSystem.Size = new System.Drawing.Size(606, 273);
         _tabSystem.TabIndex = 1;
         _tabSystem.Text = "System Logs";
         _tabSystem.UseVisualStyleBackColor = true;
         // 
-        // _systemTabContainer
-        // 
-        _systemTabContainer.Controls.Add(_lstSystemLogs);
-        _systemTabContainer.Controls.Add(_systemActionBar);
-        _systemTabContainer.Controls.Add(_systemFilterPanel);
-        _systemTabContainer.Dock = System.Windows.Forms.DockStyle.Fill;
-        _systemTabContainer.Location = new System.Drawing.Point(3, 2);
-        _systemTabContainer.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _systemTabContainer.Name = "_systemTabContainer";
-        _systemTabContainer.Size = new System.Drawing.Size(600, 288);
-        _systemTabContainer.TabIndex = 0;
-        // 
-        // _lstSystemLogs
-        // 
-        _lstSystemLogs.Dock = System.Windows.Forms.DockStyle.Fill;
-        _lstSystemLogs.FullRowSelect = true;
-        _lstSystemLogs.GridLines = true;
-        _lstSystemLogs.Location = new System.Drawing.Point(0, 49);
-        _lstSystemLogs.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _lstSystemLogs.MultiSelect = false;
-        _lstSystemLogs.Name = "_lstSystemLogs";
-        _lstSystemLogs.Size = new System.Drawing.Size(600, 239);
-        _lstSystemLogs.TabIndex = 0;
-        _lstSystemLogs.UseCompatibleStateImageBehavior = false;
-        _lstSystemLogs.View = System.Windows.Forms.View.Details;
-        _lstSystemLogs.VirtualMode = true;
-        // 
-        // _systemActionBar
-        // 
-        _systemActionBar.Controls.Add(_lblSystemBacklog);
-        _systemActionBar.Controls.Add(_btnSystemPauseResume);
-        _systemActionBar.Controls.Add(_btnSystemScrollToBottom);
-        _systemActionBar.Controls.Add(_btnSystemScrollToTop);
-        _systemActionBar.Dock = System.Windows.Forms.DockStyle.Top;
-        _systemActionBar.Location = new System.Drawing.Point(0, 28);
-        _systemActionBar.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _systemActionBar.Name = "_systemActionBar";
-        _systemActionBar.Size = new System.Drawing.Size(600, 21);
-        _systemActionBar.TabIndex = 2;
-        // 
-        // _lblSystemBacklog
-        // 
-        _lblSystemBacklog.Dock = System.Windows.Forms.DockStyle.Right;
-        _lblSystemBacklog.Location = new System.Drawing.Point(430, 0);
-        _lblSystemBacklog.Name = "_lblSystemBacklog";
-        _lblSystemBacklog.Size = new System.Drawing.Size(170, 21);
-        _lblSystemBacklog.TabIndex = 3;
-        _lblSystemBacklog.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-        _lblSystemBacklog.Visible = false;
-        // 
-        // _btnSystemPauseResume
-        // 
-        _btnSystemPauseResume.AutoSize = true;
-        _btnSystemPauseResume.Dock = System.Windows.Forms.DockStyle.Left;
-        _btnSystemPauseResume.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnSystemPauseResume.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnSystemPauseResume.Location = new System.Drawing.Point(236, 0);
-        _btnSystemPauseResume.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnSystemPauseResume.Name = "_btnSystemPauseResume";
-        _btnSystemPauseResume.Size = new System.Drawing.Size(61, 21);
-        _btnSystemPauseResume.TabIndex = 2;
-        _btnSystemPauseResume.Text = "Pause";
-        // 
-        // _btnSystemScrollToBottom
-        // 
-        _btnSystemScrollToBottom.AutoSize = true;
-        _btnSystemScrollToBottom.Dock = System.Windows.Forms.DockStyle.Left;
-        _btnSystemScrollToBottom.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnSystemScrollToBottom.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnSystemScrollToBottom.Location = new System.Drawing.Point(109, 0);
-        _btnSystemScrollToBottom.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnSystemScrollToBottom.Name = "_btnSystemScrollToBottom";
-        _btnSystemScrollToBottom.Size = new System.Drawing.Size(127, 21);
-        _btnSystemScrollToBottom.TabIndex = 1;
-        _btnSystemScrollToBottom.Text = "⬇ Scroll to Bottom";
-        // 
-        // _btnSystemScrollToTop
-        // 
-        _btnSystemScrollToTop.AutoSize = true;
-        _btnSystemScrollToTop.Dock = System.Windows.Forms.DockStyle.Left;
-        _btnSystemScrollToTop.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnSystemScrollToTop.Font = new System.Drawing.Font("Consolas", 8F);
-        _btnSystemScrollToTop.Location = new System.Drawing.Point(0, 0);
-        _btnSystemScrollToTop.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnSystemScrollToTop.Name = "_btnSystemScrollToTop";
-        _btnSystemScrollToTop.Size = new System.Drawing.Size(109, 21);
-        _btnSystemScrollToTop.TabIndex = 0;
-        _btnSystemScrollToTop.Text = "↑ Scroll to Top";
-        // 
-        // _systemFilterPanel
-        // 
-        _systemFilterPanel.Dock = System.Windows.Forms.DockStyle.Top;
-        _systemFilterPanel.Filter1SelectedIndex = -1;
-        _systemFilterPanel.Filter2SelectedIndex = -1;
-        _systemFilterPanel.Font = new System.Drawing.Font("Consolas", 9F);
-        _systemFilterPanel.Location = new System.Drawing.Point(0, 0);
-        _systemFilterPanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _systemFilterPanel.Name = "_systemFilterPanel";
-        _systemFilterPanel.NotifyRegexError = false;
-        _systemFilterPanel.Size = new System.Drawing.Size(600, 28);
-        _systemFilterPanel.TabIndex = 1;
-        // 
         // _detailPanel
         // 
         _detailPanel.Controls.Add(_tabDetail);
-        _detailPanel.Controls.Add(_pnlJsonToolbar);
+        _detailPanel.Controls.Add(_jsonDetailToolbar);
         _detailPanel.Dock = System.Windows.Forms.DockStyle.Fill;
         _detailPanel.Location = new System.Drawing.Point(0, 0);
         _detailPanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _detailPanel.Name = "_detailPanel";
-        _detailPanel.Size = new System.Drawing.Size(369, 368);
+        _detailPanel.Size = new System.Drawing.Size(369, 372);
         _detailPanel.TabIndex = 0;
         // 
         // _tabDetail
@@ -557,11 +237,11 @@ public partial class MainForm
         _tabDetail.Controls.Add(_tabRequestBody);
         _tabDetail.Controls.Add(_tabResponseBody);
         _tabDetail.Dock = System.Windows.Forms.DockStyle.Fill;
-        _tabDetail.Location = new System.Drawing.Point(0, 19);
+        _tabDetail.Location = new System.Drawing.Point(0, 37);
         _tabDetail.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabDetail.Name = "_tabDetail";
         _tabDetail.SelectedIndex = 0;
-        _tabDetail.Size = new System.Drawing.Size(369, 349);
+        _tabDetail.Size = new System.Drawing.Size(369, 335);
         _tabDetail.TabIndex = 0;
         // 
         // _tabHeaders
@@ -572,7 +252,7 @@ public partial class MainForm
         _tabHeaders.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabHeaders.Name = "_tabHeaders";
         _tabHeaders.Padding = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _tabHeaders.Size = new System.Drawing.Size(361, 322);
+        _tabHeaders.Size = new System.Drawing.Size(361, 308);
         _tabHeaders.TabIndex = 0;
         _tabHeaders.Text = "Headers";
         _tabHeaders.UseVisualStyleBackColor = true;
@@ -587,7 +267,7 @@ public partial class MainForm
         _rawHeaders.Name = "_rawHeaders";
         _rawHeaders.ReadOnly = true;
         _rawHeaders.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-        _rawHeaders.Size = new System.Drawing.Size(355, 318);
+        _rawHeaders.Size = new System.Drawing.Size(355, 304);
         _rawHeaders.TabIndex = 0;
         _rawHeaders.Visible = false;
         _rawHeaders.WordWrap = false;
@@ -598,7 +278,7 @@ public partial class MainForm
         _jsonHeaders.Location = new System.Drawing.Point(3, 2);
         _jsonHeaders.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _jsonHeaders.Name = "_jsonHeaders";
-        _jsonHeaders.Size = new System.Drawing.Size(355, 318);
+        _jsonHeaders.Size = new System.Drawing.Size(355, 304);
         _jsonHeaders.TabIndex = 1;
         // 
         // _tabRequestBody
@@ -609,7 +289,7 @@ public partial class MainForm
         _tabRequestBody.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabRequestBody.Name = "_tabRequestBody";
         _tabRequestBody.Padding = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _tabRequestBody.Size = new System.Drawing.Size(361, 273);
+        _tabRequestBody.Size = new System.Drawing.Size(361, 257);
         _tabRequestBody.TabIndex = 1;
         _tabRequestBody.Text = "Request Body";
         _tabRequestBody.UseVisualStyleBackColor = true;
@@ -624,7 +304,7 @@ public partial class MainForm
         _rawRequestBody.Name = "_rawRequestBody";
         _rawRequestBody.ReadOnly = true;
         _rawRequestBody.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-        _rawRequestBody.Size = new System.Drawing.Size(355, 269);
+        _rawRequestBody.Size = new System.Drawing.Size(355, 253);
         _rawRequestBody.TabIndex = 0;
         _rawRequestBody.Visible = false;
         _rawRequestBody.WordWrap = false;
@@ -635,7 +315,7 @@ public partial class MainForm
         _jsonRequestBody.Location = new System.Drawing.Point(3, 2);
         _jsonRequestBody.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _jsonRequestBody.Name = "_jsonRequestBody";
-        _jsonRequestBody.Size = new System.Drawing.Size(355, 269);
+        _jsonRequestBody.Size = new System.Drawing.Size(355, 253);
         _jsonRequestBody.TabIndex = 1;
         // 
         // _tabResponseBody
@@ -646,7 +326,7 @@ public partial class MainForm
         _tabResponseBody.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _tabResponseBody.Name = "_tabResponseBody";
         _tabResponseBody.Padding = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _tabResponseBody.Size = new System.Drawing.Size(361, 273);
+        _tabResponseBody.Size = new System.Drawing.Size(361, 257);
         _tabResponseBody.TabIndex = 2;
         _tabResponseBody.Text = "Response Body";
         _tabResponseBody.UseVisualStyleBackColor = true;
@@ -661,7 +341,7 @@ public partial class MainForm
         _rawResponseBody.Name = "_rawResponseBody";
         _rawResponseBody.ReadOnly = true;
         _rawResponseBody.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-        _rawResponseBody.Size = new System.Drawing.Size(355, 269);
+        _rawResponseBody.Size = new System.Drawing.Size(355, 253);
         _rawResponseBody.TabIndex = 0;
         _rawResponseBody.Visible = false;
         _rawResponseBody.WordWrap = false;
@@ -672,78 +352,17 @@ public partial class MainForm
         _jsonResponseBody.Location = new System.Drawing.Point(3, 2);
         _jsonResponseBody.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _jsonResponseBody.Name = "_jsonResponseBody";
-        _jsonResponseBody.Size = new System.Drawing.Size(355, 269);
+        _jsonResponseBody.Size = new System.Drawing.Size(355, 253);
         _jsonResponseBody.TabIndex = 1;
         // 
-        // _pnlJsonToolbar
+        // _jsonDetailToolbar
         // 
-        _pnlJsonToolbar.Controls.Add(_txtJsonSearch);
-        _pnlJsonToolbar.Controls.Add(_btnJsonSearch);
-        _pnlJsonToolbar.Controls.Add(_btnExpandAll);
-        _pnlJsonToolbar.Controls.Add(_btnCollapseAll);
-        _pnlJsonToolbar.Controls.Add(_btnCollapseTo2);
-        _pnlJsonToolbar.Controls.Add(_btnToggleView);
-        _pnlJsonToolbar.Dock = System.Windows.Forms.DockStyle.Top;
-        _pnlJsonToolbar.Location = new System.Drawing.Point(0, 0);
-        _pnlJsonToolbar.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _pnlJsonToolbar.Name = "_pnlJsonToolbar";
-        _pnlJsonToolbar.Size = new System.Drawing.Size(369, 19);
-        _pnlJsonToolbar.TabIndex = 1;
-        // 
-        // _txtJsonSearch
-        // 
-        _txtJsonSearch.Location = new System.Drawing.Point(0, 2);
-        _txtJsonSearch.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _txtJsonSearch.Name = "_txtJsonSearch";
-        _txtJsonSearch.PlaceholderText = "Search JSON...";
-        _txtJsonSearch.Size = new System.Drawing.Size(120, 22);
-        _txtJsonSearch.TabIndex = 0;
-        // 
-        // _btnJsonSearch
-        // 
-        _btnJsonSearch.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnJsonSearch.Location = new System.Drawing.Point(123, 2);
-        _btnJsonSearch.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnJsonSearch.Name = "_btnJsonSearch";
-        _btnJsonSearch.Size = new System.Drawing.Size(24, 13);
-        _btnJsonSearch.TabIndex = 1;
-        _btnJsonSearch.Text = "▶";
-        // 
-        // _btnExpandAll
-        // 
-        _btnExpandAll.Location = new System.Drawing.Point(155, 2);
-        _btnExpandAll.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnExpandAll.Name = "_btnExpandAll";
-        _btnExpandAll.Size = new System.Drawing.Size(55, 15);
-        _btnExpandAll.TabIndex = 2;
-        _btnExpandAll.Text = "Expand";
-        // 
-        // _btnCollapseAll
-        // 
-        _btnCollapseAll.Location = new System.Drawing.Point(212, 2);
-        _btnCollapseAll.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnCollapseAll.Name = "_btnCollapseAll";
-        _btnCollapseAll.Size = new System.Drawing.Size(60, 15);
-        _btnCollapseAll.TabIndex = 3;
-        _btnCollapseAll.Text = "Collapse";
-        // 
-        // _btnCollapseTo2
-        // 
-        _btnCollapseTo2.Location = new System.Drawing.Point(274, 2);
-        _btnCollapseTo2.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnCollapseTo2.Name = "_btnCollapseTo2";
-        _btnCollapseTo2.Size = new System.Drawing.Size(42, 13);
-        _btnCollapseTo2.TabIndex = 4;
-        _btnCollapseTo2.Text = "Lvl2";
-        // 
-        // _btnToggleView
-        // 
-        _btnToggleView.Location = new System.Drawing.Point(320, 2);
-        _btnToggleView.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnToggleView.Name = "_btnToggleView";
-        _btnToggleView.Size = new System.Drawing.Size(42, 13);
-        _btnToggleView.TabIndex = 5;
-        _btnToggleView.Text = "Raw";
+        _jsonDetailToolbar.Dock = System.Windows.Forms.DockStyle.Top;
+        _jsonDetailToolbar.Location = new System.Drawing.Point(0, 0);
+        _jsonDetailToolbar.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+        _jsonDetailToolbar.Name = "_jsonDetailToolbar";
+        _jsonDetailToolbar.Size = new System.Drawing.Size(369, 37);
+        _jsonDetailToolbar.TabIndex = 1;
         // 
         // _pnlBottomBar
         // 
@@ -751,11 +370,11 @@ public partial class MainForm
         _pnlBottomBar.Controls.Add(_btnExportJson);
         _pnlBottomBar.Controls.Add(_btnExportTxt);
         _pnlBottomBar.Dock = System.Windows.Forms.DockStyle.Bottom;
-        _pnlBottomBar.Location = new System.Drawing.Point(0, 418);
+        _pnlBottomBar.Location = new System.Drawing.Point(0, 422);
         _pnlBottomBar.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _pnlBottomBar.Name = "_pnlBottomBar";
         _pnlBottomBar.Padding = new System.Windows.Forms.Padding(5, 2, 5, 2);
-        _pnlBottomBar.Size = new System.Drawing.Size(1264, 21);
+        _pnlBottomBar.Size = new System.Drawing.Size(1264, 17);
         _pnlBottomBar.TabIndex = 3;
         // 
         // _btnClear
@@ -849,18 +468,6 @@ public partial class MainForm
         _innerSplit.ResumeLayout(false);
         _logPanel.ResumeLayout(false);
         _tabLogType.ResumeLayout(false);
-        _tabNetwork.ResumeLayout(false);
-        _networkTabContainer.ResumeLayout(false);
-        _networkActionBar.ResumeLayout(false);
-        _networkActionBar.PerformLayout();
-        _tabNormal.ResumeLayout(false);
-        _normalTabContainer.ResumeLayout(false);
-        _normalActionBar.ResumeLayout(false);
-        _normalActionBar.PerformLayout();
-        _tabSystem.ResumeLayout(false);
-        _systemTabContainer.ResumeLayout(false);
-        _systemActionBar.ResumeLayout(false);
-        _systemActionBar.PerformLayout();
         _detailPanel.ResumeLayout(false);
         _tabDetail.ResumeLayout(false);
         _tabHeaders.ResumeLayout(false);
@@ -869,24 +476,11 @@ public partial class MainForm
         _tabRequestBody.PerformLayout();
         _tabResponseBody.ResumeLayout(false);
         _tabResponseBody.PerformLayout();
-        _pnlJsonToolbar.ResumeLayout(false);
-        _pnlJsonToolbar.PerformLayout();
         _pnlBottomBar.ResumeLayout(false);
         _pnlBottomBar.PerformLayout();
         _statusStrip.ResumeLayout(false);
         _statusStrip.PerformLayout();
         ResumeLayout(false);
         PerformLayout();
-    }
-
-    private static void ConfigureRawTextBox(TextBox textBox)
-    {
-        textBox.Dock = DockStyle.Fill;
-        textBox.Multiline = true;
-        textBox.ReadOnly = true;
-        textBox.WordWrap = false;
-        textBox.ScrollBars = ScrollBars.Both;
-        textBox.BackColor = Color.White;
-        textBox.Visible = false;
     }
 }

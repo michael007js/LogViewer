@@ -19,8 +19,10 @@ D:\youzyapp\LogViewer\LogViewer
 文件名你自己起
 计划文件需要使用 Rider MCP tools 直接读写文本方式并分段写入。
 
-｛plan.md｝为D:\youzyapp\LogViewer\.ai\plans\plan-ConfigStore-v1-exec.md
-直接在 ｛plan.md｝ 里所有觉得有问题的地方使用 Rider MCP tools 直接读写文本方式加批注：
+
+直接在
+D:\youzyapp\LogViewer\.ai\plans\plan-TabFormExtraction-v1.md
+里所有觉得有问题的地方使用 Rider MCP tools 直接读写文本方式加批注：
 
 | 批注类型                     | 说明                     |
 |--------------------------|------------------------|
@@ -30,14 +32,20 @@ D:\youzyapp\LogViewer\LogViewer
 | 画流程图解释                   | 有疑惑直接让 Agent 画流程图解释并思考 |
 | 标记 "don't implement yet" | 标记暂不实施的部分              |
 
-｛plan.md｝D:\youzyapp\LogViewer\.ai\plans\plan-ConfigStore-v1-exec.md
-我在你的{plan.md} 里加了点批注，你使用 Rider MCP tools 直接读写文本方式解决一下批注，但不要执行计划，执行前需要先与我确认
 
-｛plan.md｝为D:\youzyapp\LogViewer\.ai\plans\2026-06-26-normal-logs-tab.md
-帮我使用 Rider MCP tools 直接读写文本方式生成一份基于{plan.md} 的不带批注的最终可执行计划到D:\youzyapp\LogViewer\.ai\plans中
+我在你的
+D:\youzyapp\LogViewer\.ai\plans\plan-TabFormExtraction-v1.md
+里加了点批注，你使用 Rider MCP tools 直接读写文本方式解决一下批注，但不要执行计划，执行前需要先与我确认
 
-｛plan.md｝为D:\youzyapp\LogViewer\.ai\plans\2026-06-26-normal-logs-tab.md
-按照@agents\reviews\review-template.md 帮我使用mcp方式生成一份基于 {plan.md} 产物的review报告
+
+帮我使用 Rider MCP tools 直接读写文本方式生成一份基于
+D:\youzyapp\LogViewer\.ai\plans\plan-TabFormExtraction-v1.md
+的不带批注的最终可执行计划到D:\youzyapp\LogViewer\.ai\plans中
+
+
+按照@reviews\review-template.md 帮我使用mcp方式生成一份基于
+D:\youzyapp\LogViewer\.ai\plans\plan-TabFormExtraction-v1.md
+产物的review报告
 
 D:\youzyapp\youzy.mobile.android\.ai\reviews\2026-06-26-normal-logs-tab-review.md
 {review.md} 这是你的review报告，使用mcp方式解决一下存在的问题

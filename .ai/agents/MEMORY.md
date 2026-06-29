@@ -233,6 +233,12 @@ rtk git diff                                                # Git 差异
 | Normal Logs 独立 RingBuffer 双写 | `_deviceNormalLogs[id]` + `_allNormalLogs` 必须同时写入（和 Network Logs 双写模式一致）。OnDeleteDevice 不重建 `_allNormalLogs`（RingBuffer 追加写入无法安全删除中间条目） |
 | Normal Logs 高频防抖必须和 Network 一致 | ScheduleNormalRefresh 使用 Task.Run + Task.Delay 防抖（80ms），不使用 Timer。对照 ScheduleNetworkRefresh |
 | Normal Logs ForeColor 着色 | 使用 ForeColor（和 System Logs 一致），不用 BackColor 避免深浅色主题对比度问题 |
+| Tab Form 内嵌架构 | 三个日志 Tab 已抽取为独立 Form（NetworkLogForm/NormalLogForm/SystemLogForm），各自拥有 Designer.cs。MainForm 通过 `TopLevel=false + FormBorderStyle=None + Dock=Fill` 嵌入 TabPage。Form 不引用 Network 层，事件通知 MainForm 协调 |
+| TopLevel=false 内嵌注意事项 | 1) 内嵌 Form 的控件不参与父 Form 的 ProcessTabKey，Tab 键无法自动跳入；2) End 键通过 ProcessCmdKey 委托给活动 Form 的 HandleEndKey()；3) 内嵌 Form 的 Handle 未创建时 BeginInvoke 会失败，SystemLog 入队逻辑留在 MainForm |
+| Form 生命周期管理 | 内嵌 Form 必须在 MainForm.OnFormClosing 中显式 Dispose，否则 GDI 对象泄漏。SystemLogForm 在自己 Dispose 时取消 CTS |
+| ShowLogDetail 归属 | ShowLogDetail 操作预览面板控件，从 NetworkLogs.cs 移入 MainForm.Preview.cs。NetworkLogForm 通过 LogEntrySelected 事件通知 MainForm |
+| 导出逻辑归属 | OnExportJson/OnExportTxt 留在 MainForm，因为需要协调 Network/Normal 两种缓冲区，通过 Form.GetCurrentLogBuffer()/GetCurrentNormalLogBuffer() 获取数据 |
+| ScrollToBottom/IsAtBottom/ScrollToTop/GetApproxVisibleRowCount | 已提取为 BufferedListViewHelper 的 public static 方法，三个 Form 和 MainForm 共用 |
 
 ---
 
