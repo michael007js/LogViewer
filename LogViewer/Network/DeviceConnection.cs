@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Net.Sockets;
 using System.Text;
@@ -14,6 +15,19 @@ namespace LogViewer.Network;
 /// </summary>
 public class DeviceConnection
 {
+    private static readonly string LogPath = Path.Combine(AppContext.BaseDirectory, "server.log");
+    private static readonly object LogLock = new();
+
+    private static void Log(string msg)
+    {
+        var line = $"[{DateTime.Now:HH:mm:ss.fff}] {msg}";
+        lock (LogLock)
+        {
+            try { File.AppendAllText(LogPath, line + Environment.NewLine); } catch { }
+        }
+        Debug.WriteLine(line);
+    }
+
     private readonly TcpClient _tcpClient;
     private readonly CancellationToken _ct;
     private readonly NetworkStream _stream;
@@ -78,16 +92,25 @@ public class DeviceConnection
     {
         try
         {
+            Log($"[DeviceConnection] StartReceiving from {RemoteEndpoint}, ct={_ct.IsCancellationRequested}, connected={_tcpClient.Connected}");
             while (!_ct.IsCancellationRequested && _tcpClient.Connected)
             {
                 var lengthBytes = await ReadExactAsync(4);
-                if (lengthBytes == null) break;
+                if (lengthBytes == null)
+                {
+                    Log($"[DeviceConnection] ReadExactAsync(4) returned null from {RemoteEndpoint}");
+                    break;
+                }
 
                 // 大端序处理：Java ByteBuffer.putInt() 默认大端输出，
                 // x86/x64 是小端序，必须反转字节序才能正确读取长度值
                 if (BitConverter.IsLittleEndian) Array.Reverse(lengthBytes);
                 int totalLength = BitConverter.ToInt32(lengthBytes, 0);
-                if (totalLength <= 0 || totalLength > 10 * 1024 * 1024) break;
+                if (totalLength <= 0 || totalLength > 10 * 1024 * 1024)
+                {
+                    Log($"[DeviceConnection] Invalid frame length: {totalLength} from {RemoteEndpoint}");
+                    break;
+                }
 
                 var payloadBytes = await ReadExactAsync(totalLength);
                 if (payloadBytes == null) break;
@@ -124,24 +147,21 @@ public class DeviceConnection
                         }
 
                         break;
-                    // 客户端 Ping 心跳保活：回复 Pong 以确认连接存活，
-                    // 防止 adb reverse 隧道因空闲超时静默断连。
-                    // 使用异步写入避免阻塞接收循环，同步 Flush 在 TCP 发送缓冲区满时
-                    // 会等待对端 ACK，导致后续所有消息帧排队，UI 卡顿 3-4 秒。
                     case 0x03:
                         _ = SendPongAsync();
                         break;
-                    // 服务端不会收到 Pong（Pong 是服务端发出的），忽略即可
                     case 0x04:
                         break;
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Log($"[DeviceConnection] Exception in StartReceivingAsync from {RemoteEndpoint}: {ex.GetType().Name}: {ex.Message}");
         }
         finally
         {
+            Log($"[DeviceConnection] Disconnected: {RemoteEndpoint}");
             Disconnected?.Invoke(this, EventArgs.Empty);
         }
     }

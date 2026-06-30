@@ -13,6 +13,18 @@ namespace LogViewer.Network;
 /// </summary>
 public class LogServer
 {
+    private static readonly string LogFilePath = Path.Combine(AppContext.BaseDirectory, "server.log");
+    private static readonly object FileLogLock = new();
+
+    private static void FileLog(string msg)
+    {
+        var line = $"[{DateTime.Now:HH:mm:ss.fff}] {msg}";
+        lock (FileLogLock)
+        {
+            try { File.AppendAllText(LogFilePath, line + Environment.NewLine); } catch { }
+        }
+        Debug.WriteLine(line);
+    }
     private static readonly string LogTag = nameof(LogServer);
 
     private TcpListener? _listener;
@@ -57,6 +69,7 @@ public class LogServer
         _cts = new CancellationTokenSource();
         _listener = new TcpListener(IPAddress.Any, port);
         _listener.Start();
+        FileLog($"[{LogTag}] Server started, listening on port {port}");
         _acceptTask = AcceptLoopAsync(_cts.Token);
         _timeoutTimer = new Timer(OnTimeoutCheck, null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
     }
@@ -101,6 +114,7 @@ public class LogServer
             try
             {
                 var tcpClient = await _listener.AcceptTcpClientAsync(ct);
+                FileLog($"[{LogTag}] New connection from {tcpClient.Client.RemoteEndPoint}");
                 var connection = new DeviceConnection(tcpClient, ct);
                 connection.Registered += OnDeviceRegistered;
                 connection.LogReceived += OnLogReceived;
@@ -157,7 +171,7 @@ public class LogServer
 
         _connections[deviceId] = conn;
         conn.DeviceId = deviceId;
-        Debug.WriteLine($"[{LogTag}] Device registered: {deviceId} ({info.DeviceModel}) from {conn.RemoteEndpoint}");
+        FileLog($"[{LogTag}] Device registered: {deviceId} ({info.DeviceModel}) from {conn.RemoteEndpoint}");
         DeviceConnected?.Invoke(this, info);
     }
 
@@ -215,7 +229,7 @@ public class LogServer
         {
             if ((now - kvp.Value.LastActiveTime).TotalSeconds > TimeoutSeconds)
             {
-                Debug.WriteLine($"[{LogTag}] Timeout: {kvp.Key}, last active {kvp.Value.LastActiveTime:HH:mm:ss}");
+                FileLog($"[{LogTag}] Timeout: {kvp.Key}, last active {kvp.Value.LastActiveTime:HH:mm:ss}");
                 kvp.Value.Disconnect();
             }
         }
