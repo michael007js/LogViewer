@@ -21,7 +21,7 @@ public class LogServer
         var line = $"[{DateTime.Now:HH:mm:ss.fff}] {msg}";
         lock (FileLogLock)
         {
-            try { File.AppendAllText(LogFilePath, line + Environment.NewLine); } catch { }
+            // try { File.AppendAllText(LogFilePath, line + Environment.NewLine); } catch { }
         }
         Debug.WriteLine(line);
     }
