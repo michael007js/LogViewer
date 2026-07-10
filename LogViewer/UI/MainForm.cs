@@ -244,19 +244,15 @@ public partial class MainForm : Form
         _devicePanel.MirrorPopoutRequested += OnMirrorPopoutRequested;
         _devicePanel.MirrorLayoutChanged += OnMirrorLayoutChanged;
 
-        // Tab 切换：延迟 Show 非 Active Tab 的 Form。
-        // Network/Normal 在 Tab 不可见期间不增量维护过滤索引，切回时需全量 RebuildFilter。
+        // Tab 切换：延迟 Show 非 Active Tab 的 Form + 仅对 SystemLog 做后台刷新。
+        // Network/Normal 的过滤索引在日志添加时已增量维护，切回时无需全量 RebuildFilter。
         _tabLogType.SelectedIndexChanged += (s, e) =>
         {
             _showingNormalLog = _tabLogType.SelectedTab == _tabNormal;
             _showingSystemLog = _tabLogType.SelectedTab == _tabSystem;
             EnsureFormVisible(_showingNormalLog ? _normalLogForm : _showingSystemLog ? _systemLogForm : null);
-            if (_showingNormalLog)
-                _normalLogForm.RebuildFilter();
-            else if (_showingSystemLog)
+            if (_showingSystemLog)
                 _systemLogForm.RefreshSystemLogList(preferBackground: true);
-            else
-                _networkLogForm.RebuildFilter();
         };
 
         _networkLogForm.LogEntrySelected += entry =>

@@ -124,6 +124,15 @@ public partial class NormalLogForm : Form
         _lstNormalLogs.Columns.Add(Language.TagColumn, 100);
         _lstNormalLogs.Columns.Add(Language.NormalLogMessageColumn, 500);
         _lstNormalLogs.RetrieveVirtualItem += OnNormalLogsRetrieveVirtualItem;
+        _lstNormalLogs.SelectedIndexChanged += (_, _) =>
+        {
+            if (_lstNormalLogs.SelectedIndices.Count > 0)
+            {
+                _normalAutoScrollEnabled = false;
+                ScrollStateChanged?.Invoke();
+                UpdateLogCount();
+            }
+        };
         _lstNormalLogs.DoubleClick += OnNormalLogsDoubleClick;
         _lstNormalLogs.MouseWheel += OnNormalLogsMouseWheel;
         _lstNormalLogs.ContextMenuStrip = CreateNormalLogMenu();
@@ -229,19 +238,23 @@ public partial class NormalLogForm : Form
     private void RefreshNormalLogList()
     {
         var anchorIndex = _normalAutoScrollEnabled ? -1 : BufferedListViewHelper.GetTopIndexExact(_lstNormalLogs);
+        if (_normalAutoScrollEnabled)
+        {
+            _lstNormalLogs.SelectedIndices.Clear();
+            _lstNormalLogs.FocusedItem = null;
+        }
+
         _lstNormalLogs.VirtualListSize = _filteredNormalIndices.Count;
         if (_normalAutoScrollEnabled)
         {
             BufferedListViewHelper.ScrollToBottom(_lstNormalLogs);
+            _lstNormalLogs.Invalidate();
         }
         else
         {
             BufferedListViewHelper.RestoreTopIndexExact(_lstNormalLogs, anchorIndex);
             RefreshNormalVisibleRows();
-            return;
         }
-
-        _lstNormalLogs.Invalidate();
     }
 
     private void RefreshNormalFilter()
@@ -380,6 +393,7 @@ public partial class NormalLogForm : Form
     private void OnNormalScrollToBottomClick(object? sender, EventArgs e)
     {
         _normalAutoScrollEnabled = true;
+        _lstNormalLogs.SelectedIndices.Clear();
         BufferedListViewHelper.ScrollToBottom(_lstNormalLogs);
         ScrollStateChanged?.Invoke();
         UpdateLogCount();

@@ -177,6 +177,12 @@ public partial class NetworkLogForm : Form
 
     private void OnNetworkLogSelected(object? sender, EventArgs e)
     {
+        if (_lstNetworkLogs.SelectedIndices.Count > 0)
+        {
+            _networkAutoScrollEnabled = false;
+            ScrollStateChanged?.Invoke();
+            UpdateLogCount();
+        }
         var entry = GetSelectedNetworkEntry();
         LogEntrySelected?.Invoke(entry);
     }
@@ -249,19 +255,23 @@ public partial class NetworkLogForm : Form
     private void RefreshNetworkLogList()
     {
         var anchorIndex = _networkAutoScrollEnabled ? -1 : BufferedListViewHelper.GetTopIndexExact(_lstNetworkLogs);
+        if (_networkAutoScrollEnabled)
+        {
+            _lstNetworkLogs.SelectedIndices.Clear();
+            _lstNetworkLogs.FocusedItem = null;
+        }
+
         _lstNetworkLogs.VirtualListSize = _filteredNetworkIndices.Count;
         if (_networkAutoScrollEnabled)
         {
             BufferedListViewHelper.ScrollToBottom(_lstNetworkLogs);
+            _lstNetworkLogs.Invalidate();
         }
         else
         {
             BufferedListViewHelper.RestoreTopIndexExact(_lstNetworkLogs, anchorIndex);
             RefreshNetworkVisibleRows();
-            return;
         }
-
-        _lstNetworkLogs.Invalidate();
     }
 
     private void RefreshNetworkFilter()
@@ -414,6 +424,7 @@ public partial class NetworkLogForm : Form
     private void OnScrollToBottomClick(object? sender, EventArgs e)
     {
         _networkAutoScrollEnabled = true;
+        _lstNetworkLogs.SelectedIndices.Clear();
         BufferedListViewHelper.ScrollToBottom(_lstNetworkLogs);
         ScrollStateChanged?.Invoke();
         UpdateLogCount();

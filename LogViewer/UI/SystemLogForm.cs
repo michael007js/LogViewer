@@ -193,7 +193,16 @@ public partial class SystemLogForm : Form
         _lstSystemLogs.Columns.Add(Language.MessageColumn, 500);
         _lstSystemLogs.RetrieveVirtualItem += OnSystemLogsRetrieveVirtualItem;
         _lstSystemLogs.CacheVirtualItems += OnSystemLogsCacheVirtualItems;
-        _lstSystemLogs.SelectedIndexChanged += (_, _) => _systemContextSequenceId = 0;
+        _lstSystemLogs.SelectedIndexChanged += (_, _) =>
+        {
+            _systemContextSequenceId = 0;
+            if (_lstSystemLogs.SelectedIndices.Count > 0)
+            {
+                _systemAutoScrollEnabled = false;
+                ScrollStateChanged?.Invoke();
+                UpdateSystemLogUiState();
+            }
+        };
         _lstSystemLogs.MouseUp += OnSystemLogMouseUp;
         _lstSystemLogs.MouseWheel += OnSystemLogsMouseWheel;
         _lstSystemLogs.ContextMenuStrip = CreateSystemLogMenu();
@@ -357,6 +366,12 @@ public partial class SystemLogForm : Form
         var anchorIndex = _systemAutoScrollEnabled || !showingSystemLog
             ? -1
             : BufferedListViewHelper.GetTopIndexExact(_lstSystemLogs);
+
+        if (showingSystemLog && _systemAutoScrollEnabled)
+        {
+            _lstSystemLogs.SelectedIndices.Clear();
+            _lstSystemLogs.FocusedItem = null;
+        }
 
         _lstSystemLogs.VirtualListSize = _systemLogSnapshot.Count;
 
@@ -659,6 +674,7 @@ public partial class SystemLogForm : Form
     private void OnSystemScrollToBottomClick(object? sender, EventArgs e)
     {
         _systemAutoScrollEnabled = true;
+        _lstSystemLogs.SelectedIndices.Clear();
         BufferedListViewHelper.ScrollToBottom(_lstSystemLogs);
         ScrollStateChanged?.Invoke();
         UpdateSystemLogUiState();
