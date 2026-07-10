@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using LogViewer.Utils;
 
 namespace LogViewer.UI;
@@ -62,6 +63,18 @@ public class JsonTreeView : UserControl
 
     /// <summary>当前搜索关键字缓存。</summary>
     private string? _searchKeyword;
+
+    /// <summary>图片 URL 正则，null 表示禁用图片预览。</summary>
+    private Regex? _imageUrlRegex;
+
+    /// <summary>当前悬浮的节点，用于检测节点切换。</summary>
+    private TreeNode? _hoveredNode;
+
+    /// <summary>悬浮延迟计时器，400ms 后触发图片预览。</summary>
+    private System.Windows.Forms.Timer? _hoverTimer;
+
+    /// <summary>当前显示的图片预览弹窗。</summary>
+    private ImagePreviewPopup? _imagePopup;
 
     /// <summary>
     /// 初始化 JsonTreeView，设计器模式下创建预览标签，运行时模式下创建内部 TreeView。
@@ -310,6 +323,21 @@ public class JsonTreeView : UserControl
     }
 
     /// <summary>
+    /// 设置图片 URL 正则模式，匹配的节点悬浮时显示图片预览。空或无效则禁用。
+    /// </summary>
+    public void SetImageUrlPattern(string? pattern)
+    {
+        _imageUrlRegex = null;
+        if (string.IsNullOrWhiteSpace(pattern)) return;
+        try
+        {
+            _imageUrlRegex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled,
+                TimeSpan.FromMilliseconds(500));
+        }
+        catch { }
+    }
+
+    /// <summary>
     /// 创建设计时预览标签，模拟 JSON 树的外观。
     /// </summary>
     private void InitializeDesignPreview()
@@ -355,6 +383,11 @@ public class JsonTreeView : UserControl
         treeView.DrawNode += OnTreeViewDrawNode;
         treeView.BeforeExpand += OnBeforeExpand;
         treeView.ContextMenuStrip = CreateContextMenu();
+
+        treeView.MouseMove += OnTreeViewMouseMove;
+        treeView.MouseLeave += OnTreeViewMouseLeave;
+        _hoverTimer = new System.Windows.Forms.Timer { Interval = 400 };
+        _hoverTimer.Tick += OnHoverTimerTick;
     }
 
     /// <summary>
@@ -513,6 +546,83 @@ public class JsonTreeView : UserControl
     }
 
     /// <summary>
+    /// TreeView MouseMove：检测悬浮节点变化，重启延迟计时器。
+    /// </summary>
+    private void OnTreeViewMouseMove(object? sender, MouseEventArgs e)
+    {
+        if (_treeView == null || _imageUrlRegex == null) return;
+        var node = _treeView.GetNodeAt(e.Location);
+        if (node == _hoveredNode) return;
+
+        _hoveredNode = node;
+        _hoverTimer!.Stop();
+        HideImagePopup();
+        if (node != null && ExtractImageUrl(node) != null)
+            _hoverTimer.Start();
+    }
+
+    /// <summary>
+    /// TreeView MouseLeave：停止计时器并隐藏弹窗。
+    /// </summary>
+    private void OnTreeViewMouseLeave(object? sender, EventArgs e)
+    {
+        _hoverTimer?.Stop();
+        _hoveredNode = null;
+        HideImagePopup();
+    }
+
+    /// <summary>
+    /// 延迟计时器触发：显示图片预览弹窗。
+    /// </summary>
+    private void OnHoverTimerTick(object? sender, EventArgs e)
+    {
+        _hoverTimer?.Stop();
+        if (_hoveredNode == null) return;
+        var url = ExtractImageUrl(_hoveredNode);
+        if (url == null) return;
+        ShowImagePopup(url);
+    }
+
+    /// <summary>
+    /// 从节点 Tag 提取 RawValue，用正则匹配图片 URL。
+    /// </summary>
+    private string? ExtractImageUrl(TreeNode node)
+    {
+        if (node.Tag is JsonPathInfo info && !string.IsNullOrEmpty(info.RawValue))
+        {
+            var match = _imageUrlRegex?.Match(info.RawValue);
+            if (match is { Success: true }) return match.Value;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 显示图片预览弹窗，定位在鼠标右下方，超出屏幕时翻转。
+    /// </summary>
+    private void ShowImagePopup(string url)
+    {
+        HideImagePopup();
+        _imagePopup = new ImagePreviewPopup();
+        var cursor = Cursor.Position;
+        _imagePopup.Location = new Point(cursor.X + 16, cursor.Y + 16);
+        _imagePopup.Deactivate += (_, _) => HideImagePopup();
+        _imagePopup.Show();
+        _imagePopup.LoadImageAsync(url);
+    }
+
+    /// <summary>
+    /// 隐藏并释放当前图片预览弹窗。
+    /// </summary>
+    private void HideImagePopup()
+    {
+        if (_imagePopup == null) return;
+        _imagePopup.Deactivate -= (_, _) => HideImagePopup();
+        _imagePopup.Close();
+        _imagePopup.Dispose();
+        _imagePopup = null;
+    }
+
+    /// <summary>
     /// 创建右键上下文菜单，包含复制值、复制 JSONPath、复制节点 JSON、展开/折叠等操作。
     /// </summary>
     /// <returns>构建完成的 ContextMenuStrip。</returns>
@@ -567,6 +677,9 @@ public class JsonTreeView : UserControl
     {
         if (disposing)
         {
+            HideImagePopup();
+            _hoverTimer?.Stop();
+            _hoverTimer?.Dispose();
             _jsonDoc?.Dispose();
             _displayFont?.Dispose();
         }

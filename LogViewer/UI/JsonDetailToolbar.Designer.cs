@@ -37,7 +37,7 @@ public partial class JsonDetailToolbar
         _btnToggleView.Location = new System.Drawing.Point(313, 1);
         _btnToggleView.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _btnToggleView.Name = "_btnToggleView";
-        _btnToggleView.Size = new System.Drawing.Size(42, 24);
+        _btnToggleView.Size = new System.Drawing.Size(59, 24);
         _btnToggleView.TabIndex = 10;
         _btnToggleView.Text = "Raw";
         // 

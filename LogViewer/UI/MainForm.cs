@@ -408,6 +408,9 @@ public partial class MainForm : Form
         _jsonHeadersView?.SetFont(font);
         _jsonRequestBodyView?.SetFont(font);
         _jsonResponseBodyView?.SetFont(font);
+        _jsonHeadersView?.SetImageUrlPattern(_settings.ImageUrlPattern);
+        _jsonRequestBodyView?.SetImageUrlPattern(_settings.ImageUrlPattern);
+        _jsonResponseBodyView?.SetImageUrlPattern(_settings.ImageUrlPattern);
         _networkLogForm.ApplySettings(_settings);
         _normalLogForm.ApplySettings(_settings);
         _systemLogForm.ApplySettings(_settings);

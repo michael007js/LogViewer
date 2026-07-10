@@ -18,5 +18,6 @@
     <NotifyRegexError>True</NotifyRegexError>
     <AutoStartScrcpyForSelectedDevice>False</AutoStartScrcpyForSelectedDevice>
     <LastLeftPanelWidth>340</LastLeftPanelWidth>
+    <ImageUrlPattern>https?://[^\s&quot;&apos;]+\.(jpg|jpeg|png|gif|bmp|webp|svg)(\?[^\s&quot;&apos;]*)?</ImageUrlPattern>
   </PropertyGroup>
 </Project>

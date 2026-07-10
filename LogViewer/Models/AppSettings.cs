@@ -60,6 +60,9 @@ public class AppSettings
     /// <summary>上次关闭时左侧面板宽度，用于恢复布局。</summary>
     public int LastLeftPanelWidth { get; set; } = 340;
 
+    /// <summary>图片 URL 正则模式，匹配的节点悬浮时显示图片预览。空则禁用。</summary>
+    public string ImageUrlPattern { get; set; } = @"https?://[^\s""']+\.(jpg|jpeg|png|gif|bmp|webp|svg)(\?[^\s""']*)?";
+
     /// <summary>
     /// 将当前设置写入 Properties.Settings 并持久化到用户配置文件。
     /// </summary>
@@ -83,6 +86,7 @@ public class AppSettings
         s.NotifyRegexError = NotifyRegexError;
         s.AutoStartScrcpyForSelectedDevice = AutoStartScrcpyForSelectedDevice;
         s.LastLeftPanelWidth = LastLeftPanelWidth;
+        s.ImageUrlPattern = ImageUrlPattern;
         s.Save();
     }
 
@@ -110,7 +114,8 @@ public class AppSettings
             LogcatFilter = s.LogcatFilter ?? "",
             NotifyRegexError = s.NotifyRegexError,
             AutoStartScrcpyForSelectedDevice = s.AutoStartScrcpyForSelectedDevice,
-            LastLeftPanelWidth = s.LastLeftPanelWidth
+            LastLeftPanelWidth = s.LastLeftPanelWidth,
+            ImageUrlPattern = s.ImageUrlPattern ?? @"https?://[^\s""']+\.(jpg|jpeg|png|gif|bmp|webp|svg)(\?[^\s""']*)?"
         };
     }
 }

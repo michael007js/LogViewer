@@ -63,6 +63,7 @@ public partial class SettingsDialog : Form
         _lblAdbScanInterval.Text = "ADB 扫描间隔(ms)：";
         _lblLogcatFilter.Text = "Logcat 过滤：";
         _chkNotifyRegexError.Text = Language.NotifyRegexError;
+        _lblImageUrlPattern.Text = "图片URL正则：";
         _btnOk.Text = Language.Confirm;
         _btnCancel.Text = Language.Cancel;
     }
@@ -85,6 +86,7 @@ public partial class SettingsDialog : Form
         _nudAdbScanInterval.Value = _settings.AdbScanIntervalMs;
         _txtLogcatFilter.Text = _settings.LogcatFilter;
         _chkNotifyRegexError.Checked = _settings.NotifyRegexError;
+        _txtImageUrlPattern.Text = _settings.ImageUrlPattern;
     }
 
     /// <summary>
@@ -140,6 +142,7 @@ public partial class SettingsDialog : Form
         _settings.AdbScanIntervalMs = (int)_nudAdbScanInterval.Value;
         _settings.LogcatFilter = _txtLogcatFilter.Text;
         _settings.NotifyRegexError = _chkNotifyRegexError.Checked;
+        _settings.ImageUrlPattern = _txtImageUrlPattern.Text;
         _settings.Save();
         DialogResult = DialogResult.OK;
         Close();

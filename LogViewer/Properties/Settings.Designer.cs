@@ -91,5 +91,10 @@ namespace LogViewer.Properties {
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("340")]
         public int LastLeftPanelWidth { get { return ((int)(this["LastLeftPanelWidth"])); } set { this["LastLeftPanelWidth"] = value; } }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("https?://[^\\s\"']+\\.(jpg|jpeg|png|gif|bmp|webp|svg)(\\?[^\\s\"']*)?")]
+        public string ImageUrlPattern { get { return ((string)(this["ImageUrlPattern"])); } set { this["ImageUrlPattern"] = value; } }
     }
 }
