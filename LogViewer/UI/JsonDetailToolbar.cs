@@ -19,6 +19,11 @@ public partial class JsonDetailToolbar : UserControl
     public JsonDetailToolbar()
     {
         InitializeComponent();
+        _btnJsonSearch.Click += OnBtnJsonSearchClick;
+        _btnExpandAll.Click += OnBtnExpandAllClick;
+        _btnCollapseAll.Click += OnBtnCollapseAllClick;
+        _btnCollapseTo2.Click += OnBtnCollapseTo2Click;
+        _btnToggleView.Click += OnBtnToggleViewClick;
     }
 
     public void ApplyLanguage()

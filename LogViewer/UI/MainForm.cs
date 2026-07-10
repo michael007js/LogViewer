@@ -36,10 +36,10 @@ public partial class MainForm : Form
     private NormalLogForm _normalLogForm = null!;
     private SystemLogForm _systemLogForm = null!;
 
-    private SplitContainer _outerSplit;
-    private SplitContainer _innerSplit;
-    private DevicePanel _devicePanel;
-    private TabControl _tabLogType;
+    private System.Windows.Forms.SplitContainer _outerSplit;
+    private System.Windows.Forms.SplitContainer _innerSplit;
+    private LogViewer.UI.DevicePanel _devicePanel;
+    private System.Windows.Forms.TabControl _tabLogType;
     private TabPage _tabNetwork;
     private TabPage _tabNormal;
     private TabPage _tabSystem;
@@ -66,7 +66,7 @@ public partial class MainForm : Form
     private ToolStripStatusLabel _lblDeviceCountStatus;
     private ToolStripStatusLabel _lblAdbStatus;
     private ToolStripStatusLabel _lblLogcatStatus;
-    private FlowLayoutPanel _pnlBottomBar;
+    private System.Windows.Forms.FlowLayoutPanel _pnlBottomBar;
     private Button _btnClear;
     private Button _btnExportJson;
     private Button _btnExportTxt;

@@ -120,7 +120,7 @@ partial class DevicePanel
         _mirrorHostPanel.Location = new System.Drawing.Point(3, 61);
         _mirrorHostPanel.MirrorActive = false;
         _mirrorHostPanel.Name = "_mirrorHostPanel";
-        _mirrorHostPanel.Size = new System.Drawing.Size(150, 183);
+        _mirrorHostPanel.Size = new System.Drawing.Size(150, 175);
         _mirrorHostPanel.TabIndex = 30;
         // 
         // tableLayoutPanel2
@@ -134,14 +134,14 @@ partial class DevicePanel
         tableLayoutPanel2.Controls.Add(_btnMirrorScreenshot, 1, 1);
         tableLayoutPanel2.Controls.Add(_btnMirrorPopout, 0, 2);
         tableLayoutPanel2.Dock = System.Windows.Forms.DockStyle.Fill;
-        tableLayoutPanel2.Location = new System.Drawing.Point(0, 247);
+        tableLayoutPanel2.Location = new System.Drawing.Point(0, 239);
         tableLayoutPanel2.Margin = new System.Windows.Forms.Padding(0);
         tableLayoutPanel2.Name = "tableLayoutPanel2";
         tableLayoutPanel2.RowCount = 3;
         tableLayoutPanel2.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 30F));
         tableLayoutPanel2.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 30F));
         tableLayoutPanel2.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 30F));
-        tableLayoutPanel2.Size = new System.Drawing.Size(156, 84);
+        tableLayoutPanel2.Size = new System.Drawing.Size(156, 92);
         tableLayoutPanel2.TabIndex = 27;
         // 
         // button1
@@ -201,7 +201,7 @@ partial class DevicePanel
         _btnMirrorPopout.Location = new System.Drawing.Point(0, 60);
         _btnMirrorPopout.Margin = new System.Windows.Forms.Padding(0, 0, 6, 6);
         _btnMirrorPopout.Name = "_btnMirrorPopout";
-        _btnMirrorPopout.Size = new System.Drawing.Size(150, 24);
+        _btnMirrorPopout.Size = new System.Drawing.Size(150, 26);
         _btnMirrorPopout.TabIndex = 4;
         _btnMirrorPopout.Text = "弹出";
         // 

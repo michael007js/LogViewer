@@ -16,72 +16,67 @@ public partial class JsonDetailToolbar
     private void InitializeComponent()
     {
         _txtJsonSearch = new System.Windows.Forms.TextBox();
-        _btnJsonSearch = new System.Windows.Forms.Button();
-        _btnExpandAll = new System.Windows.Forms.Button();
-        _btnCollapseAll = new System.Windows.Forms.Button();
-        _btnCollapseTo2 = new System.Windows.Forms.Button();
         _btnToggleView = new System.Windows.Forms.Button();
+        _btnCollapseTo2 = new System.Windows.Forms.Button();
+        _btnCollapseAll = new System.Windows.Forms.Button();
+        _btnExpandAll = new System.Windows.Forms.Button();
+        _btnJsonSearch = new System.Windows.Forms.Button();
         SuspendLayout();
         // 
         // _txtJsonSearch
         // 
-        _txtJsonSearch.Location = new System.Drawing.Point(3, 0);
+        _txtJsonSearch.Location = new System.Drawing.Point(0, 2);
         _txtJsonSearch.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _txtJsonSearch.Name = "_txtJsonSearch";
         _txtJsonSearch.PlaceholderText = "Search JSON...";
         _txtJsonSearch.Size = new System.Drawing.Size(102, 23);
         _txtJsonSearch.TabIndex = 0;
         // 
-        // _btnJsonSearch
-        // 
-        _btnJsonSearch.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-        _btnJsonSearch.Location = new System.Drawing.Point(111, -3);
-        _btnJsonSearch.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnJsonSearch.Name = "_btnJsonSearch";
-        _btnJsonSearch.Size = new System.Drawing.Size(24, 25);
-        _btnJsonSearch.TabIndex = 1;
-        _btnJsonSearch.Text = "▶";
-        _btnJsonSearch.Click += OnBtnJsonSearchClick;
-        // 
-        // _btnExpandAll
-        // 
-        _btnExpandAll.Location = new System.Drawing.Point(141, -3);
-        _btnExpandAll.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnExpandAll.Name = "_btnExpandAll";
-        _btnExpandAll.Size = new System.Drawing.Size(55, 25);
-        _btnExpandAll.TabIndex = 2;
-        _btnExpandAll.Text = "Expand";
-        _btnExpandAll.Click += OnBtnExpandAllClick;
-        // 
-        // _btnCollapseAll
-        // 
-        _btnCollapseAll.Location = new System.Drawing.Point(202, -3);
-        _btnCollapseAll.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnCollapseAll.Name = "_btnCollapseAll";
-        _btnCollapseAll.Size = new System.Drawing.Size(60, 25);
-        _btnCollapseAll.TabIndex = 3;
-        _btnCollapseAll.Text = "Collapse";
-        _btnCollapseAll.Click += OnBtnCollapseAllClick;
-        // 
-        // _btnCollapseTo2
-        // 
-        _btnCollapseTo2.Location = new System.Drawing.Point(268, -3);
-        _btnCollapseTo2.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-        _btnCollapseTo2.Name = "_btnCollapseTo2";
-        _btnCollapseTo2.Size = new System.Drawing.Size(42, 25);
-        _btnCollapseTo2.TabIndex = 4;
-        _btnCollapseTo2.Text = "Lvl2";
-        _btnCollapseTo2.Click += OnBtnCollapseTo2Click;
-        // 
         // _btnToggleView
         // 
-        _btnToggleView.Location = new System.Drawing.Point(316, -2);
+        _btnToggleView.Location = new System.Drawing.Point(313, 1);
         _btnToggleView.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
         _btnToggleView.Name = "_btnToggleView";
         _btnToggleView.Size = new System.Drawing.Size(42, 24);
-        _btnToggleView.TabIndex = 5;
+        _btnToggleView.TabIndex = 10;
         _btnToggleView.Text = "Raw";
-        _btnToggleView.Click += OnBtnToggleViewClick;
+        // 
+        // _btnCollapseTo2
+        // 
+        _btnCollapseTo2.Location = new System.Drawing.Point(265, 0);
+        _btnCollapseTo2.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+        _btnCollapseTo2.Name = "_btnCollapseTo2";
+        _btnCollapseTo2.Size = new System.Drawing.Size(42, 25);
+        _btnCollapseTo2.TabIndex = 9;
+        _btnCollapseTo2.Text = "Lvl2";
+        // 
+        // _btnCollapseAll
+        // 
+        _btnCollapseAll.Location = new System.Drawing.Point(199, 0);
+        _btnCollapseAll.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+        _btnCollapseAll.Name = "_btnCollapseAll";
+        _btnCollapseAll.Size = new System.Drawing.Size(60, 25);
+        _btnCollapseAll.TabIndex = 8;
+        _btnCollapseAll.Text = "Collapse";
+        // 
+        // _btnExpandAll
+        // 
+        _btnExpandAll.Location = new System.Drawing.Point(138, 0);
+        _btnExpandAll.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+        _btnExpandAll.Name = "_btnExpandAll";
+        _btnExpandAll.Size = new System.Drawing.Size(55, 25);
+        _btnExpandAll.TabIndex = 7;
+        _btnExpandAll.Text = "Expand";
+        // 
+        // _btnJsonSearch
+        // 
+        _btnJsonSearch.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+        _btnJsonSearch.Location = new System.Drawing.Point(108, 0);
+        _btnJsonSearch.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+        _btnJsonSearch.Name = "_btnJsonSearch";
+        _btnJsonSearch.Size = new System.Drawing.Size(24, 25);
+        _btnJsonSearch.TabIndex = 6;
+        _btnJsonSearch.Text = "▶";
         // 
         // JsonDetailToolbar
         // 
@@ -91,7 +86,7 @@ public partial class JsonDetailToolbar
         Controls.Add(_btnExpandAll);
         Controls.Add(_btnJsonSearch);
         Controls.Add(_txtJsonSearch);
-        Size = new System.Drawing.Size(1061, 37);
+        Size = new System.Drawing.Size(1061, 26);
         ResumeLayout(false);
         PerformLayout();
     }
