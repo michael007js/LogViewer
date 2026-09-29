@@ -145,10 +145,10 @@ public partial class JsonDetailForm : Form
         _btnSearchRes.Enabled = !_responseIsRaw;
     }
 
-    /// <summary>拦截 Ctrl+W 快捷键关闭窗口。</summary>
+    /// <summary>拦截 Esc 或 Ctrl+W 快捷键关闭窗口。</summary>
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (keyData == (Keys.Control | Keys.W))
+        if (keyData == Keys.Escape || keyData == (Keys.Control | Keys.W))
         {
             Close();
             return true;
