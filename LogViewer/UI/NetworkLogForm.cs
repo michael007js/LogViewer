@@ -209,6 +209,11 @@ public partial class NetworkLogForm : Form
             var entry = GetSelectedNetworkEntry();
             await ClipboardTextHelper.TrySetTextAsync(entry?.Url);
         });
+        menu.Items.Add(Language.CopyUrlWithoutDomain, null, async (s, e) =>
+        {
+            var entry = GetSelectedNetworkEntry();
+            await ClipboardTextHelper.TrySetTextAsync(GetUrlWithoutDomain(entry?.Url));
+        });
         menu.Items.Add(Language.CopyMethodUrl, null, async (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
@@ -237,6 +242,14 @@ public partial class NetworkLogForm : Form
             string? text = entry == null ? null : await Task.Run(() => FormatUrlWithBody(entry.Url, entry.Content));
             await ClipboardTextHelper.TrySetTextAsync(text);
         });
+        menu.Items.Add(Language.CopyUrlRequestResponse, null, async (s, e) =>
+        {
+            var entry = GetSelectedNetworkEntry();
+            string? text = entry == null
+                ? null
+                : await Task.Run(() => FormatUrlRequestResponse(entry.Url, entry.Send, entry.Content));
+            await ClipboardTextHelper.TrySetTextAsync(text);
+        });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(Language.ViewDetail, null, (s, e) =>
         {
@@ -252,6 +265,27 @@ public partial class NetworkLogForm : Form
         return string.IsNullOrEmpty(formattedBody)
             ? url ?? ""
             : $"{url ?? ""}{Environment.NewLine}{formattedBody}";
+    }
+
+    private static string GetUrlWithoutDomain(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return string.Empty;
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            ? uri.PathAndQuery + uri.Fragment
+            : url;
+    }
+
+    private static string FormatUrlRequestResponse(string? url, string? requestBody, string? responseBody)
+    {
+        var parts = new List<string>(3);
+        if (!string.IsNullOrEmpty(url)) parts.Add(url);
+
+        var formattedRequest = JsonFormatter.FormatJson(requestBody) ?? requestBody ?? string.Empty;
+        if (!string.IsNullOrEmpty(formattedRequest)) parts.Add(formattedRequest);
+
+        var formattedResponse = JsonFormatter.FormatJson(responseBody) ?? responseBody ?? string.Empty;
+        if (!string.IsNullOrEmpty(formattedResponse)) parts.Add(formattedResponse);
+        return string.Join(Environment.NewLine, parts);
     }
 
     private void RefreshNetworkLogList()

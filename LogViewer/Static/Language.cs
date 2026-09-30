@@ -195,6 +195,9 @@ public static class Language
     /// <summary>右键菜单：复制请求 URL。</summary>
     public const string CopyUrl = "复制 URL";
 
+    /// <summary>右键菜单：复制不含域名的 URL 路径。</summary>
+    public const string CopyUrlWithoutDomain = "复制 URL（不带域名）";
+
     /// <summary>右键菜单：复制 HTTP 方法和 URL。</summary>
     public const string CopyMethodUrl = "复制方法和 URL";
 
@@ -209,6 +212,9 @@ public static class Language
 
     /// <summary>右键菜单：复制 URL 和响应体。</summary>
     public const string CopyUrlResponseBody = "复制 URL 和响应体";
+
+    /// <summary>右键菜单：复制完整 URL、请求体和响应体。</summary>
+    public const string CopyUrlRequestResponse = "复制 URL + 请求体 + 响应体";
 
     /// <summary>右键菜单：复制日志内容。</summary>
     public const string CopyNormalLogMessage = "复制日志内容";
