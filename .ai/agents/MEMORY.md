@@ -245,6 +245,11 @@ rtk git diff                                                # Git 差异
 | Raw 长文本禁止写入 TextBox 全文 | 使用 `PagedTextView + ListView.VirtualMode`，后台建立行/分段索引，UI 仅生成可视项；避免 `AppendText` 随文本增长退化并阻塞消息循环 |
 | WinForms Font 相同值替换陷阱 | `Control.Font` 可能因新旧 Font 属性相同而跳过引用替换；此时释放旧 Font 会在 `OnHandleCreated → Font.ToHfont()` 抛 `Parameter is not valid`。相同字体必须复用，不同字体确认替换后再释放，且自有 Font 要在子控件 Dispose 后释放 |
 | 折叠 JSON 搜索不能依赖 TreeNode | 完整搜索必须遍历根 `JsonElement` 快照，使用 `ChildOrdinal` 定位重复键/远端数组项；命中后只投影路径，正常分页按序号去重接管，禁止为搜索展开或物化整棵树 |
+| Logcat 读取不得捕获 UI 上下文 | `LogcatReader` 的进程启动、`ReadLineAsync`、正则和时间解析必须在后台执行；Start/Stop/Exited 用运行版本和实例身份保证只清理当前进程一次 |
+| Network/Normal 高频日志必须批量进 UI | 后台事件只入队，UI 每轮按批量和时间预算写 RingBuffer；每批只更新一次设备计数和日志视图，禁止每条日志 `BeginInvoke`、重建 ComboBox 或刷新 ListView |
+| Network/Normal 过滤使用稳定快照 | RingBuffer 只在 UI 线程复制引用数组；字符串/Regex 在后台过滤；VirtualMode 读取稳定 `LogEntry[]`，查询/范围版本变化时丢弃旧结果，隐藏 Tab 只标记 dirty |
+| scrcpy 停止必须先摘除后释放 | UI 先隐藏窗口、清空当前 session 和面板状态，再后台 Dispose；Exited 必须用 `ReferenceEquals` 防止旧会话误清新会话，窗口关闭需等待受跟踪清理任务 |
+| CTS 取消释放后必须清空字段 | `Cancel()` 对已释放的 CancellationTokenSource 会抛 ObjectDisposedException；两阶段关闭会重复调用 CancelAsyncOperations，取消+释放后必须置 null 并 try/catch，保证幂等（SystemLogForm 关闭崩溃已踩坑） |
 
 ---
 

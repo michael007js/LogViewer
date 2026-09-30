@@ -8,44 +8,144 @@ namespace LogViewer.Network;
 
 /// <summary>
 /// ADB Logcat 日志读取器，通过启动 adb logcat 进程获取 Android 系统日志。
-/// 支持 threadtime 格式解析，实时触发 SystemLogReceived 事件。
 /// </summary>
 public partial class LogcatReader
 {
+    private readonly object _stateGate = new();
     private Process? _process;
     private CancellationTokenSource? _cts;
     private Task? _readTask;
+    private int _runVersion;
+    private int _completedVersion;
+    private bool _startInProgress;
+    private bool _stopRequested;
 
-    /// <summary>目标设备的 ADB 序列号。</summary>
     public string? DeviceSerial { get; private set; }
 
-    /// <summary>logcat 进程是否正在运行。</summary>
-    public bool IsRunning => _process != null && !_process.HasExited;
+    public bool IsRunning
+    {
+        get
+        {
+            lock (_stateGate)
+            {
+                if (_process == null || _startInProgress || _stopRequested) return false;
+                try { return !_process.HasExited; }
+                catch (ObjectDisposedException) { return false; }
+                catch (InvalidOperationException) { return false; }
+            }
+        }
+    }
 
-    /// <summary>系统日志接收事件，每解析一行有效日志时触发。</summary>
     public event EventHandler<SystemLogEntry>? SystemLogReceived;
-
-    /// <summary>进程退出事件，当 adb logcat 进程退出时触发。</summary>
     public event EventHandler<(string serial, bool success)>? ProcessExited;
 
-    /// <summary>
-    /// 启动 adb logcat 进程，开始读取指定设备的系统日志。
-    /// </summary>
-    /// <param name="adbPath">adb 可执行文件路径。</param>
-    /// <param name="deviceSerial">目标设备的 ADB 序列号。</param>
-    /// <param name="filter">logcat 过滤器表达式（如 "ActivityManager:I *:S"）。</param>
     public void Start(string adbPath, string deviceSerial, string filter = "")
     {
-        if (_process != null) return;
+        _ = StartAsync(adbPath, deviceSerial, filter).ContinueWith(task =>
+        {
+            Debug.WriteLine(task.Exception?.GetBaseException());
+        }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+    }
 
-        DeviceSerial = deviceSerial;
-        _cts = new CancellationTokenSource();
+    public async Task StartAsync(string adbPath, string deviceSerial, string filter = "",
+        CancellationToken cancellationToken = default)
+    {
+        Process process;
+        CancellationTokenSource runCts;
+        int runVersion;
 
-        // 构建 adb logcat 命令参数
+        lock (_stateGate)
+        {
+            if (_process != null || _startInProgress) return;
+
+            _startInProgress = true;
+            _stopRequested = false;
+            runVersion = ++_runVersion;
+            DeviceSerial = deviceSerial;
+            runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _cts = runCts;
+            process = CreateProcess(adbPath, deviceSerial, filter);
+            _process = process;
+        }
+
+        process.Exited += (_, _) => CompleteRun(process, runVersion, IsStopRequested(runVersion));
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                runCts.Token.ThrowIfCancellationRequested();
+                if (!process.Start()) throw new InvalidOperationException("Failed to start adb logcat.");
+            }, runCts.Token).ConfigureAwait(false);
+
+            var shouldStop = false;
+            lock (_stateGate)
+            {
+                if (runVersion == _runVersion)
+                {
+                    _startInProgress = false;
+                    shouldStop = _stopRequested || _completedVersion == runVersion;
+                }
+                else
+                {
+                    shouldStop = true;
+                }
+            }
+
+            if (shouldStop)
+            {
+                StopProcess(process);
+                CompleteRun(process, runVersion, expectedStop: true);
+                return;
+            }
+
+            var readTask = ReadLoopAsync(process, deviceSerial, runVersion, runCts.Token);
+            lock (_stateGate)
+            {
+                if (runVersion == _runVersion && _completedVersion != runVersion)
+                    _readTask = readTask;
+            }
+
+            _ = readTask;
+        }
+        catch (OperationCanceledException) when (runCts.IsCancellationRequested)
+        {
+            StopProcess(process);
+            CompleteRun(process, runVersion, expectedStop: true);
+        }
+        catch
+        {
+            StopProcess(process);
+            CompleteRun(process, runVersion, expectedStop: false);
+            throw;
+        }
+    }
+
+    public void Stop()
+    {
+        Process? process;
+        CancellationTokenSource? cts;
+        int runVersion;
+        lock (_stateGate)
+        {
+            _stopRequested = true;
+            runVersion = _runVersion;
+            process = _process;
+            cts = _cts;
+        }
+
+        try { cts?.Cancel(); } catch (ObjectDisposedException) { }
+        if (process == null) return;
+        StopProcess(process);
+        CompleteRun(process, runVersion, expectedStop: true);
+    }
+
+    private static Process CreateProcess(string adbPath, string deviceSerial, string filter)
+    {
         var args = $"-s {deviceSerial} logcat -v threadtime";
         if (!string.IsNullOrWhiteSpace(filter)) args += $" {filter}";
 
-        _process = new Process
+        return new Process
         {
             StartInfo = new ProcessStartInfo
             {
@@ -59,79 +159,121 @@ public partial class LogcatReader
             },
             EnableRaisingEvents = true
         };
-
-        _process.Exited += (s, e) =>
-        {
-            ProcessExited?.Invoke(this, (deviceSerial, false));
-            Cleanup();
-        };
-
-        _process.Start();
-        _readTask = ReadLoopAsync(_cts.Token);
     }
 
-    /// <summary>
-    /// 停止 adb logcat 进程，释放相关资源。
-    /// </summary>
-    public void Stop()
+    private async Task ReadLoopAsync(Process process, string deviceSerial, int runVersion,
+        CancellationToken cancellationToken)
     {
-        _cts?.Cancel();
-        try
-        {
-            if (_process != null && !_process.HasExited)
-            {
-                _process.Kill();
-                _process.WaitForExit(500);
-            }
-        }
-        catch
-        {
-        }
-
-        Cleanup();
-    }
-
-    /// <summary>
-    /// 异步读取循环，持续从 adb logcat 进程的标准输出读取日志行。
-    /// </summary>
-    private async Task ReadLoopAsync(CancellationToken ct)
-    {
-        if (_process == null) return;
-
         var regex = LogcatRegex();
-
         try
         {
-            using var reader = _process.StandardOutput;
-            while (!ct.IsCancellationRequested && _process != null && !_process.HasExited)
+            using var reader = process.StandardOutput;
+            while (!cancellationToken.IsCancellationRequested)
             {
-                var line = await reader.ReadLineAsync(ct);
+                var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                 if (line == null) break;
 
                 var entry = ParseLine(line, regex);
-                if (entry != null)
-                {
-                    entry.SourceDeviceSerial = DeviceSerial;
-                    SystemLogReceived?.Invoke(this, entry);
-                }
+                if (entry == null) continue;
+                entry.SourceDeviceSerial = deviceSerial;
+                SystemLogReceived?.Invoke(this, entry);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (IOException)
+        {
+        }
+        finally
+        {
+            if (!HasExited(process)) StopProcess(process);
+            CompleteRun(process, runVersion, cancellationToken.IsCancellationRequested || IsStopRequested(runVersion));
+        }
+    }
+
+    private bool IsStopRequested(int runVersion)
+    {
+        lock (_stateGate)
+        {
+            return runVersion != _runVersion || _stopRequested;
+        }
+    }
+
+    private void CompleteRun(Process process, int runVersion, bool expectedStop)
+    {
+        CancellationTokenSource? cts = null;
+        var shouldRaise = false;
+        var success = false;
+
+        lock (_stateGate)
+        {
+            if (runVersion == _runVersion && _completedVersion != runVersion)
+            {
+                _completedVersion = runVersion;
+                shouldRaise = true;
+                _startInProgress = false;
+                _readTask = null;
+                if (ReferenceEquals(_process, process)) _process = null;
+                cts = _cts;
+                _cts = null;
+                success = !expectedStop && TryGetExitCode(process, out var exitCode) && exitCode == 0;
+            }
+        }
+
+        try { process.Dispose(); } catch { }
+        try { cts?.Dispose(); } catch { }
+
+        if (!shouldRaise) return;
+        try { ProcessExited?.Invoke(this, (DeviceSerial ?? string.Empty, success)); }
+        catch { }
+    }
+
+    private static bool HasExited(Process process)
+    {
+        try { return process.HasExited; }
+        catch { return true; }
+    }
+
+    private static bool TryGetExitCode(Process process, out int exitCode)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                exitCode = -1;
+                return false;
+            }
+
+            exitCode = process.ExitCode;
+            return true;
+        }
+        catch
+        {
+            exitCode = -1;
+            return false;
+        }
+    }
+
+    private static void StopProcess(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(500);
+            }
         }
         catch
         {
         }
     }
 
-    /// <summary>
-    /// 解析单行 logcat 日志，提取时间、PID、TID、级别、标签和消息。
-    /// threadtime 格式：MM-DD HH:mm:ss.fff PID TID LEVEL TAG: MESSAGE
-    /// </summary>
-    /// <param name="line">原始日志行。</param>
-    /// <param name="regex">预编译的正则表达式。</param>
-    /// <returns>解析后的日志条目，如果格式不匹配则返回 null。</returns>
-    private SystemLogEntry? ParseLine(string line, Regex regex)
+    private static SystemLogEntry? ParseLine(string line, Regex regex)
     {
         var match = regex.Match(line);
         if (!match.Success) return null;
@@ -145,22 +287,14 @@ public partial class LogcatReader
             ThreadId = int.TryParse(match.Groups["tid"].Value, out var tid) ? tid : 0
         };
 
-        // 解析时间戳（threadtime 格式不含年份，使用当前年份推断）
         var dateStr = match.Groups["date"].Value;
         var timeStr = match.Groups["time"].Value;
         var now = DateTime.Now;
         var parsedText = $"{now.Year}-{dateStr} {timeStr}";
-        if (DateTime.TryParseExact(
-                parsedText,
-                "yyyy-MM-dd HH:mm:ss.FFFFFFF",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var dt))
+        if (DateTime.TryParseExact(parsedText, "yyyy-MM-dd HH:mm:ss.FFFFFFF",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
         {
-            // 跨年推断：如果解析的月份大于当前月份，则认为是上一年
-            var year = now.Year;
-            var parsedMonth = dt.Month;
-            if (parsedMonth > now.Month) year--;
+            var year = dt.Month > now.Month ? now.Year - 1 : now.Year;
             entry.Timestamp = new DateTime(year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Millisecond);
         }
         else
@@ -171,36 +305,6 @@ public partial class LogcatReader
         return entry;
     }
 
-    /// <summary>
-    /// 清理进程和 CancellationTokenSource 资源。
-    /// </summary>
-    private void Cleanup()
-    {
-        try
-        {
-            _process?.Dispose();
-        }
-        catch
-        {
-        }
-
-        _process = null;
-        try
-        {
-            _cts?.Dispose();
-        }
-        catch
-        {
-        }
-
-        _cts = null;
-        _readTask = null;
-    }
-
-    /// <summary>
-    /// 预编译的 logcat threadtime 格式正则表达式。
-    /// 格式：MM-DD HH:mm:ss.fff PID TID LEVEL TAG: MESSAGE
-    /// </summary>
     [GeneratedRegex(
         @"^(?<date>\d{2}-\d{2})\s+(?<time>\d{2}:\d{2}:\d{2}\.\d+)\s+(?<pid>\d+)\s+(?<tid>\d+)\s+(?<level>[VDIWEF])\s+(?<tag>[^\s:]+)\s*:\s*(?<msg>.*)$")]
     private static partial Regex LogcatRegex();

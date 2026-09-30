@@ -17,6 +17,7 @@ public partial class MainForm : Form
     private AppSettings _settings;
     private Font? _uiFont;
     private CancellationTokenSource? _adbScanCts;
+    private readonly SemaphoreSlim _adbScanGate = new(1, 1);
     private int _adbScanVersion;
     private CancellationTokenSource? _scrcpyStartCts;
     private readonly Dictionary<string, RingBuffer<LogEntry>> _deviceLogs = new();
@@ -33,6 +34,8 @@ public partial class MainForm : Form
     private bool _showingNormalLog;
     private LogEntry? _selectedLogEntry;
     private SystemLogSessionStore _systemLogStore = null!;
+    private bool _allowFinalClose;
+    private Task? _shutdownTask;
 
     private NetworkLogForm _networkLogForm = null!;
     private NormalLogForm _normalLogForm = null!;
@@ -163,6 +166,8 @@ public partial class MainForm : Form
         EmbedFormInTab(_networkLogForm, _tabNetwork);
         EmbedFormInTabLazy(_normalLogForm, _tabNormal);
         EmbedFormInTabLazy(_systemLogForm, _tabSystem);
+        _networkLogForm.SetActive(_tabLogType.SelectedTab == _tabNetwork);
+        _normalLogForm.SetActive(_tabLogType.SelectedTab == _tabNormal);
     }
 
     /// <summary>
@@ -256,6 +261,8 @@ public partial class MainForm : Form
             _showingNormalLog = _tabLogType.SelectedTab == _tabNormal;
             _showingSystemLog = _tabLogType.SelectedTab == _tabSystem;
             EnsureFormVisible(_showingNormalLog ? _normalLogForm : _showingSystemLog ? _systemLogForm : null);
+            _networkLogForm.SetActive(!_showingNormalLog && !_showingSystemLog);
+            _normalLogForm.SetActive(_showingNormalLog);
             if (_showingSystemLog)
                 _systemLogForm.RefreshSystemLogList(preferBackground: true);
         };
@@ -447,8 +454,10 @@ public partial class MainForm : Form
     /// </summary>
     private void OnDeviceConnected(object? sender, DeviceInfo info)
     {
+        if (_isClosing) return;
         this.BeginInvoke(new Action(() =>
         {
+            if (_isClosing) return;
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var id = info.DeviceId ?? "";
             if (!_deviceLogs.ContainsKey(id))
@@ -482,10 +491,12 @@ public partial class MainForm : Form
     private async Task TryMatchAdbSerialAsync(DeviceInfo info)
     {
         if (!_adbHelper.IsAdbAvailable()) return;
-        var adbDevices = await Task.Run(() => _adbHelper.GetDevices());
-        if (IsDisposed || !IsHandleCreated) return;
+        var scan = await ScanAdbDevicesAsync(CancellationToken.None).ConfigureAwait(false);
+        if (!scan.succeeded || IsDisposed || !IsHandleCreated) return;
+        var adbDevices = scan.devices;
         BeginInvoke(new Action(() =>
         {
+            if (_isClosing) return;
             var model = info.DeviceModel ?? "";
             foreach (var dev in adbDevices)
             {
@@ -528,13 +539,20 @@ public partial class MainForm : Form
             _logcatReaders[deviceId] = reader;
         }
 
-        if (_currentDeviceId == adbSerial) _currentDeviceId = deviceId;
+        if (_currentDeviceId == adbSerial)
+        {
+            _currentDeviceId = deviceId;
+            _networkLogForm.InvalidateData(clearView: true);
+            _normalLogForm.InvalidateData(clearView: true);
+        }
     }
 
     private void OnDeviceDisconnected(object? sender, string deviceId)
     {
+        if (_isClosing) return;
         this.BeginInvoke(new Action(() =>
         {
+            if (_isClosing) return;
             _devicePanel.SetDeviceConnected(deviceId, false);
             UpdateDeviceCountStatus();
             RefreshMirrorPanelState();
@@ -544,76 +562,17 @@ public partial class MainForm : Form
 
     private void OnLogReceived(object? sender, (string deviceId, LogEntry entry) args)
     {
-        this.BeginInvoke(new Action(() =>
-        {
-            var (deviceId, entry) = args;
-            var showingCurrentNetwork =
-                !_showingSystemLog && (_currentDeviceId == deviceId || _currentDeviceId == null);
-            var activeViewCountBeforeAdd = 0;
-            var activeViewWasFull = false;
-
-            if (showingCurrentNetwork)
-            {
-                if (_currentDeviceId == null)
-                {
-                    activeViewCountBeforeAdd = _allLogs.Count;
-                    activeViewWasFull = _allLogs.Count >= _allLogs.Capacity;
-                }
-                else if (_deviceLogs.TryGetValue(deviceId, out var activeDeviceBuf))
-                {
-                    activeViewCountBeforeAdd = activeDeviceBuf.Count;
-                    activeViewWasFull = activeDeviceBuf.Count >= activeDeviceBuf.Capacity;
-                }
-            }
-
-            if (_deviceLogs.TryGetValue(deviceId, out var deviceBuf))
-            {
-                deviceBuf.Add(entry);
-                _devicePanel.UpdateLogCount(deviceId, deviceBuf.Count);
-            }
-
-            _allLogs.Add(entry);
-
-            if (showingCurrentNetwork)
-                _networkLogForm.OnLogAdded(entry, true, activeViewCountBeforeAdd, activeViewWasFull);
-        }));
+        EnqueueUiLog(PendingLogKind.Network, args.deviceId, args.entry);
     }
 
     private void OnNormalLogReceived(object? sender, (string deviceId, LogEntry entry) args)
     {
-        this.BeginInvoke(new Action(() =>
-        {
-            var (deviceId, entry) = args;
-            var showingCurrentNormal =
-                _showingNormalLog && (_currentDeviceId == deviceId || _currentDeviceId == null);
-            var activeViewCountBeforeAdd = 0;
-            var activeViewWasFull = false;
-
-            if (showingCurrentNormal)
-            {
-                if (_currentDeviceId == null)
-                {
-                    activeViewCountBeforeAdd = _allNormalLogs.Count;
-                    activeViewWasFull = _allNormalLogs.Count >= _allNormalLogs.Capacity;
-                }
-                else if (_deviceNormalLogs.TryGetValue(deviceId, out var activeDeviceBuf))
-                {
-                    activeViewCountBeforeAdd = activeDeviceBuf.Count;
-                    activeViewWasFull = activeDeviceBuf.Count >= activeDeviceBuf.Capacity;
-                }
-            }
-
-            if (_deviceNormalLogs.TryGetValue(deviceId, out var deviceBuf))
-                deviceBuf.Add(entry);
-            _allNormalLogs.Add(entry);
-
-            if (showingCurrentNormal)
-                _normalLogForm.OnNormalLogAdded(entry, true, activeViewCountBeforeAdd, activeViewWasFull);
-        }));
+        EnqueueUiLog(PendingLogKind.Normal, args.deviceId, args.entry);
     }
 
     private void OnSystemLogReceived(object? sender, SystemLogEntry entry)
     {
+        if (_isClosing) return;
         lock (_pendingSystemLogsLock)
         {
             _pendingSystemLogs.Enqueue(entry);
@@ -633,29 +592,64 @@ public partial class MainForm : Form
     /// </summary>
     private async Task FlushPendingSystemLogsAsync()
     {
-        while (true)
+        try
         {
-            var entries = new List<SystemLogEntry>();
+            while (!_isClosing)
+            {
+                var entries = new List<SystemLogEntry>();
+                lock (_pendingSystemLogsLock)
+                {
+                    while (_pendingSystemLogs.Count > 0 && entries.Count < 200)
+                        entries.Add(_pendingSystemLogs.Dequeue());
+                    if (entries.Count == 0) return;
+                }
+
+                if (!_systemLogForm.IsRuntimeReady() || IsDisposed) return;
+                foreach (var entry in entries) _systemLogStore.Append(entry);
+
+                if (!_isClosing && IsHandleCreated)
+                {
+                    try
+                    {
+                        BeginInvoke(new Action(() =>
+                        {
+                            if (!_isClosing && !IsDisposed) _systemLogForm.OnStoreAppended(entries);
+                        }));
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        return;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        return;
+                    }
+                }
+
+                await Task.Yield();
+            }
+        }
+        catch (ObjectDisposedException) when (_isClosing)
+        {
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+        }
+        finally
+        {
+            var restart = false;
             lock (_pendingSystemLogsLock)
             {
-                while (_pendingSystemLogs.Count > 0 && entries.Count < 200)
-                    entries.Add(_pendingSystemLogs.Dequeue());
-                if (entries.Count == 0) { _systemLogFlushScheduled = false; return; }
+                _systemLogFlushScheduled = false;
+                if (!_isClosing && _pendingSystemLogs.Count > 0)
+                {
+                    _systemLogFlushScheduled = true;
+                    restart = true;
+                }
             }
 
-            if (!_systemLogForm.IsRuntimeReady()) continue;
-            if (IsDisposed) return;
-
-            foreach (var entry in entries)
-                _systemLogStore.Append(entry);
-
-            BeginInvoke(new Action(() =>
-            {
-                if (IsDisposed) return;
-                _systemLogForm.OnStoreAppended(entries);
-            }));
-
-            if (!IsHandleCreated) return;
+            if (restart) _ = Task.Run(FlushPendingSystemLogsAsync);
         }
     }
 
@@ -749,31 +743,57 @@ public partial class MainForm : Form
 
     private void RequestAdbScan()
     {
-        if (!_adbHelper.IsAdbAvailable()) return;
+        if (!_adbHelper.IsAdbAvailable() || _isClosing) return;
         var scanVersion = Interlocked.Increment(ref _adbScanVersion);
-        Task.Run(() =>
+        _ = RunRequestedAdbScanAsync(scanVersion);
+    }
+
+    private async Task RunRequestedAdbScanAsync(int scanVersion)
+    {
+        var scan = await ScanAdbDevicesAsync(CancellationToken.None).ConfigureAwait(false);
+        if (!scan.succeeded || _isClosing || IsDisposed || !IsHandleCreated) return;
+        try
         {
-            if (!_adbHelper.TryGetDevices(out var devices)) return;
-            if (IsHandleCreated)
-                BeginInvoke(() =>
-                {
-                    if (scanVersion == Volatile.Read(ref _adbScanVersion)) ApplyAdbDevices(devices);
-                });
-        });
+            BeginInvoke(() =>
+            {
+                if (!_isClosing && scanVersion == Volatile.Read(ref _adbScanVersion))
+                    ApplyAdbDevices(scan.devices);
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private async Task<(bool succeeded, List<AdbDevice> devices)> ScanAdbDevicesAsync(
+        CancellationToken cancellationToken)
+    {
+        await _adbScanGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await Task.Run(() =>
+            {
+                var succeeded = _adbHelper.TryGetDevices(out var devices);
+                return (succeeded, devices);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _adbScanGate.Release();
+        }
     }
 
     private async Task PrimeAdbDeviceListAsync()
     {
         if (!_adbHelper.IsAdbAvailable()) return;
-        for (int attempt = 0; attempt < 4 && !IsDisposed; attempt++)
+        for (int attempt = 0; attempt < 4 && !IsDisposed && !_isClosing; attempt++)
         {
             var scanVersion = Interlocked.Increment(ref _adbScanVersion);
-            var scan = await Task.Run(() =>
-            {
-                var succeeded = _adbHelper.TryGetDevices(out var devices);
-                return (succeeded, devices);
-            });
-            if (IsDisposed || scanVersion != Volatile.Read(ref _adbScanVersion)) return;
+            var scan = await ScanAdbDevicesAsync(CancellationToken.None);
+            if (IsDisposed || _isClosing || scanVersion != Volatile.Read(ref _adbScanVersion)) return;
             if (scan.succeeded) ApplyAdbDevices(scan.devices);
             if (scan.succeeded && scan.devices.Count > 0) return;
             await Task.Delay(1000);
@@ -783,32 +803,40 @@ public partial class MainForm : Form
     private void ApplyAdbDevices(List<AdbDevice> adbDevices)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var currentSerials = new HashSet<string>(adbDevices.Select(d => d.Serial), StringComparer.Ordinal);
-        var removedDeviceIds = _devicePanel.RemoveMissingAdbDevices(currentSerials);
-        RemoveUnavailableDeviceState(removedDeviceIds);
-        BootLog($"  ApplyAdbDevices.RemoveMissing: {sw.ElapsedMilliseconds}");
         var adbPath = _adbHelper.GetAdbPath();
         var newAdbSerials = new List<string>();
 
-        foreach (var dev in adbDevices)
+        _devicePanel.BeginDeviceUpdate();
+        try
         {
-            var isNew = _devicePanel.AddAdbDevice(dev.Serial, dev.Model);
-            if (isNew) newAdbSerials.Add(dev.Serial);
-            if (!_deviceLogs.ContainsKey(dev.Serial))
-                _deviceLogs[dev.Serial] = new RingBuffer<LogEntry>(_settings.MaxLogEntriesPerDevice);
-            if (!_deviceNormalLogs.ContainsKey(dev.Serial))
-                _deviceNormalLogs[dev.Serial] = new RingBuffer<LogEntry>(_settings.MaxNormalLogEntriesPerDevice);
+            var currentSerials = new HashSet<string>(adbDevices.Select(d => d.Serial), StringComparer.Ordinal);
+            var removedDeviceIds = _devicePanel.RemoveMissingAdbDevices(currentSerials);
+            RemoveUnavailableDeviceState(removedDeviceIds);
+            BootLog($"  ApplyAdbDevices.RemoveMissing: {sw.ElapsedMilliseconds}");
 
-            var mappedDeviceId = _adbSerialToDeviceId.TryGetValue(dev.Serial, out var existingDeviceId) &&
-                                 !string.IsNullOrEmpty(existingDeviceId)
-                ? existingDeviceId
-                : dev.Serial;
-
-            if (!_logcatReaders.ContainsKey(mappedDeviceId) && !_logcatReaders.ContainsKey(dev.Serial) &&
-                _settings.AutoStartLogcat)
+            foreach (var dev in adbDevices)
             {
-                if (adbPath != null) StartLogcat(adbPath, dev.Serial, mappedDeviceId, _settings.LogcatFilter);
+                var mappedDeviceId = _adbSerialToDeviceId.TryGetValue(dev.Serial, out var existingDeviceId) &&
+                                     !string.IsNullOrEmpty(existingDeviceId)
+                    ? existingDeviceId
+                    : dev.Serial;
+
+                var isNew = _devicePanel.AddAdbDevice(dev.Serial, dev.Model);
+                if (isNew) newAdbSerials.Add(dev.Serial);
+                if (!_deviceLogs.ContainsKey(mappedDeviceId))
+                    _deviceLogs[mappedDeviceId] = new RingBuffer<LogEntry>(_settings.MaxLogEntriesPerDevice);
+                if (!_deviceNormalLogs.ContainsKey(mappedDeviceId))
+                    _deviceNormalLogs[mappedDeviceId] =
+                        new RingBuffer<LogEntry>(_settings.MaxNormalLogEntriesPerDevice);
+
+                if (!_logcatReaders.ContainsKey(mappedDeviceId) && !_logcatReaders.ContainsKey(dev.Serial) &&
+                    _settings.AutoStartLogcat && adbPath != null)
+                    StartLogcat(adbPath, dev.Serial, mappedDeviceId, _settings.LogcatFilter);
             }
+        }
+        finally
+        {
+            _devicePanel.EndDeviceUpdate();
         }
 
         BootLog($"  ApplyAdbDevices.Loop: {sw.ElapsedMilliseconds}");
@@ -843,15 +871,12 @@ public partial class MainForm : Form
                 if (_adbHelper.IsAdbAvailable())
                 {
                     var scanVersion = Interlocked.Increment(ref _adbScanVersion);
-                    var scan = await Task.Run(() =>
-                    {
-                        var succeeded = _adbHelper.TryGetDevices(out var devices);
-                        return (succeeded, devices);
-                    }, token);
+                    var scan = await ScanAdbDevicesAsync(token);
                     if (scan.succeeded && IsHandleCreated && !token.IsCancellationRequested)
                         BeginInvoke(() =>
                         {
-                            if (scanVersion == Volatile.Read(ref _adbScanVersion)) ApplyAdbDevices(scan.devices);
+                            if (!_isClosing && scanVersion == Volatile.Read(ref _adbScanVersion))
+                                ApplyAdbDevices(scan.devices);
                         });
                 }
 
@@ -872,8 +897,8 @@ public partial class MainForm : Form
     private void OnDeviceSelected(object? sender, string? deviceId)
     {
         _currentDeviceId = deviceId;
-        _networkLogForm.RebuildFilter();
-        _normalLogForm.RebuildFilter();
+        _networkLogForm.InvalidateData(clearView: true);
+        _normalLogForm.InvalidateData(clearView: true);
         _systemLogForm.RefreshSystemLogList();
         _selectedLogEntry = null;
         ShowLogDetail(null);
@@ -919,8 +944,8 @@ public partial class MainForm : Form
             _selectedLogEntry = null;
             ShowLogDetail(null);
             StopMirror(clearStatusOnly: true);
-            _networkLogForm.RebuildFilter();
-            _normalLogForm.RebuildFilter();
+            _networkLogForm.InvalidateData(clearView: true);
+            _normalLogForm.InvalidateData(clearView: true);
             _systemLogForm.RefreshSystemLogList();
         }
 
@@ -944,12 +969,14 @@ public partial class MainForm : Form
 
     private void OnLogcatToggle(object? sender, string deviceId)
     {
-        if (_logcatReaders.TryGetValue(deviceId, out var reader) && reader.IsRunning)
+        if (_logcatReaders.TryGetValue(deviceId, out var reader))
         {
             var serial = reader.DeviceSerial;
-            reader.Stop();
             _logcatReaders.Remove(deviceId);
-            if (serial != null) _adbSerialToDeviceId.Remove(serial);
+            if (serial != null && _adbSerialToDeviceId.TryGetValue(serial, out var mappedId) &&
+                mappedId == deviceId)
+                _adbSerialToDeviceId.Remove(serial);
+            _ = Task.Run(reader.Stop);
         }
         else
         {
@@ -972,25 +999,63 @@ public partial class MainForm : Form
 
     private void StartLogcat(string adbPath, string serial, string deviceId, string filter)
     {
-        if (_logcatReaders.ContainsKey(deviceId)) return;
+        if (_isClosing || _logcatReaders.ContainsKey(deviceId)) return;
         var reader = new LogcatReader();
         reader.SystemLogReceived += OnSystemLogReceived;
-        reader.ProcessExited += (s, args) => this.BeginInvoke(new Action(() =>
-        {
-            if (_logcatReaders.TryGetValue(deviceId, out var currentReader) &&
-                ReferenceEquals(currentReader, reader))
-            {
-                _logcatReaders.Remove(deviceId);
-                if (_adbSerialToDeviceId.TryGetValue(serial, out var mappedId) && mappedId == deviceId)
-                    _adbSerialToDeviceId.Remove(serial);
-            }
-
-            UpdateLogcatStatus();
-        }));
+        reader.ProcessExited += (s, args) => PostLogcatExitToUi(deviceId, serial, reader);
         _logcatReaders[deviceId] = reader;
         _adbSerialToDeviceId[serial] = deviceId;
-        reader.Start(adbPath, serial, filter);
         UpdateLogcatStatus();
+        _ = RunLogcatReaderAsync(reader, adbPath, serial, deviceId, filter);
+    }
+
+    private async Task RunLogcatReaderAsync(LogcatReader reader, string adbPath, string serial,
+        string deviceId, string filter)
+    {
+        try
+        {
+            await reader.StartAsync(adbPath, serial, filter).ConfigureAwait(false);
+            if (!_isClosing && IsHandleCreated)
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    if (_logcatReaders.TryGetValue(deviceId, out var currentReader) &&
+                        ReferenceEquals(currentReader, reader))
+                        UpdateLogcatStatus();
+                }));
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+            PostLogcatExitToUi(deviceId, serial, reader);
+        }
+    }
+
+    private void PostLogcatExitToUi(string deviceId, string serial, LogcatReader reader)
+    {
+        if (_isClosing || IsDisposed || !IsHandleCreated) return;
+        try
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (_logcatReaders.TryGetValue(deviceId, out var currentReader) &&
+                    ReferenceEquals(currentReader, reader))
+                {
+                    _logcatReaders.Remove(deviceId);
+                    if (_adbSerialToDeviceId.TryGetValue(serial, out var mappedId) && mappedId == deviceId)
+                        _adbSerialToDeviceId.Remove(serial);
+                }
+
+                UpdateLogcatStatus();
+            }));
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     #endregion
@@ -1135,6 +1200,8 @@ public partial class MainForm : Form
             foreach (var kvp in _deviceNormalLogs) kvp.Value.Resize(_settings.MaxNormalLogEntriesPerDevice);
             _allLogs.Resize(_settings.MaxLogEntriesAll);
             _allNormalLogs.Resize(_settings.MaxNormalLogEntries);
+            _networkLogForm.InvalidateData(clearView: true);
+            _normalLogForm.InvalidateData(clearView: true);
             if (_systemLogForm.IsRuntimeReady())
             {
                 _systemLogStore.UpdateHotCapacity(_settings.MaxSystemLogEntries);
@@ -1157,25 +1224,93 @@ public partial class MainForm : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
+        if (!_allowFinalClose && e.CloseReason != CloseReason.WindowsShutDown)
+        {
+            e.Cancel = true;
+            _shutdownTask ??= PrepareForFinalCloseAsync();
+            return;
+        }
+
+        _isClosing = true;
         StopAdbScanLoop();
-        StopMirror(clearStatusOnly: true);
+        CancelUiLogPipeline();
         CancelPreviewAsyncOperations();
-        _scrcpyStartCts?.Cancel();
-        _scrcpyStartCts?.Dispose();
-        _mirrorRestartTimer?.Stop();
-        _mirrorRestartTimer?.Dispose();
-        foreach (var session in _externalScrcpySessions.ToArray()) session.Dispose();
-        _externalScrcpySessions.Clear();
-        foreach (var reader in _logcatReaders.Values) reader.Stop();
+        _networkLogForm.CancelAsyncOperations();
+        _normalLogForm.CancelAsyncOperations();
         _systemLogForm.CancelAsyncOperations();
+        _server.DeviceConnected -= OnDeviceConnected;
+        _server.DeviceDisconnected -= OnDeviceDisconnected;
+        _server.LogReceived -= OnLogReceived;
+        _server.NormalLogReceived -= OnNormalLogReceived;
+
+        if (e.CloseReason == CloseReason.WindowsShutDown && !_allowFinalClose)
+        {
+            DetachAllScrcpySessionsForShutdown();
+            foreach (var reader in _logcatReaders.Values.ToArray()) _ = Task.Run(reader.Stop);
+            _ = Task.Run(_server.Stop);
+        }
+
         if (_systemLogStore is not null) _systemLogStore.Dispose();
         _networkLogForm.Dispose();
         _normalLogForm.Dispose();
         _systemLogForm.Dispose();
         _uiFont?.Dispose();
         _uiFont = null;
-        _server.Stop();
         base.OnFormClosing(e);
+    }
+
+    private async Task PrepareForFinalCloseAsync()
+    {
+        _isClosing = true;
+        Hide();
+        Interlocked.Increment(ref _adbScanVersion);
+        StopAdbScanLoop();
+        CancelUiLogPipeline();
+        CancelPreviewAsyncOperations();
+        _networkLogForm.CancelAsyncOperations();
+        _normalLogForm.CancelAsyncOperations();
+        _systemLogForm.CancelAsyncOperations();
+        _scrcpyStartCts?.Cancel();
+        _mirrorRestartTimer?.Stop();
+        _mirrorRestartTimer?.Dispose();
+        _mirrorRestartTimer = null;
+
+        _server.DeviceConnected -= OnDeviceConnected;
+        _server.DeviceDisconnected -= OnDeviceDisconnected;
+        _server.LogReceived -= OnLogReceived;
+        _server.NormalLogReceived -= OnNormalLogReceived;
+
+        var cleanupTasks = new List<Task>(DetachAllScrcpySessionsForShutdown());
+        foreach (var reader in _logcatReaders.Values.Distinct().ToArray())
+            cleanupTasks.Add(Task.Run(reader.Stop));
+        _logcatReaders.Clear();
+        _adbSerialToDeviceId.Clear();
+        cleanupTasks.Add(Task.Run(_server.Stop));
+
+        try
+        {
+            await Task.WhenAll(cleanupTasks).ConfigureAwait(false);
+            await WaitForScrcpyCleanupAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+        }
+
+        if (IsDisposed || !IsHandleCreated) return;
+        try
+        {
+            BeginInvoke(new Action(() =>
+            {
+                _allowFinalClose = true;
+                Close();
+            }));
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)

@@ -48,12 +48,19 @@ public partial class MainForm
     /// <summary>用户是否主动调整了镜像区域尺寸（拖动分条或窗口）。</summary>
     private bool _userResizedMirror;
 
+    private int _scrcpyRequestVersion;
+    private int _scrcpyPrepareCount;
+    private int _scrcpyOrphanCleanupStarted;
+    private ScrcpySession? _mirrorRestartSession;
+    private readonly object _scrcpyCleanupLock = new();
+    private readonly HashSet<Task> _scrcpyCleanupTasks = new();
+
     /// <summary>
     /// 刷新镜像面板状态，根据当前设备、scrcpy 部署进度和会话状态更新面板显示。
     /// </summary>
     private void RefreshMirrorPanelState()
     {
-        if (IsDesignTimeMode())
+        if (_isClosing || IsDesignTimeMode())
         {
             return;
         }
@@ -122,9 +129,10 @@ public partial class MainForm
     /// <returns>scrcpy 可执行文件路径；部署失败返回 null。</returns>
     private async Task<string?> EnsureScrcpyReadyAsync(bool forceDeploy, bool reportToMirrorPanel)
     {
+        if (_isClosing) return null;
         try
         {
-            _scrcpyPreparing = true;
+            _scrcpyPreparing = Interlocked.Increment(ref _scrcpyPrepareCount) > 0;
             _scrcpyDeployError = null;
             _scrcpyDeployStatus = Language.ScrcpyPreparing;
             UpdateAdbStatus();
@@ -136,6 +144,7 @@ public partial class MainForm
 
             var progress = new Progress<string>(message =>
             {
+                if (_isClosing) return;
                 _scrcpyDeployStatus = message;
                 UpdateAdbStatus();
 
@@ -164,12 +173,11 @@ public partial class MainForm
         }
         finally
         {
-            _scrcpyPreparing = false;
-            UpdateAdbStatus();
-
-            if (reportToMirrorPanel)
+            _scrcpyPreparing = Interlocked.Decrement(ref _scrcpyPrepareCount) > 0;
+            if (!_isClosing)
             {
-                RefreshMirrorPanelState();
+                UpdateAdbStatus();
+                if (reportToMirrorPanel) RefreshMirrorPanelState();
             }
         }
     }
@@ -256,12 +264,11 @@ public partial class MainForm
     }
 
     /// <summary>
-    /// 启动 scrcpy 镜像会话，支持内嵌或外部窗口模式。内嵌模式绑定 DevicePanel 宿主，外部模式独立窗口。
+    /// 启动 scrcpy 镜像会话，使用请求版本和设备身份防止旧启动覆盖新会话。
     /// </summary>
-    /// <param name="embedded">是否内嵌模式。</param>
-    /// <param name="restartCurrent">是否先停止当前会话再启动。</param>
     private async Task StartMirrorSessionAsync(bool embedded, bool restartCurrent)
     {
+        if (_isClosing) return;
         var deviceId = _currentDeviceId;
         if (string.IsNullOrEmpty(deviceId))
         {
@@ -276,35 +283,35 @@ public partial class MainForm
             return;
         }
 
-        var scrcpyPath = await EnsureScrcpyReadyAsync(forceDeploy: false, reportToMirrorPanel: true);
-        if (string.IsNullOrEmpty(scrcpyPath))
-        {
-            RefreshMirrorPanelState();
-            return;
-        }
-
-        _scrcpyManager.TerminateBundledProcesses(scrcpyPath);
-
-        if (restartCurrent)
-        {
-            StopMirror(clearStatusOnly: true);
-        }
-
+        var requestVersion = Interlocked.Increment(ref _scrcpyRequestVersion);
         _scrcpyStartCts?.Cancel();
-        _scrcpyStartCts?.Dispose();
-        _scrcpyStartCts = new CancellationTokenSource();
-        var token = _scrcpyStartCts.Token;
-
-        if (embedded)
-        {
-            _mirrorStartingSerial = serial;
-            _devicePanel.SetMirrorAspectRatio(GetDeviceContentAspectRatio(serial));
-            _devicePanel.SetMirrorStatus(Language.MirrorStarting(serial), hostVisible: false,
-                isRunning: false, isReady: false);
-        }
+        var requestCts = new CancellationTokenSource();
+        _scrcpyStartCts = requestCts;
+        var token = requestCts.Token;
 
         try
         {
+            var scrcpyPath = await EnsureScrcpyReadyAsync(forceDeploy: false, reportToMirrorPanel: true);
+            if (string.IsNullOrEmpty(scrcpyPath) ||
+                !IsCurrentScrcpyRequest(requestVersion, requestCts, deviceId, serial))
+                return;
+
+            if (Interlocked.CompareExchange(ref _scrcpyOrphanCleanupStarted, 1, 0) == 0)
+                await Task.Run(() => _scrcpyManager.TerminateBundledProcesses(scrcpyPath));
+
+            if (restartCurrent && _scrcpySession != null)
+                await DetachMirrorSessionAsync(clearStatusOnly: true, invalidateRequest: false);
+
+            if (!IsCurrentScrcpyRequest(requestVersion, requestCts, deviceId, serial)) return;
+
+            if (embedded)
+            {
+                _mirrorStartingSerial = serial;
+                _devicePanel.SetMirrorAspectRatio(GetDeviceContentAspectRatio(serial));
+                _devicePanel.SetMirrorStatus(Language.MirrorStarting(serial), hostVisible: false,
+                    isRunning: false, isReady: false);
+            }
+
             var contentAspectRatio = GetDeviceContentAspectRatio(serial);
             var hostHandle = embedded ? _devicePanel.EnsureMirrorHostHandle() : IntPtr.Zero;
             var windowBounds = Rectangle.Empty;
@@ -327,91 +334,196 @@ public partial class MainForm
                 WindowY = windowBounds.Y,
                 WindowWidth = windowBounds.Width,
                 WindowHeight = windowBounds.Height
-            }, token).ConfigureAwait(false);
+            }, token);
 
-            if (token.IsCancellationRequested || IsDisposed)
+            if (!IsCurrentScrcpyRequest(requestVersion, requestCts, deviceId, serial))
             {
-                session.Dispose();
+                session.HideEmbeddedWindow();
+                QueueScrcpyCleanup(session);
                 return;
             }
 
             if (embedded)
             {
-                BeginInvoke(new Action(() =>
+                _mirrorStartingSerial = null;
+                _scrcpySession = session;
+                session.Exited += OnScrcpySessionExited;
+                if (!session.IsRunning)
                 {
-                    _mirrorStartingSerial = null;
-                    _scrcpySession?.Dispose();
-                    _scrcpySession = session;
-                    _scrcpySession.Exited += OnScrcpySessionExited;
-                    _devicePanel.SetMirrorAspectRatio(contentAspectRatio);
-                    _devicePanel.SetMirrorStatus(Language.MirrorConnected(serial), hostVisible: true,
-                        isRunning: true, isReady: true);
-                    ApplyEmbeddedMirrorLayout();
-                }));
+                    OnScrcpySessionExited(session, EventArgs.Empty);
+                    return;
+                }
+
+                _devicePanel.SetMirrorAspectRatio(contentAspectRatio);
+                _devicePanel.SetMirrorStatus(Language.MirrorConnected(serial), hostVisible: true,
+                    isRunning: true, isReady: true);
+                ApplyEmbeddedMirrorLayout();
             }
             else
             {
-                BeginInvoke(new Action(() =>
-                {
-                    _externalScrcpySessions.Add(session);
-                    session.Exited += (_, _) =>
-                    {
-                        if (!IsDisposed && IsHandleCreated)
-                        {
-                            BeginInvoke(new Action(() => _externalScrcpySessions.Remove(session)));
-                        }
-                    };
-                }));
+                _externalScrcpySessions.Add(session);
+                session.Exited += OnExternalScrcpySessionExited;
+                if (!session.IsRunning) OnExternalScrcpySessionExited(session, EventArgs.Empty);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            if (string.Equals(_mirrorStartingSerial, serial, StringComparison.Ordinal))
+                _mirrorStartingSerial = null;
         }
         catch (Exception ex)
         {
-            if (!IsDisposed)
+            if (IsCurrentScrcpyRequest(requestVersion, requestCts, deviceId, serial))
             {
-                BeginInvoke(new Action(() =>
-                {
-                    _mirrorStartingSerial = null;
-                    _devicePanel.SetMirrorStatus(Language.MirrorStartFailed(ex.Message),
-                        hostVisible: false, isRunning: false, isReady: false);
-                }));
+                _mirrorStartingSerial = null;
+                _devicePanel.SetMirrorStatus(Language.MirrorStartFailed(ex.Message),
+                    hostVisible: false, isRunning: false, isReady: false);
             }
+        }
+        finally
+        {
+            if (ReferenceEquals(_scrcpyStartCts, requestCts)) _scrcpyStartCts = null;
+            requestCts.Dispose();
         }
     }
 
-    /// <summary>
-    /// scrcpy 会话退出事件处理，清理会话并刷新面板状态。通过 BeginInvoke 确保 UI 线程操作。
-    /// </summary>
+    private bool IsCurrentScrcpyRequest(int version, CancellationTokenSource requestCts,
+        string deviceId, string serial)
+    {
+        return !_isClosing && !IsDisposed && !requestCts.IsCancellationRequested &&
+               version == Volatile.Read(ref _scrcpyRequestVersion) &&
+               ReferenceEquals(_scrcpyStartCts, requestCts) &&
+               string.Equals(_currentDeviceId, deviceId, StringComparison.Ordinal) &&
+               string.Equals(ResolveAdbSerial(deviceId), serial, StringComparison.Ordinal);
+    }
+
     private void OnScrcpySessionExited(object? sender, EventArgs e)
     {
-        if (IsDisposed || !IsHandleCreated)
+        if (sender is not ScrcpySession exitedSession) return;
+        if (_isClosing || IsDisposed || !IsHandleCreated)
         {
+            QueueScrcpyCleanup(exitedSession);
             return;
         }
 
-        BeginInvoke(new Action(() =>
+        try
         {
-            _mirrorStartingSerial = null;
-            _scrcpySession?.Dispose();
-            _scrcpySession = null;
-            RefreshMirrorPanelState();
-        }));
+            BeginInvoke(new Action(() =>
+            {
+                if (ReferenceEquals(_scrcpySession, exitedSession))
+                {
+                    _scrcpySession = null;
+                    _mirrorStartingSerial = null;
+                    _devicePanel.ClearMirrorHost();
+                    RefreshMirrorPanelState();
+                }
+
+                exitedSession.Exited -= OnScrcpySessionExited;
+                QueueScrcpyCleanup(exitedSession);
+            }));
+        }
+        catch (ObjectDisposedException)
+        {
+            QueueScrcpyCleanup(exitedSession);
+        }
+        catch (InvalidOperationException)
+        {
+            QueueScrcpyCleanup(exitedSession);
+        }
     }
 
-    /// <summary>
-    /// 停止当前内嵌镜像，取消启动令牌并释放会话资源。
-    /// </summary>
-    /// <param name="clearStatusOnly">是否仅清理宿主状态而不更新面板。</param>
+    private void OnExternalScrcpySessionExited(object? sender, EventArgs e)
+    {
+        if (sender is not ScrcpySession exitedSession) return;
+        if (_isClosing || IsDisposed || !IsHandleCreated)
+        {
+            QueueScrcpyCleanup(exitedSession);
+            return;
+        }
+
+        try
+        {
+            BeginInvoke(new Action(() =>
+            {
+                exitedSession.Exited -= OnExternalScrcpySessionExited;
+                _externalScrcpySessions.Remove(exitedSession);
+                QueueScrcpyCleanup(exitedSession);
+            }));
+        }
+        catch (ObjectDisposedException)
+        {
+            QueueScrcpyCleanup(exitedSession);
+        }
+        catch (InvalidOperationException)
+        {
+            QueueScrcpyCleanup(exitedSession);
+        }
+    }
+
     private void StopMirror(bool clearStatusOnly)
     {
-        _scrcpyStartCts?.Cancel();
+        _ = DetachMirrorSessionAsync(clearStatusOnly, invalidateRequest: true);
+    }
+
+    private Task DetachMirrorSessionAsync(bool clearStatusOnly, bool invalidateRequest)
+    {
+        if (invalidateRequest)
+        {
+            Interlocked.Increment(ref _scrcpyRequestVersion);
+            _scrcpyStartCts?.Cancel();
+        }
+
         _mirrorStartingSerial = null;
         _mirrorRestartPending = false;
-        _scrcpySession?.Dispose();
+        _mirrorRestartSession = null;
+        _mirrorRestartTimer?.Stop();
+
+        var session = _scrcpySession;
         _scrcpySession = null;
-        if (clearStatusOnly)
+        if (session != null)
         {
-            _devicePanel.ClearMirrorHost();
+            session.Exited -= OnScrcpySessionExited;
+            session.HideEmbeddedWindow();
         }
+
+        _devicePanel.ClearMirrorHost();
+        if (!clearStatusOnly && !_isClosing) RefreshMirrorPanelState();
+        return session == null ? Task.CompletedTask : QueueScrcpyCleanup(session);
+    }
+
+    private Task QueueScrcpyCleanup(ScrcpySession session)
+    {
+        var cleanupTask = Task.Run(session.Dispose);
+        lock (_scrcpyCleanupLock) _scrcpyCleanupTasks.Add(cleanupTask);
+        _ = cleanupTask.ContinueWith(completedTask =>
+        {
+            lock (_scrcpyCleanupLock) _scrcpyCleanupTasks.Remove(completedTask);
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        return cleanupTask;
+    }
+
+    private async Task WaitForScrcpyCleanupAsync()
+    {
+        while (true)
+        {
+            Task[] tasks;
+            lock (_scrcpyCleanupLock) tasks = _scrcpyCleanupTasks.ToArray();
+            if (tasks.Length == 0) return;
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+        }
+    }
+
+    private Task[] DetachAllScrcpySessionsForShutdown()
+    {
+        var tasks = new List<Task> { DetachMirrorSessionAsync(clearStatusOnly: true, invalidateRequest: true) };
+        foreach (var session in _externalScrcpySessions.ToArray())
+        {
+            session.Exited -= OnExternalScrcpySessionExited;
+            tasks.Add(QueueScrcpyCleanup(session));
+        }
+
+        _externalScrcpySessions.Clear();
+        return tasks.ToArray();
     }
 
     /// <summary>
@@ -433,6 +545,7 @@ public partial class MainForm
         }
 
         _mirrorRestartPending = true;
+        _mirrorRestartSession = _scrcpySession;
         _mirrorRestartTimer ??= CreateMirrorRestartTimer();
         _mirrorRestartTimer.Stop();
         _mirrorRestartTimer.Start();
@@ -478,6 +591,8 @@ public partial class MainForm
             if (!_mirrorRestartPending ||
                 _mirrorRestartInProgress ||
                 _mirrorStartingSerial != null ||
+                !ReferenceEquals(_scrcpySession, _mirrorRestartSession) ||
+                _isClosing ||
                 IsDisposed ||
                 !IsHandleCreated ||
                 string.IsNullOrEmpty(_currentDeviceId))
@@ -486,6 +601,7 @@ public partial class MainForm
             }
 
             _mirrorRestartPending = false;
+            _mirrorRestartSession = null;
             _mirrorRestartInProgress = true;
             try
             {

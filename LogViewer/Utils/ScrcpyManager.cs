@@ -89,8 +89,8 @@ internal sealed class ScrcpyStartOptions
 /// <remarks>实现 <see cref="IDisposable"/>，释放时会优雅关闭 scrcpy 进程</remarks>
 internal sealed class ScrcpySession : IDisposable
 {
-    // 标识是否已调用过 Stop/Dispose，防止重复终止
-    private bool _disposed;
+    // 原子标识是否已开始 Stop/Dispose，防止多线程重复终止同一进程。
+    private int _disposeStarted;
 
     /// <summary>
     /// 初始化 scrcpy 会话实例
@@ -151,7 +151,16 @@ internal sealed class ScrcpySession : IDisposable
     /// <summary>
     /// 进程是否仍在运行
     /// </summary>
-    public bool IsRunning => !Process.HasExited;
+    public bool IsRunning
+    {
+        get
+        {
+            if (Volatile.Read(ref _disposeStarted) != 0) return false;
+            try { return !Process.HasExited; }
+            catch (ObjectDisposedException) { return false; }
+            catch (InvalidOperationException) { return false; }
+        }
+    }
 
     /// <summary>
     /// scrcpy 进程退出时触发
@@ -178,17 +187,19 @@ internal sealed class ScrcpySession : IDisposable
         EmbeddedWindowHost.ResizeToBounds(WindowHandle, bounds);
     }
 
+    /// <summary>立即隐藏嵌入窗口，不等待进程退出。</summary>
+    public void HideEmbeddedWindow()
+    {
+        if (Mode == ScrcpySessionMode.Embedded && WindowHandle != IntPtr.Zero)
+            EmbeddedWindowHost.Hide(WindowHandle);
+    }
+
     /// <summary>
     /// 停止 scrcpy 会话：先尝试优雅关闭窗口，超时后强制终止进程树
     /// </summary>
     public void Stop()
     {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
+        if (Interlocked.Exchange(ref _disposeStarted, 1) != 0) return;
 
         try
         {
@@ -474,12 +485,16 @@ internal sealed class ScrcpyManager
             psi.ArgumentList.Add((options.AngleDegrees / 90).ToString(CultureInfo.InvariantCulture));
         }
 
-        var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start scrcpy.");
-        var stdoutTask = ReadToEndSafeAsync(process.StandardOutput);
-        var stderrTask = ReadToEndSafeAsync(process.StandardError);
-
+        var process = new Process { StartInfo = psi };
         try
         {
+            await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!process.Start()) throw new InvalidOperationException("Failed to start scrcpy.");
+            }, cancellationToken).ConfigureAwait(false);
+            var stdoutTask = ReadToEndSafeAsync(process.StandardOutput);
+            var stderrTask = ReadToEndSafeAsync(process.StandardError);
             var windowHandle = await WaitForWindowAsync(process, stderrTask, cancellationToken, options.WindowTitle)
                 .ConfigureAwait(false);
             var session = new ScrcpySession(process, windowHandle, options);
@@ -492,13 +507,15 @@ internal sealed class ScrcpyManager
         {
             try
             {
-                if (!process.HasExited)
-                {
-                    process.Kill(entireProcessTree: true);
-                }
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
             }
             catch
             {
+            }
+            finally
+            {
+                process.Dispose();
             }
 
             throw;
@@ -523,6 +540,25 @@ internal sealed class ScrcpyManager
     }
 
     /// <summary>
+    /// 读取 stderr 并附加超时：子进程继承句柄时管道可能不随主进程退出关闭，避免无界等待。
+    /// </summary>
+    private static async Task<string> ReadStderrWithTimeoutAsync(Task<string> stderrTask)
+    {
+        try
+        {
+            return await stderrTask.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            return string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
     /// 等待 scrcpy 进程创建窗口句柄，超时或进程提前退出时抛出异常
     /// </summary>
     /// <param name="process">scrcpy 进程对象</param>
@@ -534,28 +570,27 @@ internal sealed class ScrcpyManager
     private static async Task<IntPtr> WaitForWindowAsync(Process process, Task<string> stderrTask,
         CancellationToken cancellationToken, string windowTitle)
     {
-        return await Task.Run(async () =>
+        for (var attempt = 0; attempt < 80; attempt++)
         {
-            for (var attempt = 0; attempt < 80; attempt++)
+            cancellationToken.ThrowIfCancellationRequested();
+            process.Refresh();
+            if (process.HasExited)
             {
-                if (attempt % 10 == 0)
-                {
-                    if (process.HasExited)
-                    {
-                        throw new InvalidOperationException("scrcpy exited before creating a window.");
-                    }
-
-                    if (process.MainWindowHandle != IntPtr.Zero)
-                    {
-                        return process.MainWindowHandle;
-                    }
-                }
-
-                Thread.Sleep(100);
+                var error = await ReadStderrWithTimeoutAsync(stderrTask).ConfigureAwait(false);
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(error)
+                    ? "scrcpy exited before creating a window."
+                    : error.Trim());
             }
 
-            throw new TimeoutException("Timed out waiting for scrcpy window.");
-        }, cancellationToken);
+            var windowHandle = process.MainWindowHandle;
+            if (windowHandle == IntPtr.Zero)
+                windowHandle = EmbeddedWindowHost.FindWindowByTitle(windowTitle);
+            if (windowHandle != IntPtr.Zero) return windowHandle;
+
+            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+        }
+
+        throw new TimeoutException("Timed out waiting for scrcpy window.");
     }
 }
 
@@ -599,6 +634,8 @@ internal static class EmbeddedWindowHost
 
     // SWP_FRAMECHANGED：重新应用窗口样式
     private const uint SwpFrameChanged = 0x0020;
+
+    private const uint SwHide = 0;
 
     // SW_SHOW：显示窗口
     private const uint SwShow = 5;
@@ -657,6 +694,11 @@ internal static class EmbeddedWindowHost
             return;
 
         MoveWindow(windowHandle, bounds.X, bounds.Y, bounds.Width, bounds.Height, true);
+    }
+
+    public static void Hide(IntPtr windowHandle)
+    {
+        if (windowHandle != IntPtr.Zero) ShowWindow(windowHandle, SwHide);
     }
 
     /// <summary>

@@ -12,11 +12,28 @@ namespace LogViewer.UI;
 /// </summary>
 public sealed partial class DevicePanel : UserControl
 {
+    private const int LogCountRefreshDelayMs = 100;
+
     /// <summary>是否处于设计器模式。</summary>
     private readonly bool _isDesignMode;
 
     /// <summary>设备ID到设备记录的映射表。</summary>
     private readonly Dictionary<string, DeviceRecord> _devices = new();
+
+    /// <summary>设备更新批处理的嵌套深度。</summary>
+    private int _deviceUpdateDepth;
+
+    /// <summary>设备列表是否存在尚未呈现的数据变化。</summary>
+    private bool _listRefreshDirty;
+
+    /// <summary>结构数据版本，用于使旧的计数延迟刷新失效。</summary>
+    private int _listRefreshVersion;
+
+    /// <summary>计数延迟刷新回调版本。</summary>
+    private int _countRefreshCallbackVersion;
+
+    /// <summary>是否已有计数延迟刷新等待执行。</summary>
+    private bool _countRefreshScheduled;
 
     /// <summary>当前选中的设备ID。</summary>
     private string? _selectedDeviceId;
@@ -269,6 +286,28 @@ public sealed partial class DevicePanel : UserControl
         UpdateMirrorUiState();
     }
 
+    /// <summary>开始设备列表批量更新。支持嵌套，最外层结束时最多刷新一次。</summary>
+    public void BeginDeviceUpdate()
+    {
+        _deviceUpdateDepth++;
+    }
+
+    /// <summary>结束设备列表批量更新，并在最外层结束时呈现累计的数据变化。</summary>
+    /// <exception cref="InvalidOperationException">未与 BeginDeviceUpdate 配对调用。</exception>
+    public void EndDeviceUpdate()
+    {
+        if (_deviceUpdateDepth <= 0)
+        {
+            throw new InvalidOperationException("EndDeviceUpdate must be paired with BeginDeviceUpdate.");
+        }
+
+        _deviceUpdateDepth--;
+        if (_deviceUpdateDepth == 0 && _listRefreshDirty)
+        {
+            FlushPendingListRefresh();
+        }
+    }
+
     /// <summary>
     /// 添加或更新 TCP 连接设备。若设备已存在则更新信息和日志计数；
     /// 若设备已连接则标记为非 ADB-only。
@@ -278,27 +317,30 @@ public sealed partial class DevicePanel : UserControl
     public void AddOrUpdateDevice(DeviceInfo info, int logCount)
     {
         var id = info.DeviceId ?? string.Empty;
-        if (!_devices.ContainsKey(id))
+        if (!_devices.TryGetValue(id, out var record))
         {
             _devices[id] = new DeviceRecord { Info = info, LogCount = logCount };
+            RequestListRefresh();
+            return;
         }
-        else
+
+        if (string.IsNullOrEmpty(info.AdbSerial))
         {
-            var record = _devices[id];
-            if (string.IsNullOrEmpty(info.AdbSerial))
-            {
-                info.AdbSerial = record.Info.AdbSerial;
-            }
-
-            record.Info = info;
-            record.LogCount = logCount;
-            if (info.IsConnected)
-            {
-                record.IsAdbOnly = false;
-            }
+            info.AdbSerial = record.Info.AdbSerial;
         }
 
-        RefreshList();
+        var isAdbOnly = info.IsConnected ? false : record.IsAdbOnly;
+        if (DeviceInfoEquals(record.Info, info) &&
+            record.LogCount == logCount &&
+            record.IsAdbOnly == isAdbOnly)
+        {
+            return;
+        }
+
+        record.Info = info;
+        record.LogCount = logCount;
+        record.IsAdbOnly = isAdbOnly;
+        RequestListRefresh();
     }
 
     /// <summary>
@@ -312,12 +354,17 @@ public sealed partial class DevicePanel : UserControl
     {
         if (_devices.TryGetValue(serial, out var existing) && existing.IsAdbOnly)
         {
-            existing.Info.DeviceModel = model;
-            RefreshList();
+            if (!string.Equals(existing.Info.DeviceModel, model, StringComparison.Ordinal))
+            {
+                existing.Info.DeviceModel = model;
+                RequestListRefresh();
+            }
+
             return false;
         }
 
-        if (_devices.ContainsKey(serial))
+        if (_devices.ContainsKey(serial) || _devices.Values.Any(record =>
+                !record.IsAdbOnly && string.Equals(record.Info.AdbSerial, serial, StringComparison.Ordinal)))
         {
             return false;
         }
@@ -331,7 +378,7 @@ public sealed partial class DevicePanel : UserControl
         };
 
         _devices[serial] = new DeviceRecord { Info = info, LogCount = 0, IsAdbOnly = true };
-        RefreshList();
+        RequestListRefresh();
         return true;
     }
 
@@ -361,7 +408,11 @@ public sealed partial class DevicePanel : UserControl
             if (_selectedDeviceId == deviceId) _selectedDeviceId = null;
         }
 
-        if (toRemove.Count > 0) RefreshList();
+        if (toRemove.Count > 0)
+        {
+            RequestListRefresh();
+        }
+
         return toRemove;
     }
 
@@ -380,21 +431,45 @@ public sealed partial class DevicePanel : UserControl
             existing.IsAdbOnly = false;
             _devices.Remove(adbSerial);
             _devices[tcpInfo.DeviceId ?? string.Empty] = existing;
-            RefreshList();
+            RequestListRefresh();
         }
     }
 
     /// <summary>
-    /// 更新指定设备的日志计数并刷新下拉列表显示。
+    /// 更新指定设备的日志计数，实际变化时合并到约 100ms 后刷新。
     /// </summary>
     /// <param name="deviceId">设备ID。</param>
     /// <param name="count">新的日志条数。</param>
     public void UpdateLogCount(string deviceId, int count)
     {
-        if (_devices.TryGetValue(deviceId, out var record))
+        if (!_devices.TryGetValue(deviceId, out var record) || record.LogCount == count)
         {
-            record.LogCount = count;
-            RefreshList();
+            return;
+        }
+
+        record.LogCount = count;
+        RequestListRefresh(deferForLogCounts: true);
+    }
+
+    /// <summary>批量更新设备日志计数，所有实际变化合并为一次延迟刷新。</summary>
+    /// <param name="logCounts">设备ID到日志条数的只读映射。</param>
+    public void UpdateLogCounts(IReadOnlyDictionary<string, int> logCounts)
+    {
+        var changed = false;
+        foreach (var pair in logCounts)
+        {
+            if (!_devices.TryGetValue(pair.Key, out var record) || record.LogCount == pair.Value)
+            {
+                continue;
+            }
+
+            record.LogCount = pair.Value;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            RequestListRefresh(deferForLogCounts: true);
         }
     }
 
@@ -405,15 +480,22 @@ public sealed partial class DevicePanel : UserControl
     /// <param name="connected">是否已连接。</param>
     public void SetDeviceConnected(string deviceId, bool connected)
     {
-        if (_devices.TryGetValue(deviceId, out var record))
+        if (!_devices.TryGetValue(deviceId, out var record))
         {
-            record.Info.IsConnected = connected;
-            if (connected)
-            {
-                record.IsAdbOnly = false;
-            }
+            return;
+        }
 
-            RefreshList();
+        var changed = record.Info.IsConnected != connected;
+        record.Info.IsConnected = connected;
+        if (connected && record.IsAdbOnly)
+        {
+            record.IsAdbOnly = false;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            RequestListRefresh();
         }
     }
 
@@ -423,13 +505,90 @@ public sealed partial class DevicePanel : UserControl
     /// <param name="deviceId">要移除的设备ID。</param>
     public void RemoveDevice(string deviceId)
     {
-        _devices.Remove(deviceId);
+        if (!_devices.Remove(deviceId))
+        {
+            return;
+        }
+
         if (_selectedDeviceId == deviceId)
         {
             _selectedDeviceId = null;
         }
 
+        RequestListRefresh();
+    }
+
+    private void RequestListRefresh(bool deferForLogCounts = false)
+    {
+        _listRefreshDirty = true;
+        if (_deviceUpdateDepth > 0) return;
+        if (deferForLogCounts)
+        {
+            ScheduleCountRefresh();
+            return;
+        }
+
+        FlushPendingListRefresh();
+    }
+
+    private void FlushPendingListRefresh()
+    {
+        if (_deviceUpdateDepth > 0 || !_listRefreshDirty) return;
+        _listRefreshDirty = false;
+        _listRefreshVersion++;
+        _countRefreshCallbackVersion++;
+        _countRefreshScheduled = false;
         RefreshList();
+    }
+
+    private void ScheduleCountRefresh()
+    {
+        if (_countRefreshScheduled || IsDisposed) return;
+        _countRefreshScheduled = true;
+        var callbackVersion = ++_countRefreshCallbackVersion;
+        var structureVersion = _listRefreshVersion;
+        _ = FlushCountRefreshAfterDelayAsync(callbackVersion, structureVersion);
+    }
+
+    private async Task FlushCountRefreshAfterDelayAsync(int callbackVersion, int structureVersion)
+    {
+        await Task.Delay(LogCountRefreshDelayMs).ConfigureAwait(false);
+        if (IsDisposed) return;
+        if (!IsHandleCreated)
+        {
+            if (callbackVersion == _countRefreshCallbackVersion) _countRefreshScheduled = false;
+            return;
+        }
+
+        try
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (callbackVersion != _countRefreshCallbackVersion) return;
+                _countRefreshScheduled = false;
+                if (structureVersion != _listRefreshVersion) return;
+                FlushPendingListRefresh();
+            }));
+        }
+        catch (ObjectDisposedException)
+        {
+            if (callbackVersion == _countRefreshCallbackVersion) _countRefreshScheduled = false;
+        }
+        catch (InvalidOperationException)
+        {
+            if (callbackVersion == _countRefreshCallbackVersion) _countRefreshScheduled = false;
+        }
+    }
+
+    private static bool DeviceInfoEquals(DeviceInfo left, DeviceInfo right)
+    {
+        return string.Equals(left.DeviceId, right.DeviceId, StringComparison.Ordinal) &&
+               string.Equals(left.DeviceModel, right.DeviceModel, StringComparison.Ordinal) &&
+               string.Equals(left.AndroidVersion, right.AndroidVersion, StringComparison.Ordinal) &&
+               string.Equals(left.AppVersion, right.AppVersion, StringComparison.Ordinal) &&
+               left.IsQa == right.IsQa &&
+               left.IsConnected == right.IsConnected &&
+               string.Equals(left.AdbSerial, right.AdbSerial, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -460,14 +619,16 @@ public sealed partial class DevicePanel : UserControl
     }
 
     /// <summary>
-    /// 清除投屏宿主状态，将就绪和可见标志置为 false 并更新 UI。
+    /// 清除投屏宿主状态，将运行、就绪和可见标志置为 false 并更新 UI。
     /// </summary>
     public void ClearMirrorHost()
     {
-        _mirrorHostVisible = false;
+        _mirrorRunning = false;
         _mirrorReady = false;
+        _mirrorHostVisible = false;
         _mirrorHostPanel.MirrorActive = false;
         UpdateMirrorUiState();
+        _mirrorHostPanel.Invalidate();
     }
 
     /// <summary>
@@ -555,23 +716,28 @@ public sealed partial class DevicePanel : UserControl
 
         _cmbDevices.BeginUpdate();
         _cmbDevices.SelectedIndexChanged -= OnDeviceSelected;
-        _cmbDevices.Items.Clear();
-        _cmbDevices.Items.Add(new DeviceSelectorItem(null, Language.All));
-
-        foreach (var kvp in _devices.OrderBy(static pair => pair.Value.Info.DisplayName,
-                     StringComparer.OrdinalIgnoreCase))
+        try
         {
-            _cmbDevices.Items.Add(new DeviceSelectorItem(kvp.Key, BuildDeviceDisplayText(kvp.Value)));
+            _cmbDevices.Items.Clear();
+            _cmbDevices.Items.Add(new DeviceSelectorItem(null, Language.All));
+
+            foreach (var kvp in _devices.OrderBy(static pair => pair.Value.Info.DisplayName,
+                         StringComparer.OrdinalIgnoreCase))
+            {
+                _cmbDevices.Items.Add(new DeviceSelectorItem(kvp.Key, BuildDeviceDisplayText(kvp.Value)));
+            }
+
+            if (_selectedDeviceId != null && !_devices.ContainsKey(_selectedDeviceId))
+                _selectedDeviceId = null;
+
+            SyncSelectedItem();
+        }
+        finally
+        {
+            _cmbDevices.SelectedIndexChanged += OnDeviceSelected;
+            _cmbDevices.EndUpdate();
         }
 
-        if (_selectedDeviceId != null && !_devices.ContainsKey(_selectedDeviceId))
-        {
-            _selectedDeviceId = null;
-        }
-
-        SyncSelectedItem();
-        _cmbDevices.SelectedIndexChanged += OnDeviceSelected;
-        _cmbDevices.EndUpdate();
         UpdateMirrorUiState();
     }
 

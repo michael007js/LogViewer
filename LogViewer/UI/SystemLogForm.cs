@@ -178,10 +178,22 @@ public partial class SystemLogForm : Form
 
     public void CancelAsyncOperations()
     {
-        _systemSnapshotCts?.Cancel();
-        _systemSnapshotCts?.Dispose();
-        _systemPrefetchCts?.Cancel();
-        _systemPrefetchCts?.Dispose();
+        var snapshotCts = _systemSnapshotCts;
+        _systemSnapshotCts = null;
+        SafeCancelAndDispose(snapshotCts);
+        var prefetchCts = _systemPrefetchCts;
+        _systemPrefetchCts = null;
+        SafeCancelAndDispose(prefetchCts);
+    }
+
+    /// <summary>
+    /// 取消并释放 CTS，对已释放实例安全：两阶段关闭会重复调用 CancelAsyncOperations。
+    /// </summary>
+    private static void SafeCancelAndDispose(CancellationTokenSource? cts)
+    {
+        if (cts == null) return;
+        try { cts.Cancel(); } catch (ObjectDisposedException) { }
+        cts.Dispose();
     }
 
     private void ConfigureSystemLogList()
@@ -257,8 +269,7 @@ public partial class SystemLogForm : Form
             return;
         }
 
-        _systemSnapshotCts?.Cancel();
-        _systemSnapshotCts?.Dispose();
+        SafeCancelAndDispose(_systemSnapshotCts);
         _systemSnapshotCts = new CancellationTokenSource();
         var token = _systemSnapshotCts.Token;
         var version = ++_systemSnapshotVersion;
@@ -645,8 +656,7 @@ public partial class SystemLogForm : Form
         for (var i = prefetchStart; i <= prefetchEnd; i++)
             prefetchSequenceIds.Add(_systemLogSnapshot.Records[i].SequenceId);
 
-        _systemPrefetchCts?.Cancel();
-        _systemPrefetchCts?.Dispose();
+        SafeCancelAndDispose(_systemPrefetchCts);
         _systemPrefetchCts = new CancellationTokenSource();
         var token = _systemPrefetchCts.Token;
         var snapshot = _systemLogSnapshot;
@@ -684,10 +694,10 @@ public partial class SystemLogForm : Form
     {
         if (disposing)
         {
-            try { _systemSnapshotCts?.Cancel(); } catch (ObjectDisposedException) { }
-            _systemSnapshotCts?.Dispose();
-            try { _systemPrefetchCts?.Cancel(); } catch (ObjectDisposedException) { }
-            _systemPrefetchCts?.Dispose();
+            SafeCancelAndDispose(_systemSnapshotCts);
+            _systemSnapshotCts = null;
+            SafeCancelAndDispose(_systemPrefetchCts);
+            _systemPrefetchCts = null;
         }
 
         base.Dispose(disposing);

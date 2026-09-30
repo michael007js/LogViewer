@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using LogViewer.Models;
 using LogViewer.Static;
 using LogViewer.Utils;
@@ -6,10 +7,29 @@ namespace LogViewer.UI;
 
 public partial class NetworkLogForm : Form
 {
-    private bool _networkRefreshScheduled;
-    private bool _networkRefreshNeedsFullFilter;
-    private List<int> _filteredNetworkIndices = new();
+    private const int DataRefreshDebounceMs = 80;
+    private const int FilterInputDebounceMs = 200;
+
+    private readonly record struct NetworkLogQuery(
+        string Keyword,
+        Regex? Regex,
+        string? Method,
+        string? StatusFilter)
+    {
+        public bool FilterActive =>
+            !string.IsNullOrEmpty(Keyword) || Method != null || StatusFilter != null;
+    }
+
+    private LogEntry[] _networkView = Array.Empty<LogEntry>();
+    private int _networkViewTotalCount;
     private bool _networkAutoScrollEnabled = true;
+    private bool _isActive;
+    private bool _isDirty = true;
+    private int _queryVersion;
+    private int _dataVersion;
+    private CancellationTokenSource? _filterCts;
+    private CancellationTokenSource? _refreshDebounceCts;
+    private volatile bool _isClosing;
 
     private readonly Dictionary<string, RingBuffer<LogEntry>> _deviceLogs;
     private readonly RingBuffer<LogEntry> _allLogs;
@@ -66,41 +86,67 @@ public partial class NetworkLogForm : Form
 
     public void ClearFilterAndRefresh()
     {
-        _filteredNetworkIndices.Clear();
-        RefreshNetworkLogList();
-        UpdateLogCount();
+        InvalidateData(clearView: true);
     }
 
     public void RebuildFilter()
     {
-        RefreshNetworkFilter();
+        RequestQueryRefresh(0);
+    }
+
+    public void SetActive(bool active)
+    {
+        if (_isClosing || IsDisposed) return;
+        if (_isActive == active)
+        {
+            if (active && _isDirty) ScheduleNetworkRefresh(0);
+            return;
+        }
+
+        _isActive = active;
+        if (!active)
+        {
+            _isDirty = true;
+            CancelNetworkRefreshDelay();
+            CancelNetworkFilter();
+            return;
+        }
+
+        ScheduleNetworkRefresh(0);
+    }
+
+    public void NotifyDataChanged()
+    {
+        if (_isClosing || IsDisposed) return;
+        _dataVersion++;
+        _isDirty = true;
+        if (_isActive) ScheduleNetworkRefresh(DataRefreshDebounceMs);
+    }
+
+    public void InvalidateData(bool clearView = false)
+    {
+        if (_isClosing || IsDisposed) return;
+        _queryVersion++;
+        _dataVersion++;
+        _isDirty = true;
+        CancelNetworkRefreshDelay();
+        CancelNetworkFilter();
+
+        if (clearView) ClearNetworkView();
+        if (_isActive) ScheduleNetworkRefresh(0);
+    }
+
+    public void CancelAsyncOperations()
+    {
+        _queryVersion++;
+        _isDirty = true;
+        CancelNetworkRefreshDelay();
+        CancelNetworkFilter();
     }
 
     public void OnLogAdded(LogEntry entry, bool isActiveView, int bufferCountBeforeAdd, bool bufferWasFull)
     {
-        if (!isActiveView) return;
-
-        var incrementalUpdated = TryAppendNetworkLogIncrementally(entry, bufferCountBeforeAdd, bufferWasFull);
-        if (_networkAutoScrollEnabled)
-        {
-            var wasAtBottom = BufferedListViewHelper.IsAtBottom(_lstNetworkLogs);
-            if (!incrementalUpdated)
-            {
-                RefreshNetworkFilter();
-            }
-            else
-            {
-                RefreshNetworkLogList();
-                UpdateLogCount();
-            }
-
-            if (wasAtBottom) BufferedListViewHelper.ScrollToBottom(_lstNetworkLogs);
-        }
-        else
-        {
-            _networkRefreshNeedsFullFilter |= !incrementalUpdated;
-            ScheduleNetworkRefresh();
-        }
+        if (isActiveView) NotifyDataChanged();
     }
 
     public void HandleEndKey()
@@ -113,8 +159,7 @@ public partial class NetworkLogForm : Form
 
     public (int filtered, int total) GetFilterCounts()
     {
-        var buf = GetCurrentLogBuffer();
-        return (_filteredNetworkIndices.Count, buf.Count);
+        return (_networkView.Length, _networkViewTotalCount);
     }
 
     private void ConfigureLogLists()
@@ -136,9 +181,7 @@ public partial class NetworkLogForm : Form
 
     private LogEntry? GetNetworkLogEntryByViewIndex(int index)
     {
-        if (index < 0 || index >= _filteredNetworkIndices.Count) return null;
-        var buf = GetCurrentLogBuffer();
-        return buf.Get(_filteredNetworkIndices[index]);
+        return index >= 0 && index < _networkView.Length ? _networkView[index] : null;
     }
 
     private void OnNetworkLogsRetrieveVirtualItem(object? sender, RetrieveVirtualItemEventArgs e)
@@ -288,129 +331,317 @@ public partial class NetworkLogForm : Form
         return string.Join(Environment.NewLine, parts);
     }
 
-    private void RefreshNetworkLogList()
+    private void RequestQueryRefresh(int debounceMs)
     {
-        var anchorIndex = _networkAutoScrollEnabled ? -1 : BufferedListViewHelper.GetTopIndexExact(_lstNetworkLogs);
-        if (_networkAutoScrollEnabled)
+        if (_isClosing || IsDisposed) return;
+        _queryVersion++;
+        _isDirty = true;
+        CancelNetworkRefreshDelay();
+        CancelNetworkFilter();
+        if (_isActive) ScheduleNetworkRefresh(debounceMs);
+    }
+
+    private void ScheduleNetworkRefresh(int debounceMs)
+    {
+        if (!_isActive || !_isDirty || _isClosing || IsDisposed || !IsHandleCreated) return;
+        if (_filterCts != null || _refreshDebounceCts != null) return;
+        if (debounceMs <= 0)
+        {
+            StartNetworkSnapshotRefresh();
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _refreshDebounceCts = cts;
+        _ = DelayNetworkRefreshAsync(debounceMs, cts);
+    }
+
+    private async Task DelayNetworkRefreshAsync(int debounceMs, CancellationTokenSource cts)
+    {
+        try
+        {
+            await Task.Delay(debounceMs, cts.Token).ConfigureAwait(false);
+            await PostToUiWithRetryAsync(() =>
+            {
+                if (!ReferenceEquals(_refreshDebounceCts, cts)) return;
+                _refreshDebounceCts.Dispose();
+                _refreshDebounceCts = null;
+                StartNetworkSnapshotRefresh();
+            }, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void StartNetworkSnapshotRefresh()
+    {
+        if (!_isActive || !_isDirty || _isClosing || IsDisposed || !IsHandleCreated || _filterCts != null)
+            return;
+
+        var source = CaptureCurrentLogSnapshot();
+        var query = CaptureNetworkQuery();
+        var queryVersion = _queryVersion;
+        var dataVersion = _dataVersion;
+        _isDirty = false;
+
+        var cts = new CancellationTokenSource();
+        _filterCts = cts;
+        _ = FilterNetworkSnapshotAsync(source, query, queryVersion, dataVersion, cts);
+    }
+
+    private LogEntry[] CaptureCurrentLogSnapshot()
+    {
+        var buffer = GetCurrentLogBuffer();
+        var snapshot = new LogEntry[buffer.Count];
+        for (var i = 0; i < snapshot.Length; i++) snapshot[i] = buffer.Get(i);
+        return snapshot;
+    }
+
+    private NetworkLogQuery CaptureNetworkQuery()
+    {
+        var keyword = _networkFilterPanel.Keyword;
+        var regex = _networkFilterPanel.RegexMode ? _networkFilterPanel.CachedRegex : null;
+        return new NetworkLogQuery(
+            keyword,
+            regex,
+            NormalizeNetworkFilterValue(_networkFilterPanel.Filter1Value),
+            NormalizeNetworkFilterValue(_networkFilterPanel.Filter2Value));
+    }
+
+    private async Task FilterNetworkSnapshotAsync(
+        LogEntry[] source,
+        NetworkLogQuery query,
+        int queryVersion,
+        int dataVersion,
+        CancellationTokenSource cts)
+    {
+        try
+        {
+            var token = cts.Token;
+            var view = await Task.Run(
+                () => BuildNetworkView(source, query, token), token).ConfigureAwait(false);
+            await PostToUiWithRetryAsync(
+                () => CompleteNetworkSnapshotRefresh(source.Length, view, queryVersion, dataVersion, cts),
+                token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+            await PostToUiWithRetryAsync(() => CompleteNetworkSnapshotFailure(cts), CancellationToken.None);
+        }
+    }
+
+    private static LogEntry[] BuildNetworkView(
+        LogEntry[] source,
+        NetworkLogQuery query,
+        CancellationToken token)
+    {
+        if (!query.FilterActive) return source;
+
+        var filtered = new List<LogEntry>(source.Length);
+        foreach (var entry in source)
+        {
+            token.ThrowIfCancellationRequested();
+            if (MatchesNetworkFilter(entry, query)) filtered.Add(entry);
+        }
+
+        return filtered.ToArray();
+    }
+
+    private void CompleteNetworkSnapshotRefresh(
+        int totalCount,
+        LogEntry[] view,
+        int queryVersion,
+        int dataVersion,
+        CancellationTokenSource cts)
+    {
+        if (!ReferenceEquals(_filterCts, cts)) return;
+        _filterCts.Dispose();
+        _filterCts = null;
+
+        if (_isClosing || IsDisposed || !_isActive || queryVersion != _queryVersion)
+        {
+            _isDirty = true;
+            return;
+        }
+
+        ApplyNetworkSnapshot(view, totalCount);
+        if (dataVersion != _dataVersion) _isDirty = true;
+        if (_isDirty) ScheduleNetworkRefresh(DataRefreshDebounceMs);
+    }
+
+    private void CompleteNetworkSnapshotFailure(CancellationTokenSource cts)
+    {
+        if (!ReferenceEquals(_filterCts, cts)) return;
+        _filterCts.Dispose();
+        _filterCts = null;
+        _isDirty = true;
+        ScheduleNetworkRefresh(DataRefreshDebounceMs);
+    }
+
+    private void ApplyNetworkSnapshot(LogEntry[] view, int totalCount)
+    {
+        var hadItems = _lstNetworkLogs.VirtualListSize > 0;
+        var wasAtBottom = BufferedListViewHelper.IsAtBottom(_lstNetworkLogs);
+        var followBottom = _networkAutoScrollEnabled && wasAtBottom;
+        var anchorIndex = followBottom ? -1 : BufferedListViewHelper.GetTopIndexExact(_lstNetworkLogs);
+        var anchorEntry = anchorIndex >= 0 && anchorIndex < _networkView.Length
+            ? _networkView[anchorIndex]
+            : null;
+        if (hadItems && !wasAtBottom) _networkAutoScrollEnabled = false;
+
+        if (followBottom)
         {
             _lstNetworkLogs.SelectedIndices.Clear();
             _lstNetworkLogs.FocusedItem = null;
         }
 
-        _lstNetworkLogs.VirtualListSize = _filteredNetworkIndices.Count;
-        if (_networkAutoScrollEnabled)
-        {
+        _networkView = view;
+        _networkViewTotalCount = totalCount;
+        _lstNetworkLogs.VirtualListSize = view.Length;
+
+        if (followBottom)
             BufferedListViewHelper.ScrollToBottom(_lstNetworkLogs);
-            _lstNetworkLogs.Invalidate();
-        }
         else
-        {
-            BufferedListViewHelper.RestoreTopIndexExact(_lstNetworkLogs, anchorIndex);
-            RefreshNetworkVisibleRows();
-        }
-    }
+            BufferedListViewHelper.RestoreTopIndexExact(
+                _lstNetworkLogs, ResolveNetworkAnchorIndex(view, anchorEntry, anchorIndex));
 
-    private void RefreshNetworkFilter()
-    {
-        var buf = GetCurrentLogBuffer();
-        _filteredNetworkIndices.Clear();
-        for (int i = 0; i < buf.Count; i++)
-        {
-            if (MatchesNetworkFilter(buf.Get(i)))
-                _filteredNetworkIndices.Add(i);
-        }
-
-        RefreshNetworkLogList();
+        _lstNetworkLogs.Invalidate();
         UpdateLogCount();
     }
 
-    private bool TryAppendNetworkLogIncrementally(LogEntry entry, int bufferCountBeforeAdd, bool bufferWasFull)
+    private static int ResolveNetworkAnchorIndex(
+        LogEntry[] view,
+        LogEntry? anchorEntry,
+        int fallbackIndex)
     {
-        if (bufferWasFull) return false;
-        if (MatchesNetworkFilter(entry))
-            _filteredNetworkIndices.Add(bufferCountBeforeAdd);
-        return true;
-    }
-
-    private void ScheduleNetworkRefresh(int debounceMs = 80)
-    {
-        if (_networkRefreshScheduled || !IsHandleCreated || IsDisposed) return;
-        _networkRefreshScheduled = true;
-        _ = Task.Run(async () =>
+        if (view.Length == 0) return -1;
+        if (anchorEntry != null)
         {
-            try { await Task.Delay(debounceMs).ConfigureAwait(false); } catch { }
-            if (IsDisposed || !IsHandleCreated) return;
-            BeginInvoke(new Action(() =>
+            for (var i = 0; i < view.Length; i++)
             {
-                _networkRefreshScheduled = false;
-                if (IsDisposed) return;
-                if (_networkRefreshNeedsFullFilter)
-                {
-                    _networkRefreshNeedsFullFilter = false;
-                    RefreshNetworkFilter();
-                    return;
-                }
-
-                RefreshNetworkLogList();
-                UpdateLogCount();
-            }));
-        });
-    }
-
-    private bool MatchesNetworkFilter(LogEntry entry)
-    {
-        var kw = _networkFilterPanel.Keyword;
-        if (!string.IsNullOrEmpty(kw))
-        {
-            if (_networkFilterPanel.RegexMode && _networkFilterPanel.CachedRegex != null)
-            {
-                if (!(_networkFilterPanel.CachedRegex.IsMatch(entry.Url ?? "") ||
-                      _networkFilterPanel.CachedRegex.IsMatch(entry.Method ?? "") ||
-                      _networkFilterPanel.CachedRegex.IsMatch(entry.Code.ToString()) ||
-                      _networkFilterPanel.CachedRegex.IsMatch(entry.Duration.ToString()) ||
-                      _networkFilterPanel.CachedRegex.IsMatch(entry.Headers ?? "") ||
-                      _networkFilterPanel.CachedRegex.IsMatch(entry.Send ?? "") ||
-                      _networkFilterPanel.CachedRegex.IsMatch(entry.Content ?? "") ||
-                      _networkFilterPanel.CachedRegex.IsMatch(entry.Message ?? "")))
-                    return false;
-            }
-            else
-            {
-                if (!(entry.Url?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
-                      entry.Method?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
-                      entry.Code.ToString().Contains(kw, StringComparison.OrdinalIgnoreCase) ||
-                      entry.Duration.ToString().Contains(kw, StringComparison.OrdinalIgnoreCase) ||
-                      entry.Headers?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
-                      entry.Send?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
-                      entry.Content?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
-                      entry.Message?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true))
-                    return false;
+                if (ReferenceEquals(view[i], anchorEntry)) return i;
             }
         }
 
-        var method = _networkFilterPanel.Filter1Value;
-        if (method != Language.All && !string.IsNullOrEmpty(method) &&
-            !string.Equals(entry.Method, method, StringComparison.OrdinalIgnoreCase))
+        return Math.Clamp(fallbackIndex, 0, view.Length - 1);
+    }
+
+    private void ClearNetworkView()
+    {
+        _networkView = Array.Empty<LogEntry>();
+        _networkViewTotalCount = 0;
+        if (!IsHandleCreated) return;
+        _lstNetworkLogs.SelectedIndices.Clear();
+        _lstNetworkLogs.FocusedItem = null;
+        _lstNetworkLogs.VirtualListSize = 0;
+        _lstNetworkLogs.Invalidate();
+        UpdateLogCount();
+    }
+
+    private bool PostToUi(Action action)
+    {
+        if (_isClosing || IsDisposed || Disposing || !IsHandleCreated) return false;
+        try { BeginInvoke(action); return true; }
+        catch (ObjectDisposedException) { return false; }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    /// <summary>
+    /// 句柄重建窗口内投递可能失败，短延迟重试；窗体已废弃时放弃（状态不再有意义）。
+    /// </summary>
+    private async Task PostToUiWithRetryAsync(Action action, CancellationToken token)
+    {
+        while (!PostToUi(action))
+        {
+            if (_isClosing || IsDisposed || Disposing) return;
+            try { await Task.Delay(50, token).ConfigureAwait(false); }
+            catch (OperationCanceledException) { return; }
+        }
+    }
+
+    private void CancelNetworkRefreshDelay()
+    {
+        var cts = _refreshDebounceCts;
+        _refreshDebounceCts = null;
+        if (cts == null) return;
+        cts.Cancel();
+        cts.Dispose();
+    }
+
+    private void CancelNetworkFilter()
+    {
+        var cts = _filterCts;
+        _filterCts = null;
+        if (cts == null) return;
+        cts.Cancel();
+        cts.Dispose();
+    }
+
+    private static bool MatchesNetworkFilter(LogEntry entry, NetworkLogQuery query)
+    {
+        if (!string.IsNullOrEmpty(query.Keyword))
+        {
+            if (query.Regex != null)
+            {
+                try
+                {
+                    if (!(query.Regex.IsMatch(entry.Url ?? "") ||
+                          query.Regex.IsMatch(entry.Method ?? "") ||
+                          query.Regex.IsMatch(entry.Code.ToString()) ||
+                          query.Regex.IsMatch(entry.Duration.ToString()) ||
+                          query.Regex.IsMatch(entry.Headers ?? "") ||
+                          query.Regex.IsMatch(entry.Send ?? "") ||
+                          query.Regex.IsMatch(entry.Content ?? "") ||
+                          query.Regex.IsMatch(entry.Message ?? "")))
+                        return false;
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    return false;
+                }
+            }
+            else if (!(entry.Url?.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) == true ||
+                       entry.Method?.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) == true ||
+                       entry.Code.ToString().Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) ||
+                       entry.Duration.ToString().Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) ||
+                       entry.Headers?.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) == true ||
+                       entry.Send?.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) == true ||
+                       entry.Content?.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) == true ||
+                       entry.Message?.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) == true))
+            {
+                return false;
+            }
+        }
+
+        if (query.Method != null &&
+            !string.Equals(entry.Method, query.Method, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        var statusFilter = _networkFilterPanel.Filter2Value;
-        if (statusFilter != Language.All && !string.IsNullOrEmpty(statusFilter))
+        if (query.StatusFilter == "0") return entry.Code == 0;
+        if (query.StatusFilter != null)
         {
-            if (statusFilter == "0" && entry.Code != 0) return false;
-            else if (statusFilter != "0")
-            {
-                var range = statusFilter[0];
-                var codeStr = entry.Code.ToString();
-                if (codeStr.Length == 0 || codeStr[0] != range) return false;
-            }
+            var codeText = entry.Code.ToString();
+            return codeText.Length > 0 && codeText[0] == query.StatusFilter[0];
         }
 
         return true;
+    }
+
+    private static string? NormalizeNetworkFilterValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ||
+               string.Equals(value, Language.All, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : value;
     }
 
     private void OnNetworkFilterChanged(object? sender, EventArgs e)
     {
-        RefreshNetworkFilter();
+        RequestQueryRefresh(FilterInputDebounceMs);
     }
 
     private void RefreshNetworkVisibleRows()
@@ -436,11 +667,10 @@ public partial class NetworkLogForm : Form
 
     private void UpdateLogCount()
     {
-        var buf = GetCurrentLogBuffer();
-        var total = buf.Count;
-        var filtered = _filteredNetworkIndices.Count;
+        var total = _networkViewTotalCount;
+        var filtered = _networkView.Length;
         var max = _getCurrentDeviceId() == null ? _settings.MaxLogEntriesAll : _settings.MaxLogEntriesPerDevice;
-        var pct = (double)total / max;
+        var pct = max > 0 ? (double)total / max : 0;
         var countText = Language.LogsCount(filtered, total);
         var isPaused = !(_networkAutoScrollEnabled && BufferedListViewHelper.IsAtBottom(_lstNetworkLogs));
         _lblLogCount.Text = Language.LogsCountWithMax(countText, max, isPaused);
@@ -464,5 +694,23 @@ public partial class NetworkLogForm : Form
         BufferedListViewHelper.ScrollToBottom(_lstNetworkLogs);
         ScrollStateChanged?.Invoke();
         UpdateLogCount();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        if (_isActive && _isDirty) ScheduleNetworkRefresh(0);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _isClosing = true;
+            CancelNetworkRefreshDelay();
+            CancelNetworkFilter();
+        }
+
+        base.Dispose(disposing);
     }
 }

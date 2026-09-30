@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using LogViewer.Models;
 using LogViewer.Static;
 using LogViewer.Utils;
@@ -6,10 +7,24 @@ namespace LogViewer.UI;
 
 public partial class NormalLogForm : Form
 {
-    private bool _normalRefreshScheduled;
-    private bool _normalRefreshNeedsFullFilter;
-    private List<int> _filteredNormalIndices = new();
+    private const int DataRefreshDebounceMs = 80;
+    private const int FilterInputDebounceMs = 200;
+
+    private readonly record struct NormalLogQuery(string Keyword, Regex? Regex, int Level)
+    {
+        public bool FilterActive => !string.IsNullOrEmpty(Keyword) || Level > 0;
+    }
+
+    private LogEntry[] _normalView = Array.Empty<LogEntry>();
+    private int _normalViewTotalCount;
     private bool _normalAutoScrollEnabled = true;
+    private bool _isActive;
+    private bool _isDirty = true;
+    private int _queryVersion;
+    private int _dataVersion;
+    private CancellationTokenSource? _filterCts;
+    private CancellationTokenSource? _refreshDebounceCts;
+    private volatile bool _isClosing;
 
     private readonly Dictionary<string, RingBuffer<LogEntry>> _deviceNormalLogs;
     private readonly RingBuffer<LogEntry> _allNormalLogs;
@@ -65,41 +80,67 @@ public partial class NormalLogForm : Form
 
     public void ClearFilterAndRefresh()
     {
-        _filteredNormalIndices.Clear();
-        RefreshNormalLogList();
-        UpdateLogCount();
+        InvalidateData(clearView: true);
     }
 
     public void RebuildFilter()
     {
-        RefreshNormalFilter();
+        RequestQueryRefresh(0);
+    }
+
+    public void SetActive(bool active)
+    {
+        if (_isClosing || IsDisposed) return;
+        if (_isActive == active)
+        {
+            if (active && _isDirty) ScheduleNormalRefresh(0);
+            return;
+        }
+
+        _isActive = active;
+        if (!active)
+        {
+            _isDirty = true;
+            CancelNormalRefreshDelay();
+            CancelNormalFilter();
+            return;
+        }
+
+        ScheduleNormalRefresh(0);
+    }
+
+    public void NotifyDataChanged()
+    {
+        if (_isClosing || IsDisposed) return;
+        _dataVersion++;
+        _isDirty = true;
+        if (_isActive) ScheduleNormalRefresh(DataRefreshDebounceMs);
+    }
+
+    public void InvalidateData(bool clearView = false)
+    {
+        if (_isClosing || IsDisposed) return;
+        _queryVersion++;
+        _dataVersion++;
+        _isDirty = true;
+        CancelNormalRefreshDelay();
+        CancelNormalFilter();
+
+        if (clearView) ClearNormalView();
+        if (_isActive) ScheduleNormalRefresh(0);
+    }
+
+    public void CancelAsyncOperations()
+    {
+        _queryVersion++;
+        _isDirty = true;
+        CancelNormalRefreshDelay();
+        CancelNormalFilter();
     }
 
     public void OnNormalLogAdded(LogEntry entry, bool isActiveView, int bufferCountBeforeAdd, bool bufferWasFull)
     {
-        if (!isActiveView) return;
-
-        var incrementalUpdated = TryAppendNormalLogIncrementally(entry, bufferCountBeforeAdd, bufferWasFull);
-        if (_normalAutoScrollEnabled)
-        {
-            var wasAtBottom = BufferedListViewHelper.IsAtBottom(_lstNormalLogs);
-            if (!incrementalUpdated)
-            {
-                RefreshNormalFilter();
-            }
-            else
-            {
-                RefreshNormalLogList();
-                UpdateLogCount();
-            }
-
-            if (wasAtBottom) BufferedListViewHelper.ScrollToBottom(_lstNormalLogs);
-        }
-        else
-        {
-            _normalRefreshNeedsFullFilter |= !incrementalUpdated;
-            ScheduleNormalRefresh();
-        }
+        if (isActiveView) NotifyDataChanged();
     }
 
     public void HandleEndKey()
@@ -112,8 +153,7 @@ public partial class NormalLogForm : Form
 
     public (int filtered, int total) GetFilterCounts()
     {
-        var buf = GetCurrentNormalLogBuffer();
-        return (_filteredNormalIndices.Count, buf.Count);
+        return (_normalView.Length, _normalViewTotalCount);
     }
 
     private void ConfigureNormalLogList()
@@ -148,9 +188,7 @@ public partial class NormalLogForm : Form
 
     private LogEntry? GetNormalLogEntryByViewIndex(int index)
     {
-        if (index < 0 || index >= _filteredNormalIndices.Count) return null;
-        var buf = GetCurrentNormalLogBuffer();
-        return buf.Get(_filteredNormalIndices[index]);
+        return index >= 0 && index < _normalView.Length ? _normalView[index] : null;
     }
 
     private void OnNormalLogsRetrieveVirtualItem(object? sender, RetrieveVirtualItemEventArgs e)
@@ -235,108 +273,288 @@ public partial class NormalLogForm : Form
         return menu;
     }
 
-    private void RefreshNormalLogList()
+    private void RequestQueryRefresh(int debounceMs)
     {
-        var anchorIndex = _normalAutoScrollEnabled ? -1 : BufferedListViewHelper.GetTopIndexExact(_lstNormalLogs);
-        if (_normalAutoScrollEnabled)
+        if (_isClosing || IsDisposed) return;
+        _queryVersion++;
+        _isDirty = true;
+        CancelNormalRefreshDelay();
+        CancelNormalFilter();
+        if (_isActive) ScheduleNormalRefresh(debounceMs);
+    }
+
+    private void ScheduleNormalRefresh(int debounceMs)
+    {
+        if (!_isActive || !_isDirty || _isClosing || IsDisposed || !IsHandleCreated) return;
+        if (_filterCts != null || _refreshDebounceCts != null) return;
+        if (debounceMs <= 0)
+        {
+            StartNormalSnapshotRefresh();
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _refreshDebounceCts = cts;
+        _ = DelayNormalRefreshAsync(debounceMs, cts);
+    }
+
+    private async Task DelayNormalRefreshAsync(int debounceMs, CancellationTokenSource cts)
+    {
+        try
+        {
+            await Task.Delay(debounceMs, cts.Token).ConfigureAwait(false);
+            await PostToUiWithRetryAsync(() =>
+            {
+                if (!ReferenceEquals(_refreshDebounceCts, cts)) return;
+                _refreshDebounceCts.Dispose();
+                _refreshDebounceCts = null;
+                StartNormalSnapshotRefresh();
+            }, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void StartNormalSnapshotRefresh()
+    {
+        if (!_isActive || !_isDirty || _isClosing || IsDisposed || !IsHandleCreated || _filterCts != null)
+            return;
+
+        var source = CaptureCurrentNormalLogSnapshot();
+        var query = CaptureNormalLogQuery();
+        var queryVersion = _queryVersion;
+        var dataVersion = _dataVersion;
+        _isDirty = false;
+
+        var cts = new CancellationTokenSource();
+        _filterCts = cts;
+        _ = FilterNormalSnapshotAsync(source, query, queryVersion, dataVersion, cts);
+    }
+
+    private LogEntry[] CaptureCurrentNormalLogSnapshot()
+    {
+        var buffer = GetCurrentNormalLogBuffer();
+        var snapshot = new LogEntry[buffer.Count];
+        for (var i = 0; i < snapshot.Length; i++) snapshot[i] = buffer.Get(i);
+        return snapshot;
+    }
+
+    private NormalLogQuery CaptureNormalLogQuery()
+    {
+        var keyword = _normalFilterPanel.Keyword;
+        var regex = _normalFilterPanel.RegexMode ? _normalFilterPanel.CachedRegex : null;
+        return new NormalLogQuery(
+            keyword,
+            regex,
+            LevelFromDisplayText(NormalizeNormalFilterValue(_normalFilterPanel.Filter1Value) ?? string.Empty));
+    }
+
+    private async Task FilterNormalSnapshotAsync(
+        LogEntry[] source,
+        NormalLogQuery query,
+        int queryVersion,
+        int dataVersion,
+        CancellationTokenSource cts)
+    {
+        try
+        {
+            var token = cts.Token;
+            var view = await Task.Run(
+                () => BuildNormalView(source, query, token), token).ConfigureAwait(false);
+            await PostToUiWithRetryAsync(
+                () => CompleteNormalSnapshotRefresh(source.Length, view, queryVersion, dataVersion, cts),
+                token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+            await PostToUiWithRetryAsync(() => CompleteNormalSnapshotFailure(cts), CancellationToken.None);
+        }
+    }
+
+    private static LogEntry[] BuildNormalView(
+        LogEntry[] source,
+        NormalLogQuery query,
+        CancellationToken token)
+    {
+        if (!query.FilterActive) return source;
+
+        var filtered = new List<LogEntry>(source.Length);
+        foreach (var entry in source)
+        {
+            token.ThrowIfCancellationRequested();
+            if (MatchesNormalFilter(entry, query)) filtered.Add(entry);
+        }
+
+        return filtered.ToArray();
+    }
+
+    private void CompleteNormalSnapshotRefresh(
+        int totalCount,
+        LogEntry[] view,
+        int queryVersion,
+        int dataVersion,
+        CancellationTokenSource cts)
+    {
+        if (!ReferenceEquals(_filterCts, cts)) return;
+        _filterCts.Dispose();
+        _filterCts = null;
+
+        if (_isClosing || IsDisposed || !_isActive || queryVersion != _queryVersion)
+        {
+            _isDirty = true;
+            return;
+        }
+
+        ApplyNormalSnapshot(view, totalCount);
+        if (dataVersion != _dataVersion) _isDirty = true;
+        if (_isDirty) ScheduleNormalRefresh(DataRefreshDebounceMs);
+    }
+
+    private void CompleteNormalSnapshotFailure(CancellationTokenSource cts)
+    {
+        if (!ReferenceEquals(_filterCts, cts)) return;
+        _filterCts.Dispose();
+        _filterCts = null;
+        _isDirty = true;
+        ScheduleNormalRefresh(DataRefreshDebounceMs);
+    }
+
+    private void ApplyNormalSnapshot(LogEntry[] view, int totalCount)
+    {
+        var hadItems = _lstNormalLogs.VirtualListSize > 0;
+        var wasAtBottom = BufferedListViewHelper.IsAtBottom(_lstNormalLogs);
+        var followBottom = _normalAutoScrollEnabled && wasAtBottom;
+        var anchorIndex = followBottom ? -1 : BufferedListViewHelper.GetTopIndexExact(_lstNormalLogs);
+        var anchorEntry = anchorIndex >= 0 && anchorIndex < _normalView.Length
+            ? _normalView[anchorIndex]
+            : null;
+        if (hadItems && !wasAtBottom) _normalAutoScrollEnabled = false;
+
+        if (followBottom)
         {
             _lstNormalLogs.SelectedIndices.Clear();
             _lstNormalLogs.FocusedItem = null;
         }
 
-        _lstNormalLogs.VirtualListSize = _filteredNormalIndices.Count;
-        if (_normalAutoScrollEnabled)
-        {
+        _normalView = view;
+        _normalViewTotalCount = totalCount;
+        _lstNormalLogs.VirtualListSize = view.Length;
+
+        if (followBottom)
             BufferedListViewHelper.ScrollToBottom(_lstNormalLogs);
-            _lstNormalLogs.Invalidate();
-        }
         else
-        {
-            BufferedListViewHelper.RestoreTopIndexExact(_lstNormalLogs, anchorIndex);
-            RefreshNormalVisibleRows();
-        }
-    }
+            BufferedListViewHelper.RestoreTopIndexExact(
+                _lstNormalLogs, ResolveNormalAnchorIndex(view, anchorEntry, anchorIndex));
 
-    private void RefreshNormalFilter()
-    {
-        var buf = GetCurrentNormalLogBuffer();
-        _filteredNormalIndices.Clear();
-        for (int i = 0; i < buf.Count; i++)
-        {
-            if (MatchesNormalFilter(buf.Get(i)))
-                _filteredNormalIndices.Add(i);
-        }
-
-        RefreshNormalLogList();
+        _lstNormalLogs.Invalidate();
         UpdateLogCount();
     }
 
-    private bool TryAppendNormalLogIncrementally(LogEntry entry, int bufferCountBeforeAdd, bool bufferWasFull)
+    private static int ResolveNormalAnchorIndex(
+        LogEntry[] view,
+        LogEntry? anchorEntry,
+        int fallbackIndex)
     {
-        if (bufferWasFull) return false;
-        if (MatchesNormalFilter(entry))
-            _filteredNormalIndices.Add(bufferCountBeforeAdd);
-        return true;
-    }
-
-    private void ScheduleNormalRefresh(int debounceMs = 80)
-    {
-        if (_normalRefreshScheduled || !IsHandleCreated || IsDisposed) return;
-        _normalRefreshScheduled = true;
-        _ = Task.Run(async () =>
+        if (view.Length == 0) return -1;
+        if (anchorEntry != null)
         {
-            try { await Task.Delay(debounceMs).ConfigureAwait(false); } catch { }
-            if (IsDisposed || !IsHandleCreated) return;
-            BeginInvoke(new Action(() =>
+            for (var i = 0; i < view.Length; i++)
             {
-                _normalRefreshScheduled = false;
-                if (IsDisposed) return;
-                if (_normalRefreshNeedsFullFilter)
-                {
-                    _normalRefreshNeedsFullFilter = false;
-                    RefreshNormalFilter();
-                    return;
-                }
+                if (ReferenceEquals(view[i], anchorEntry)) return i;
+            }
+        }
 
-                RefreshNormalLogList();
-                UpdateLogCount();
-            }));
-        });
+        return Math.Clamp(fallbackIndex, 0, view.Length - 1);
     }
 
-    private bool MatchesNormalFilter(LogEntry entry)
+    private void ClearNormalView()
     {
-        var levelFilter = _normalFilterPanel.Filter1Value;
-        if (levelFilter != Language.All && !string.IsNullOrEmpty(levelFilter))
+        _normalView = Array.Empty<LogEntry>();
+        _normalViewTotalCount = 0;
+        if (!IsHandleCreated) return;
+        _lstNormalLogs.SelectedIndices.Clear();
+        _lstNormalLogs.FocusedItem = null;
+        _lstNormalLogs.VirtualListSize = 0;
+        _lstNormalLogs.Invalidate();
+        UpdateLogCount();
+    }
+
+    private bool PostToUi(Action action)
+    {
+        if (_isClosing || IsDisposed || Disposing || !IsHandleCreated) return false;
+        try { BeginInvoke(action); return true; }
+        catch (ObjectDisposedException) { return false; }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    /// <summary>
+    /// 句柄重建窗口内投递可能失败，短延迟重试；窗体已废弃时放弃（状态不再有意义）。
+    /// </summary>
+    private async Task PostToUiWithRetryAsync(Action action, CancellationToken token)
+    {
+        while (!PostToUi(action))
         {
-            var filterLevel = LevelFromDisplayText(levelFilter);
-            if (filterLevel > 0 && entry.EffectiveLevel != filterLevel)
+            if (_isClosing || IsDisposed || Disposing) return;
+            try { await Task.Delay(50, token).ConfigureAwait(false); }
+            catch (OperationCanceledException) { return; }
+        }
+    }
+
+    private void CancelNormalRefreshDelay()
+    {
+        var cts = _refreshDebounceCts;
+        _refreshDebounceCts = null;
+        if (cts == null) return;
+        cts.Cancel();
+        cts.Dispose();
+    }
+
+    private void CancelNormalFilter()
+    {
+        var cts = _filterCts;
+        _filterCts = null;
+        if (cts == null) return;
+        cts.Cancel();
+        cts.Dispose();
+    }
+
+    private static bool MatchesNormalFilter(LogEntry entry, NormalLogQuery query)
+    {
+        if (query.Level > 0 && entry.EffectiveLevel != query.Level) return false;
+        if (string.IsNullOrEmpty(query.Keyword)) return true;
+
+        if (query.Regex != null)
+        {
+            try
+            {
+                return query.Regex.IsMatch(entry.Message ?? "") ||
+                       query.Regex.IsMatch(entry.Method ?? "");
+            }
+            catch (RegexMatchTimeoutException)
+            {
                 return false;
-        }
-
-        var kw = _normalFilterPanel.Keyword;
-        if (!string.IsNullOrEmpty(kw))
-        {
-            if (_normalFilterPanel.RegexMode && _normalFilterPanel.CachedRegex != null)
-            {
-                if (!(_normalFilterPanel.CachedRegex.IsMatch(entry.Message ?? "") ||
-                      _normalFilterPanel.CachedRegex.IsMatch(entry.Method ?? "")))
-                    return false;
-            }
-            else
-            {
-                if (!(entry.Message?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true ||
-                      entry.Method?.Contains(kw, StringComparison.OrdinalIgnoreCase) == true))
-                    return false;
             }
         }
 
-        return true;
+        return entry.Message?.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) == true ||
+               entry.Method?.Contains(query.Keyword, StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static string? NormalizeNormalFilterValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ||
+               string.Equals(value, Language.All, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : value;
     }
 
     private void OnNormalFilterChanged(object? sender, EventArgs e)
     {
-        RefreshNormalFilter();
+        RequestQueryRefresh(FilterInputDebounceMs);
     }
 
     private void OnNormalLogsMouseWheel(object? sender, MouseEventArgs e)
@@ -369,11 +587,10 @@ public partial class NormalLogForm : Form
 
     private void UpdateLogCount()
     {
-        var buf = GetCurrentNormalLogBuffer();
-        var total = buf.Count;
-        var filtered = _filteredNormalIndices.Count;
+        var total = _normalViewTotalCount;
+        var filtered = _normalView.Length;
         var max = _getCurrentDeviceId() == null ? _settings.MaxNormalLogEntries : _settings.MaxNormalLogEntriesPerDevice;
-        var pct = (double)total / max;
+        var pct = max > 0 ? (double)total / max : 0;
         var countText = Language.LogsCount(filtered, total);
         var isPaused = !(_normalAutoScrollEnabled && BufferedListViewHelper.IsAtBottom(_lstNormalLogs));
         _lblNormalLogCount.Text = Language.LogsCountWithMax(countText, max, isPaused);
@@ -397,5 +614,23 @@ public partial class NormalLogForm : Form
         BufferedListViewHelper.ScrollToBottom(_lstNormalLogs);
         ScrollStateChanged?.Invoke();
         UpdateLogCount();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        if (_isActive && _isDirty) ScheduleNormalRefresh(0);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _isClosing = true;
+            CancelNormalRefreshDelay();
+            CancelNormalFilter();
+        }
+
+        base.Dispose(disposing);
     }
 }
