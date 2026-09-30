@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using LogViewer.Static;
 using LogViewer.Utils;
 
 namespace LogViewer.UI;
@@ -28,8 +29,28 @@ public class JsonTreeView : UserControl
     /// <summary>搜索高亮节点集合。</summary>
     private readonly HashSet<TreeNode> _highlightedNodes = new();
 
-    /// <summary>当前 JSON 文档引用，保持存活以使 JsonElement 引用有效，切换/关闭时释放。</summary>
-    private JsonDocument? _jsonDoc;
+    /// <summary>正在加载分页内容的节点集合，防止重复展开。</summary>
+    private readonly HashSet<TreeNode> _loadingNodes = new();
+
+    /// <summary>当前加载任务的取消源，切换内容时取消旧任务。</summary>
+    private CancellationTokenSource? _loadCts;
+
+    /// <summary>当前加载版本，防止旧解析结果覆盖新内容。</summary>
+    private int _loadVersion;
+
+    /// <summary>当前完整 JSON 根快照，供折叠态后台搜索使用。</summary>
+    private JsonElement? _rootElement;
+
+    private CancellationTokenSource? _searchCts;
+    private JsonTreeViewLoader.JsonSearchSession? _searchSession;
+    private int _searchVersion;
+    private int _searchLoadVersion;
+    private int _plainSearchOffset;
+    private bool _searchInProgress;
+    private string? _pendingSearchKeyword;
+
+    /// <summary>加载开始时捕获的 UI 同步上下文，句柄重建期间用于可靠回写。</summary>
+    private SynchronizationContext? _uiContext;
 
     /// <summary>运行时内部的 TreeView 控件。</summary>
     private TreeView? _treeView;
@@ -39,6 +60,8 @@ public class JsonTreeView : UserControl
 
     /// <summary>节点显示字体。</summary>
     private Font _displayFont;
+
+    private bool _settingFont;
 
     /// <summary>自绘模式缓存值。</summary>
     private TreeViewDrawMode _drawMode = TreeViewDrawMode.OwnerDrawText;
@@ -84,7 +107,9 @@ public class JsonTreeView : UserControl
         _isDesignMode = IsDesignTimeMode();
         _displayFont = new Font("Consolas", 11f);
         AutoScaleMode = AutoScaleMode.None;
+        _settingFont = true;
         base.Font = _displayFont;
+        _settingFont = false;
 
         if (_isDesignMode)
         {
@@ -209,75 +234,213 @@ public class JsonTreeView : UserControl
     /// <param name="font">新的显示字体。</param>
     public void SetFont(Font font)
     {
-        _displayFont = font;
-        base.Font = font;
-        if (_treeView != null)
+        if (_settingFont || _displayFont.Equals(font)) return;
+        _settingFont = true;
+        var replacement = (Font)font.Clone();
+        var previous = _displayFont;
+        try
         {
-            _treeView.Font = font;
-            _treeView.ItemHeight = (int)(font.Height * 1.3);
-            _treeView.Invalidate();
-        }
+            _displayFont = replacement;
+            base.Font = replacement;
+            if (_treeView != null)
+            {
+                _treeView.Font = replacement;
+                _treeView.ItemHeight = (int)(replacement.Height * 1.3);
+                _treeView.Invalidate();
+            }
 
-        if (_designPreview != null)
+            if (_designPreview != null) _designPreview.Font = replacement;
+        }
+        finally
         {
-            _designPreview.Font = font;
+            _settingFont = false;
+            if (!ReferenceEquals(previous, replacement)) previous.Dispose();
         }
     }
 
     /// <summary>
-    /// 显示 JSON 内容。仅解析一次 JsonDocument，懒加载构建树视图。解析失败则降级为纯文本。
+    /// 显示 JSON 内容。解析和节点投影均在后台执行，UI 仅分批挂载节点。
     /// </summary>
     /// <param name="rawJson">原始 JSON 字符串。</param>
     public void DisplayJson(string rawJson)
     {
-        if (_treeView == null)
-        {
-            return;
-        }
-
-        _rawText = rawJson;
-        _highlightedNodes.Clear();
-        _searchKeyword = null;
-        _jsonDoc?.Dispose();
-        _jsonDoc = null;
-
-        try
-        {
-            _jsonDoc = JsonDocument.Parse(rawJson);
-            _isJson = true;
-            _treeView.LoadJson(_jsonDoc.RootElement, _displayFont);
-        }
-        catch
-        {
-            _isJson = false;
-            _treeView.LoadPlainText(rawJson, _displayFont);
-        }
+        if (_treeView == null) return;
+        int version = BeginLoad(rawJson, true);
+        _ = LoadJsonAsync(rawJson, version, _loadCts!.Token);
     }
 
     /// <summary>
-    /// 以纯文本模式显示内容，每行作为一个节点，不做语法高亮。
+    /// 以纯文本模式显示内容，长内容按固定分段分页加载。
     /// </summary>
     /// <param name="text">纯文本内容。</param>
     public void DisplayPlainText(string text)
     {
-        if (_treeView == null)
-        {
-            return;
-        }
-
-        _rawText = text;
-        _isJson = false;
-        _highlightedNodes.Clear();
-        _searchKeyword = null;
-        _jsonDoc?.Dispose();
-        _jsonDoc = null;
-        _treeView.LoadPlainText(text, _displayFont);
+        if (_treeView == null) return;
+        int version = BeginLoad(text, false);
+        _ = LoadTextAsync(text, version, _loadCts!.Token);
     }
 
-    /// <summary>展开所有树节点。</summary>
+    private int BeginLoad(string rawText, bool isJson)
+    {
+        _uiContext = SynchronizationContext.Current ?? _uiContext;
+        if (!_treeView!.IsHandleCreated) _ = _treeView.Handle;
+        ResetSearch(false);
+        _rootElement = null;
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = new CancellationTokenSource();
+        _loadVersion++;
+        _rawText = rawText;
+        _isJson = isJson;
+        _highlightedNodes.Clear();
+        _loadingNodes.Clear();
+        _hoverTimer?.Stop();
+        _hoveredNode = null;
+        HideImagePopup();
+        _searchKeyword = null;
+
+        _treeView!.BeginUpdate();
+        try
+        {
+            _treeView.Nodes.Clear();
+            _treeView.Nodes.Add(new TreeNode(Language.JsonParsing));
+        }
+        finally
+        {
+            _treeView.EndUpdate();
+        }
+
+        return _loadVersion;
+    }
+
+    private async Task LoadJsonAsync(string rawJson, int version, CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(60, token);
+            var regex = _imageUrlRegex;
+            var result = await JsonFormatter.RunBackgroundAsync(() =>
+            {
+                using var document = JsonDocument.Parse(rawJson);
+                var root = document.RootElement.Clone();
+                var page = JsonTreeViewLoader.CreateJsonPage(root, regex, token);
+                return (Root: root, Page: page);
+            }, token);
+
+            TreeNodeCollection? target = null;
+            await InvokeOnUiAsync(() =>
+            {
+                if (!IsCurrentLoad(version, token)) return;
+                _isJson = true;
+                _rootElement = result.Root;
+                _treeView!.Nodes.Clear();
+                target = _treeView.Nodes;
+            });
+            if (target != null) await AppendPageAsync(target, 0, result.Page, version, token);
+            await RunPendingSearchAsync(version, token);
+        }
+        catch (JsonException)
+        {
+            if (!token.IsCancellationRequested && version == _loadVersion)
+                await LoadTextAsync(rawJson, version, token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task LoadTextAsync(string text, int version, CancellationToken token)
+    {
+        try
+        {
+            var regex = _imageUrlRegex;
+            var page = await Task.Run(() => JsonTreeViewLoader.CreateTextPage(text, 0, regex, token), token);
+            TreeNodeCollection? target = null;
+            await InvokeOnUiAsync(() =>
+            {
+                if (!IsCurrentLoad(version, token)) return;
+                _isJson = false;
+                _rootElement = null;
+                _treeView!.Nodes.Clear();
+                target = _treeView.Nodes;
+            });
+            if (target != null) await AppendPageAsync(target, 0, page, version, token);
+            await RunPendingSearchAsync(version, token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private bool IsCurrentLoad(int version, CancellationToken token) =>
+        !token.IsCancellationRequested && !IsDisposed && _treeView is { IsDisposed: false } && version == _loadVersion;
+
+    private Task RunPendingSearchAsync(int version, CancellationToken token) => InvokeOnUiAsync(() =>
+    {
+        if (!IsCurrentLoad(version, token) || _pendingSearchKeyword == null) return;
+        string keyword = _pendingSearchKeyword;
+        _pendingSearchKeyword = null;
+        SearchAndHighlight(keyword);
+    });
+
+    private Task InvokeOnUiAsync(Action action)
+    {
+        var invokeTarget = _treeView;
+        if (IsDisposed || invokeTarget is not { IsDisposed: false }) return Task.CompletedTask;
+
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Execute()
+        {
+            try
+            {
+                if (!IsDisposed && !invokeTarget.IsDisposed) action();
+                completion.TrySetResult(true);
+            }
+            catch (Exception exception)
+            {
+                completion.TrySetException(exception);
+            }
+        }
+
+        try
+        {
+            if (invokeTarget.IsHandleCreated)
+            {
+                if (invokeTarget.InvokeRequired) invokeTarget.BeginInvoke((Action)Execute);
+                else Execute();
+            }
+            else if (_uiContext != null)
+            {
+                _uiContext.Post(_ => Execute(), null);
+            }
+            else
+            {
+                completion.TrySetResult(false);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            completion.TrySetResult(false);
+        }
+        return completion.Task;
+    }
+
+    /// <summary>仅展开已经物化的树节点，不触发未加载内容的全量构建。</summary>
     public void ExpandAll()
     {
-        _treeView?.ExpandAll();
+        if (_treeView != null) ExpandMaterializedNodes(_treeView.Nodes);
+    }
+
+    private static void ExpandMaterializedNodes(TreeNodeCollection nodes)
+    {
+        foreach (TreeNode node in nodes)
+        {
+            bool hasLazyMarker = node.Nodes.Count == 1 &&
+                                 ReferenceEquals(node.Nodes[0].Tag, JsonTreeViewLoader.LazyMarker);
+            if (hasLazyMarker) continue;
+            node.Expand();
+            ExpandMaterializedNodes(node.Nodes);
+        }
     }
 
     /// <summary>折叠所有树节点。</summary>
@@ -295,19 +458,302 @@ public class JsonTreeView : UserControl
         _treeView?.CollapseToLevelStatic(level);
     }
 
-    /// <summary>
-    /// 搜索并高亮包含关键字的节点，忽略大小写。空关键字时清除所有高亮。
-    /// </summary>
-    /// <param name="keyword">搜索关键字。</param>
+    /// <summary>后台搜索完整 JSON；同一关键字重复调用时跳到下一处。</summary>
     public void SearchAndHighlight(string keyword)
     {
-        if (_treeView == null)
+        if (_treeView == null) return;
+        if (string.IsNullOrEmpty(keyword))
         {
+            ResetSearch(true);
             return;
         }
 
+        bool sameKeyword = string.Equals(_searchKeyword, keyword, StringComparison.OrdinalIgnoreCase);
+        if (_searchInProgress && sameKeyword) return;
+        if (!sameKeyword) StartSearch(keyword);
+
+        if (_isJson && _rootElement == null)
+        {
+            _pendingSearchKeyword = keyword;
+            _searchInProgress = false;
+            return;
+        }
+        if (_isJson && _searchSession == null && _rootElement is { } searchRoot)
+            _searchSession = new JsonTreeViewLoader.JsonSearchSession(searchRoot, keyword,
+                _searchCts?.Token ?? CancellationToken.None);
+
+        _searchInProgress = true;
+        int searchVersion = _searchVersion;
+        int loadVersion = _loadVersion;
+        var token = _searchCts?.Token ?? CancellationToken.None;
+        var session = _searchSession;
+        var root = _rootElement;
+        int plainOffset = _plainSearchOffset;
+        _ = SearchNextAsync(keyword, session, root, plainOffset, loadVersion, searchVersion, token);
+    }
+
+    private void StartSearch(string keyword)
+    {
+        ResetSearch(true);
         _searchKeyword = keyword;
-        _treeView.SearchAndHighlight(_highlightedNodes, keyword);
+        _searchLoadVersion = _loadVersion;
+        _searchCts = CancellationTokenSource.CreateLinkedTokenSource(
+            _loadCts?.Token ?? CancellationToken.None);
+        _searchVersion++;
+        _plainSearchOffset = 0;
+        if (_isJson && _rootElement is { } root)
+            _searchSession = new JsonTreeViewLoader.JsonSearchSession(root, keyword, _searchCts.Token);
+    }
+
+    private void ResetSearch(bool clearHighlight)
+    {
+        var searchCts = _searchCts;
+        _searchCts = null;
+        try { searchCts?.Cancel(); } catch (ObjectDisposedException) { }
+        searchCts?.Dispose();
+        var searchSession = _searchSession;
+        _searchSession = null;
+        if (!_searchInProgress) searchSession?.Dispose();
+        _searchVersion++;
+        _searchLoadVersion = 0;
+        _plainSearchOffset = 0;
+        _searchInProgress = false;
+        _pendingSearchKeyword = null;
+        _searchKeyword = null;
+        if (_treeView != null) RemoveSearchProjections(_treeView.Nodes);
+        if (clearHighlight)
+        {
+            _highlightedNodes.Clear();
+            _treeView?.Invalidate();
+        }
+    }
+
+    private async Task SearchNextAsync(string keyword, JsonTreeViewLoader.JsonSearchSession? session,
+        JsonElement? root, int plainOffset, int loadVersion, int searchVersion, CancellationToken token)
+    {
+        JsonTreeViewLoader.JsonSearchSession? restartedSession = null;
+        try
+        {
+            JsonTreeViewLoader.JsonSearchPath? path = null;
+            int plainMatch = -1;
+            bool wrapped = false;
+
+            if (_isJson && root is { } rootElement && session != null)
+            {
+                path = await JsonFormatter.RunBackgroundAsync(session.FindNext, token);
+                if (path == null && session.HasReturnedMatch)
+                {
+                    restartedSession = new JsonTreeViewLoader.JsonSearchSession(rootElement, keyword, token);
+                    path = await JsonFormatter.RunBackgroundAsync(restartedSession.FindNext, token);
+                    wrapped = path != null;
+                }
+            }
+            else
+            {
+                string text = _rawText ?? string.Empty;
+                var result = await JsonFormatter.RunBackgroundAsync(
+                    () => FindPlainTextMatch(text, keyword, plainOffset, token), token);
+                plainMatch = result.Index;
+                wrapped = result.Wrapped;
+            }
+
+            await InvokeOnUiAsync(() =>
+            {
+                if (!IsCurrentSearch(loadVersion, searchVersion, keyword, token)) return;
+                if (restartedSession != null)
+                    _searchSession = path == null ? null : restartedSession;
+
+                if (_treeView != null) RemoveSearchProjections(_treeView.Nodes);
+                _highlightedNodes.Clear();
+                TreeNode? matchNode = path != null
+                    ? MaterializeSearchPath(path)
+                    : plainMatch >= 0 ? MaterializePlainTextMatch(plainMatch) : null;
+                if (matchNode == null)
+                {
+                    System.Media.SystemSounds.Beep.Play();
+                    return;
+                }
+
+                if (plainMatch >= 0)
+                    _plainSearchOffset = plainMatch + Math.Max(1, keyword.Length);
+                HighlightSearchNode(matchNode);
+                if (wrapped) System.Media.SystemSounds.Beep.Play();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            bool keepOriginalSession = false;
+            bool keepRestartedSession = false;
+            await InvokeOnUiAsync(() =>
+            {
+                keepOriginalSession = ReferenceEquals(_searchSession, session);
+                keepRestartedSession = ReferenceEquals(_searchSession, restartedSession);
+                if (searchVersion == _searchVersion) _searchInProgress = false;
+            });
+            if (session != null && !keepOriginalSession) session.Dispose();
+            if (restartedSession != null && !keepRestartedSession) restartedSession.Dispose();
+        }
+    }
+
+    private static (int Index, bool Wrapped) FindPlainTextMatch(string text, string keyword, int start,
+        CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        int safeStart = Math.Clamp(start, 0, text.Length);
+        int index = text.IndexOf(keyword, safeStart, StringComparison.OrdinalIgnoreCase);
+        if (index >= 0) return (index, false);
+        if (safeStart > 0)
+        {
+            index = text.IndexOf(keyword, 0, StringComparison.OrdinalIgnoreCase);
+            if (index >= 0) return (index, true);
+        }
+        return (-1, false);
+    }
+
+    private bool IsCurrentSearch(int loadVersion, int searchVersion, string keyword,
+        CancellationToken token) =>
+        !token.IsCancellationRequested && loadVersion == _loadVersion && searchVersion == _searchVersion &&
+        _searchLoadVersion == loadVersion &&
+        string.Equals(_searchKeyword, keyword, StringComparison.OrdinalIgnoreCase);
+
+    private TreeNode? MaterializeSearchPath(JsonTreeViewLoader.JsonSearchPath path)
+    {
+        if (_treeView == null || path.Nodes.Count == 0) return null;
+        TreeNodeCollection collection = _treeView.Nodes;
+        TreeNode? lastNode = null;
+
+        for (int level = 0; level < path.Nodes.Count; level++)
+        {
+            var descriptor = path.Nodes[level];
+            var node = FindNodeByOrdinal(collection, descriptor.Info.ChildOrdinal);
+            if (node == null)
+            {
+                var uiDescriptor = JsonTreeViewLoader.CloneForUi(descriptor, true);
+                node = JsonTreeViewLoader.CreateTreeNode(uiDescriptor);
+                InsertProjectionNode(collection, node, uiDescriptor.Info.ChildOrdinal);
+            }
+            else
+            {
+                MergeNodeInfo(node, descriptor, false);
+            }
+
+            lastNode = node;
+            if (level >= path.Nodes.Count - 1) continue;
+            if (node.Tag is not JsonPathInfo info || info.ChildElement is not { } childElement) return null;
+            PrepareProjectedChildren(node, childElement);
+            node.Expand();
+            collection = node.Nodes;
+        }
+        return lastNode;
+    }
+
+    private TreeNode? MaterializePlainTextMatch(int characterIndex)
+    {
+        if (_treeView == null || _rawText == null) return null;
+        int chunkIndex = characterIndex / JsonTreeViewLoader.TextChunkSize;
+        var existing = FindNodeByOrdinal(_treeView.Nodes, chunkIndex);
+        if (existing != null) return existing;
+        var descriptor = JsonTreeViewLoader.CreateTextDescriptor(_rawText, chunkIndex, _imageUrlRegex);
+        var uiDescriptor = JsonTreeViewLoader.CloneForUi(descriptor, true);
+        var node = JsonTreeViewLoader.CreateTreeNode(uiDescriptor);
+        InsertProjectionNode(_treeView.Nodes, node, chunkIndex);
+        return node;
+    }
+
+    private void HighlightSearchNode(TreeNode node)
+    {
+        if (_treeView == null) return;
+        _highlightedNodes.Clear();
+        _highlightedNodes.Add(node);
+        var parent = node.Parent;
+        while (parent != null)
+        {
+            parent.Expand();
+            parent = parent.Parent;
+        }
+        _treeView.SelectedNode = node;
+        node.EnsureVisible();
+        _treeView.Invalidate();
+    }
+
+    private static TreeNode? FindNodeByOrdinal(TreeNodeCollection collection, int childOrdinal)
+    {
+        foreach (TreeNode node in collection)
+        {
+            if (node.Tag is JsonPathInfo info && info.ChildOrdinal == childOrdinal) return node;
+        }
+        return null;
+    }
+
+    private static void MergeNodeInfo(TreeNode node, JsonTreeViewLoader.JsonNodeDescriptor descriptor,
+        bool normalPage)
+    {
+        if (node.Tag is not JsonPathInfo target) return;
+        var source = descriptor.Info;
+        target.RawValue ??= source.RawValue;
+        target.Element ??= source.Element;
+        if (source.ChildElement is { } childElement) target.ChildElement = childElement;
+        if (source.DeferredContent == JsonDeferredContentKind.None)
+            target.DeferredContent = JsonDeferredContentKind.None;
+        target.CachedImageUrl ??= source.CachedImageUrl;
+        if (normalPage)
+        {
+            target.IsSearchProjection = false;
+            node.Text = descriptor.Text;
+        }
+        if (descriptor.HasChildren && node.Nodes.Count == 0)
+            node.Nodes.Add(new TreeNode { Tag = JsonTreeViewLoader.LazyMarker });
+    }
+
+    private static void InsertProjectionNode(TreeNodeCollection collection, TreeNode node, int childOrdinal)
+    {
+        int pageIndex = -1;
+        for (int i = 0; i < collection.Count; i++)
+        {
+            if (collection[i].Tag is JsonTreeViewLoader.JsonPageRequest or
+                JsonTreeViewLoader.TextPageRequest)
+            {
+                pageIndex = i;
+                break;
+            }
+        }
+
+        int insertIndex = pageIndex >= 0 ? pageIndex + 1 : collection.Count;
+        while (insertIndex < collection.Count && collection[insertIndex].Tag is JsonPathInfo info &&
+               info.IsSearchProjection && info.ChildOrdinal < childOrdinal)
+            insertIndex++;
+        collection.Insert(insertIndex, node);
+    }
+
+    private static void PrepareProjectedChildren(TreeNode node, JsonElement childElement)
+    {
+        bool hadLazyMarker = node.Nodes.Count == 1 &&
+                             ReferenceEquals(node.Nodes[0].Tag, JsonTreeViewLoader.LazyMarker);
+        if (hadLazyMarker) node.Nodes.Clear();
+        bool hasPageNode = node.Nodes.Cast<TreeNode>().Any(child =>
+            child.Tag is JsonTreeViewLoader.JsonPageRequest or JsonTreeViewLoader.TextPageRequest);
+        if (node.Nodes.Count == 0 || hadLazyMarker && !hasPageNode)
+        {
+            var cursor = new JsonTreeViewLoader.JsonPageCursor(childElement);
+            node.Nodes.Add(JsonTreeViewLoader.CreatePageNode(new JsonTreeViewLoader.JsonPageRequest(cursor)));
+        }
+    }
+
+    private void RemoveSearchProjections(TreeNodeCollection nodes)
+    {
+        for (int i = nodes.Count - 1; i >= 0; i--)
+        {
+            var node = nodes[i];
+            if (node.Tag is JsonPathInfo { IsSearchProjection: true })
+            {
+                nodes.RemoveAt(i);
+                continue;
+            }
+            RemoveSearchProjections(node.Nodes);
+        }
     }
 
     /// <summary>
@@ -327,14 +773,25 @@ public class JsonTreeView : UserControl
     /// </summary>
     public void SetImageUrlPattern(string? pattern)
     {
+        string? oldPattern = _imageUrlRegex?.ToString();
         _imageUrlRegex = null;
-        if (string.IsNullOrWhiteSpace(pattern)) return;
-        try
+        if (!string.IsNullOrWhiteSpace(pattern))
         {
-            _imageUrlRegex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled,
-                TimeSpan.FromMilliseconds(500));
+            try
+            {
+                _imageUrlRegex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled,
+                    TimeSpan.FromMilliseconds(500));
+            }
+            catch
+            {
+            }
         }
-        catch { }
+
+        if (_rawText != null && !string.Equals(oldPattern, _imageUrlRegex?.ToString(), StringComparison.Ordinal))
+        {
+            if (_isJson) DisplayJson(_rawText);
+            else DisplayPlainText(_rawText);
+        }
     }
 
     /// <summary>
@@ -363,7 +820,7 @@ public class JsonTreeView : UserControl
     /// </summary>
     private void InitializeRuntimeTreeView()
     {
-        var treeView = new TreeView
+        var treeView = new NoToolTipTreeView
         {
             Dock = DockStyle.Fill,
             BorderStyle = BorderStyle.None,
@@ -382,6 +839,10 @@ public class JsonTreeView : UserControl
         treeView.DrawMode = _drawMode;
         treeView.DrawNode += OnTreeViewDrawNode;
         treeView.BeforeExpand += OnBeforeExpand;
+        treeView.NodeMouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Right) treeView.SelectedNode = e.Node;
+        };
         treeView.ContextMenuStrip = CreateContextMenu();
 
         treeView.MouseMove += OnTreeViewMouseMove;
@@ -391,11 +852,222 @@ public class JsonTreeView : UserControl
     }
 
     /// <summary>
-    /// TreeView 的 BeforeExpand 事件处理器，懒加载：移除哨兵子节点，从 JsonElement 构建真实子节点。
+    /// TreeView 展开事件：后台准备当前页，UI 线程分批挂载节点。
     /// </summary>
-    private void OnBeforeExpand(object? sender, TreeViewCancelEventArgs e)
+    private async void OnBeforeExpand(object? sender, TreeViewCancelEventArgs e)
     {
-        JsonTreeViewLoader.OnBeforeExpand(e.Node, _displayFont);
+        if (_treeView == null || e.Node.Nodes.Count != 1 ||
+            !ReferenceEquals(e.Node.Nodes[0].Tag, JsonTreeViewLoader.LazyMarker)) return;
+
+        e.Cancel = true;
+        int version = _loadVersion;
+        var token = _loadCts?.Token ?? CancellationToken.None;
+
+        if (e.Node.Tag is JsonTreeViewLoader.JsonPageRequest or JsonTreeViewLoader.TextPageRequest)
+        {
+            await LoadPageNodeAsync(e.Node, version, token);
+            return;
+        }
+
+        if (e.Node.Tag is JsonPathInfo info)
+            await LoadContentNodeAsync(e.Node, info, version, token);
+    }
+
+    private async Task LoadContentNodeAsync(TreeNode node, JsonPathInfo info, int version,
+        CancellationToken token)
+    {
+        if (info.IsLoading) return;
+        info.IsLoading = true;
+        node.Nodes[0].Text = Language.JsonParsing;
+        var deferredContent = info.DeferredContent;
+        var rawValue = info.RawValue ?? string.Empty;
+        var childElement = info.ChildElement;
+        var regex = _imageUrlRegex;
+        bool parseFailed = false;
+        JsonElement? parsedRoot = null;
+
+        try
+        {
+            JsonTreeViewLoader.JsonNodePage page;
+            if (deferredContent == JsonDeferredContentKind.EmbeddedJson)
+            {
+                try
+                {
+                    var parsed = await ParseEmbeddedJsonAsync(rawValue, token);
+                    parsedRoot = parsed.Root;
+                    page = parsed.Page;
+                }
+                catch (JsonException)
+                {
+                    parseFailed = true;
+                    page = await Task.Run(
+                        () => JsonTreeViewLoader.CreateTextPage(rawValue, 0, regex, token), token);
+                }
+            }
+            else if (deferredContent == JsonDeferredContentKind.LongText)
+            {
+                page = await Task.Run(() => JsonTreeViewLoader.CreateTextPage(rawValue, 0, regex, token), token);
+            }
+            else if (childElement is { } element)
+            {
+                page = await Task.Run(() => JsonTreeViewLoader.CreateJsonPage(element, regex, token), token);
+            }
+            else
+            {
+                return;
+            }
+
+            TreeNodeCollection? target = null;
+            int insertIndex = 0;
+            await InvokeOnUiAsync(() =>
+            {
+                if (!IsCurrentLoad(version, token) || node.TreeView != _treeView) return;
+                if (parsedRoot is { } root)
+                {
+                    info.ChildElement = root;
+                    info.DeferredContent = JsonDeferredContentKind.None;
+                }
+                else if (parseFailed)
+                {
+                    info.DeferredContent = JsonDeferredContentKind.LongText;
+                }
+
+                for (int i = node.Nodes.Count - 1; i >= 0; i--)
+                {
+                    var childTag = node.Nodes[i].Tag;
+                    if (ReferenceEquals(childTag, JsonTreeViewLoader.LazyMarker) ||
+                        childTag is JsonTreeViewLoader.JsonPageRequest or JsonTreeViewLoader.TextPageRequest ||
+                        childTag is not JsonPathInfo)
+                        node.Nodes.RemoveAt(i);
+                }
+                if (parseFailed)
+                {
+                    node.Nodes.Insert(0, new TreeNode(Language.JsonParseFailed));
+                    insertIndex = 1;
+                }
+                target = node.Nodes;
+            });
+
+            if (target == null) return;
+            await AppendPageAsync(target, insertIndex, page, version, token, node);
+            await InvokeOnUiAsync(() =>
+            {
+                if (IsCurrentLoad(version, token) && node.TreeView == _treeView) node.Expand();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            info.IsLoading = false;
+        }
+    }
+
+    private async Task<(JsonElement Root, JsonTreeViewLoader.JsonNodePage Page)> ParseEmbeddedJsonAsync(
+        string rawValue, CancellationToken token)
+    {
+        var regex = _imageUrlRegex;
+        return await JsonFormatter.RunBackgroundAsync(() =>
+        {
+            using var document = JsonDocument.Parse(rawValue);
+            var root = document.RootElement.Clone();
+            var page = JsonTreeViewLoader.CreateJsonPage(root, regex, token);
+            return (Root: root, Page: page);
+        }, token);
+    }
+
+    private async Task LoadPageNodeAsync(TreeNode marker, int version, CancellationToken token)
+    {
+        if (!_loadingNodes.Add(marker)) return;
+        marker.Nodes[0].Text = Language.JsonParsing;
+        try
+        {
+            JsonTreeViewLoader.JsonNodePage page;
+            if (marker.Tag is JsonTreeViewLoader.JsonPageRequest jsonPage)
+            {
+                var regex = _imageUrlRegex;
+                page = await Task.Run(
+                    () => JsonTreeViewLoader.CreateJsonPage(jsonPage.Cursor, regex, token), token);
+            }
+            else if (marker.Tag is JsonTreeViewLoader.TextPageRequest textPage)
+            {
+                var regex = _imageUrlRegex;
+                page = await Task.Run(
+                    () => JsonTreeViewLoader.CreateTextPage(textPage.Source, textPage.Offset, regex, token), token);
+            }
+            else
+            {
+                return;
+            }
+
+            TreeNodeCollection? collection = null;
+            TreeNode? owner = null;
+            int insertIndex = 0;
+            await InvokeOnUiAsync(() =>
+            {
+                if (!IsCurrentLoad(version, token) || marker.TreeView != _treeView) return;
+                collection = marker.Parent?.Nodes ?? _treeView!.Nodes;
+                insertIndex = marker.Index;
+                owner = marker.Parent;
+                marker.Remove();
+            });
+            if (collection != null)
+                await AppendPageAsync(collection, insertIndex, page, version, token, owner);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            await InvokeOnUiAsync(() => _loadingNodes.Remove(marker));
+        }
+    }
+
+    private async Task AppendPageAsync(TreeNodeCollection collection, int insertIndex,
+        JsonTreeViewLoader.JsonNodePage page, int version, CancellationToken token, TreeNode? owner = null)
+    {
+        int itemIndex = 0;
+        while (itemIndex < page.Items.Count)
+        {
+            bool appended = false;
+            await InvokeOnUiAsync(() =>
+            {
+                if (!IsCurrentLoad(version, token) || owner != null && owner.TreeView != _treeView) return;
+                _treeView!.BeginUpdate();
+                try
+                {
+                    int end = Math.Min(itemIndex + JsonTreeViewLoader.UiBatchSize, page.Items.Count);
+                    for (; itemIndex < end; itemIndex++)
+                    {
+                        var descriptor = page.Items[itemIndex];
+                        var existing = FindNodeByOrdinal(collection, descriptor.Info.ChildOrdinal);
+                        if (existing != null)
+                        {
+                            MergeNodeInfo(existing, descriptor, true);
+                            insertIndex = Math.Max(insertIndex, existing.Index + 1);
+                            continue;
+                        }
+                        collection.Insert(insertIndex++, JsonTreeViewLoader.CreateTreeNode(descriptor));
+                    }
+                    appended = true;
+                }
+                finally
+                {
+                    _treeView.EndUpdate();
+                }
+            });
+            if (!appended) return;
+        }
+
+        if (page.NextPage != null)
+        {
+            await InvokeOnUiAsync(() =>
+            {
+                if (IsCurrentLoad(version, token) && (owner == null || owner.TreeView == _treeView))
+                    collection.Insert(insertIndex, JsonTreeViewLoader.CreatePageNode(page.NextPage));
+            });
+        }
     }
 
     /// <summary>
@@ -469,14 +1141,16 @@ public class JsonTreeView : UserControl
 
         if (info.Key != null && (info.ValueKind == JsonValueKind.Object || info.ValueKind == JsonValueKind.Array))
         {
-            var keyPart = $"\"{info.Key}\": ";
+            var keyPart = $"\"{info.DisplayKey ?? info.Key}\": ";
             x += DrawTextSegment(g, keyPart, _displayFont, ColorKey, x, y, bounds);
-            var summary = isNodeExpanded ? (text.Contains("{") ? "{" : "[") : text[(text.IndexOf(":") + 2)..];
+            var summary = isNodeExpanded
+                ? info.ValueKind == JsonValueKind.Object ? "{" : "["
+                : text.Length >= keyPart.Length ? text[keyPart.Length..] : string.Empty;
             DrawTextSegment(g, summary, _displayFont, ColorSummary, x, y, bounds);
         }
         else if (info.Key != null)
         {
-            var keyPart = $"\"{info.Key}\": ";
+            var keyPart = $"\"{info.DisplayKey ?? info.Key}\": ";
             x += DrawTextSegment(g, keyPart, _displayFont, ColorKey, x, y, bounds);
 
             var valueColor = info.ValueKind switch
@@ -488,7 +1162,7 @@ public class JsonTreeView : UserControl
                 _ => SystemColors.ControlText
             };
 
-            var valueText = text[(text.IndexOf(":") + 2)..];
+            var valueText = text.Length >= keyPart.Length ? text[keyPart.Length..] : string.Empty;
             DrawTextSegment(g, valueText, _displayFont, valueColor, x, y, bounds);
         }
         else
@@ -583,18 +1257,9 @@ public class JsonTreeView : UserControl
         ShowImagePopup(url);
     }
 
-    /// <summary>
-    /// 从节点 Tag 提取 RawValue，用正则匹配图片 URL。
-    /// </summary>
-    private string? ExtractImageUrl(TreeNode node)
-    {
-        if (node.Tag is JsonPathInfo info && !string.IsNullOrEmpty(info.RawValue))
-        {
-            var match = _imageUrlRegex?.Match(info.RawValue);
-            if (match is { Success: true }) return match.Value;
-        }
-        return null;
-    }
+    /// <summary>读取后台预计算的图片 URL，悬浮事件不再扫描完整字符串。</summary>
+    private static string? ExtractImageUrl(TreeNode node) =>
+        node.Tag is JsonPathInfo info ? info.CachedImageUrl : null;
 
     /// <summary>
     /// 显示图片预览弹窗，定位在鼠标右下方，超出屏幕时翻转。
@@ -631,11 +1296,12 @@ public class JsonTreeView : UserControl
         var menu = new ContextMenuStrip();
 
         var copyValue = new ToolStripMenuItem("Copy Value");
-        copyValue.Click += (s, e) =>
+        copyValue.Click += async (s, e) =>
         {
             if (_treeView?.SelectedNode?.Tag is JsonPathInfo info)
             {
-                ClipboardTextHelper.TrySetText(info.RawValue);
+                string? value = await Task.Run(info.GetFullValue);
+                await ClipboardTextHelper.TrySetTextAsync(value);
             }
         };
 
@@ -649,17 +1315,18 @@ public class JsonTreeView : UserControl
         };
 
         var copyNode = new ToolStripMenuItem("Copy Node JSON");
-        copyNode.Click += (s, e) =>
+        copyNode.Click += async (s, e) =>
         {
-            if (_treeView?.SelectedNode != null)
+            if (_treeView?.SelectedNode?.Tag is JsonPathInfo info)
             {
-                ClipboardTextHelper.TrySetText(_treeView.SelectedNode.Text);
+                string? nodeJson = await Task.Run(info.GetNodeJson);
+                await ClipboardTextHelper.TrySetTextAsync(nodeJson);
             }
         };
 
         var sep1 = new ToolStripSeparator();
         var expandAll = new ToolStripMenuItem("Expand All");
-        expandAll.Click += (s, e) => _treeView?.ExpandAll();
+        expandAll.Click += (s, e) => ExpandAll();
 
         var collapseAll = new ToolStripMenuItem("Collapse All");
         collapseAll.Click += (s, e) => _treeView?.CollapseAll();
@@ -672,19 +1339,44 @@ public class JsonTreeView : UserControl
         return menu;
     }
 
-    /// <summary>释放 JsonDocument 和自定义字体资源。</summary>
+    private sealed class NoToolTipTreeView : TreeView
+    {
+        private const int TvsNoToolTips = 0x0080;
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var createParams = base.CreateParams;
+                createParams.Style |= TvsNoToolTips;
+                return createParams;
+            }
+        }
+    }
+
+    /// <summary>取消后台加载并释放控件资源。</summary>
     protected override void Dispose(bool disposing)
     {
+        Font? fontToDispose = null;
         if (disposing)
         {
+            ResetSearch(false);
+            _rootElement = null;
+            _rawText = null;
+            _highlightedNodes.Clear();
+            _loadingNodes.Clear();
+            var loadCts = _loadCts;
+            _loadCts = null;
+            try { loadCts?.Cancel(); } catch (ObjectDisposedException) { }
+            loadCts?.Dispose();
             HideImagePopup();
             _hoverTimer?.Stop();
             _hoverTimer?.Dispose();
-            _jsonDoc?.Dispose();
-            _displayFont?.Dispose();
+            fontToDispose = _displayFont;
         }
 
         base.Dispose(disposing);
+        fontToDispose?.Dispose();
     }
 
     /// <summary>
@@ -723,9 +1415,15 @@ file static class TreeViewExtensions
     public static void CollapseToLevelStatic(this TreeView treeView, int level)
     {
         treeView.BeginUpdate();
-        treeView.CollapseAll();
-        ExpandToLevel(treeView.Nodes, level, 0);
-        treeView.EndUpdate();
+        try
+        {
+            treeView.CollapseAll();
+            ExpandToLevel(treeView.Nodes, level, 0);
+        }
+        finally
+        {
+            treeView.EndUpdate();
+        }
     }
 
     /// <summary>
@@ -738,7 +1436,9 @@ file static class TreeViewExtensions
     {
         foreach (TreeNode node in nodes)
         {
-            if (currentLevel < targetLevel)
+            bool hasLazyMarker = node.Nodes.Count == 1 &&
+                                 ReferenceEquals(node.Nodes[0].Tag, JsonTreeViewLoader.LazyMarker);
+            if (currentLevel < targetLevel && !hasLazyMarker)
             {
                 node.Expand();
                 ExpandToLevel(node.Nodes, targetLevel, currentLevel + 1);

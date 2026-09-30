@@ -15,6 +15,7 @@ public partial class MainForm : Form
     private readonly ScrcpyManager _scrcpyManager = new();
     private readonly Dictionary<string, LogcatReader> _logcatReaders = new();
     private AppSettings _settings;
+    private Font? _uiFont;
     private CancellationTokenSource? _adbScanCts;
     private CancellationTokenSource? _scrcpyStartCts;
     private readonly Dictionary<string, RingBuffer<LogEntry>> _deviceLogs = new();
@@ -50,6 +51,9 @@ public partial class MainForm : Form
     private JsonTreeView? _jsonHeadersView;
     private JsonTreeView? _jsonRequestBodyView;
     private JsonTreeView? _jsonResponseBodyView;
+    private PagedTextView? _pagedHeadersView;
+    private PagedTextView? _pagedRequestBodyView;
+    private PagedTextView? _pagedResponseBodyView;
     private System.Windows.Forms.TextBox _rawHeaders;
     private TextBox _rawRequestBody;
     private TextBox _rawResponseBody;
@@ -401,13 +405,23 @@ public partial class MainForm : Form
 
     private void ApplySettings()
     {
-        var font = new Font("Consolas", _settings.FontSize);
-        _networkLogForm.ApplyFont(font);
-        _normalLogForm.ApplyFont(font);
-        _systemLogForm.ApplyFont(font);
-        _jsonHeadersView?.SetFont(font);
-        _jsonRequestBodyView?.SetFont(font);
-        _jsonResponseBodyView?.SetFont(font);
+        if (_uiFont == null || !_uiFont.Name.Equals("Consolas", StringComparison.OrdinalIgnoreCase) ||
+            Math.Abs(_uiFont.Size - _settings.FontSize) > 0.01f)
+        {
+            var previousFont = _uiFont;
+            var font = new Font("Consolas", _settings.FontSize);
+            _uiFont = font;
+            _networkLogForm.ApplyFont(font);
+            _normalLogForm.ApplyFont(font);
+            _systemLogForm.ApplyFont(font);
+            _jsonHeadersView?.SetFont(font);
+            _jsonRequestBodyView?.SetFont(font);
+            _jsonResponseBodyView?.SetFont(font);
+            _pagedHeadersView?.SetDisplayFont(font);
+            _pagedRequestBodyView?.SetDisplayFont(font);
+            _pagedResponseBodyView?.SetDisplayFont(font);
+            previousFont?.Dispose();
+        }
         _jsonHeadersView?.SetImageUrlPattern(_settings.ImageUrlPattern);
         _jsonRequestBodyView?.SetImageUrlPattern(_settings.ImageUrlPattern);
         _jsonResponseBodyView?.SetImageUrlPattern(_settings.ImageUrlPattern);
@@ -1104,6 +1118,7 @@ public partial class MainForm : Form
     {
         StopAdbScanLoop();
         StopMirror(clearStatusOnly: true);
+        CancelPreviewAsyncOperations();
         _scrcpyStartCts?.Cancel();
         _scrcpyStartCts?.Dispose();
         _mirrorRestartTimer?.Stop();
@@ -1116,6 +1131,8 @@ public partial class MainForm : Form
         _networkLogForm.Dispose();
         _normalLogForm.Dispose();
         _systemLogForm.Dispose();
+        _uiFont?.Dispose();
+        _uiFont = null;
         _server.Stop();
         base.OnFormClosing(e);
     }

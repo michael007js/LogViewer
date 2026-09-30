@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using LogViewer.Static;
 using LogViewer.Utils;
 
 namespace LogViewer.UI;
@@ -13,212 +15,332 @@ public static class JsonTreeViewLoader
     /// <summary>哨兵对象，标记尚未加载子节点的 Object/Array 节点。</summary>
     internal static readonly object LazyMarker = new();
 
-    /// <summary>
-    /// 将 JsonElement 加载到 TreeView 中，仅构建顶层节点（懒加载）。
-    /// </summary>
-    public static void LoadJson(this TreeView treeView, JsonElement rootElement, Font displayFont)
-    {
-        treeView.BeginUpdate();
-        treeView.Nodes.Clear();
-        BuildTreeLevel(rootElement, treeView.Nodes, "", displayFont);
-        treeView.EndUpdate();
-        treeView.CollapseToLevel(1);
-    }
+    internal const int PageSize = 100;
+    internal const int UiBatchSize = 20;
+    private const int LongTextThreshold = 512;
+    internal const int TextChunkSize = 256;
+    private const int MaxKeyDisplayLength = 128;
 
-    /// <summary>
-    /// BeforeExpand 事件处理：检测哨兵子节点，移除后从 JsonElement 构建真实子节点。
-    /// </summary>
-    public static void OnBeforeExpand(TreeNode node, Font displayFont)
-    {
-        if (node.Tag is not JsonPathInfo { Element: not null }) return;
+    internal sealed record JsonPageRequest(JsonPageCursor Cursor);
 
-        if (node.Nodes.Count == 1 && ReferenceEquals(node.Nodes[0].Tag, LazyMarker))
+    internal sealed record TextPageRequest(string Source, int Offset);
+
+    internal sealed record JsonNodeDescriptor(string Text, JsonPathInfo Info, bool HasChildren);
+
+    internal sealed record JsonNodePage(IReadOnlyList<JsonNodeDescriptor> Items, object? NextPage);
+
+    internal sealed record JsonSearchPath(IReadOnlyList<JsonNodeDescriptor> Nodes);
+
+    internal sealed class JsonSearchSession : IDisposable
+    {
+        private readonly string _keyword;
+        private readonly CancellationToken _token;
+        private readonly IEnumerator<JsonSearchPath> _enumerator;
+
+        internal JsonSearchSession(JsonElement root, string keyword, CancellationToken token)
         {
-            node.Nodes.Clear();
-            var info = (JsonPathInfo)node.Tag;
-            BuildTreeLevel(info.Element!.Value, node.Nodes, GetPathPrefix(node), displayFont);
+            _keyword = keyword;
+            _token = token;
+            _enumerator = EnumerateElement(root, new List<JsonNodeDescriptor>()).GetEnumerator();
         }
-    }
 
-    /// <summary>
-    /// 将纯文本按行加载到 TreeView 中，每行作为一个节点。
-    /// </summary>
-    public static void LoadPlainText(this TreeView treeView, string text, Font displayFont)
-    {
-        treeView.BeginUpdate();
-        treeView.Nodes.Clear();
+        internal bool HasReturnedMatch { get; private set; }
 
-        if (!string.IsNullOrEmpty(text))
+        internal JsonSearchPath? FindNext()
         {
-            var lines = text.Split('\n');
-            for (int i = 0; i < lines.Length; i++)
+            _token.ThrowIfCancellationRequested();
+            if (!_enumerator.MoveNext()) return null;
+            HasReturnedMatch = true;
+            return _enumerator.Current;
+        }
+
+        public void Dispose() => _enumerator.Dispose();
+
+        private IEnumerable<JsonSearchPath> EnumerateElement(JsonElement element,
+            List<JsonNodeDescriptor> path)
+        {
+            _token.ThrowIfCancellationRequested();
+            switch (element.ValueKind)
             {
-                var node = new TreeNode(lines[i])
-                    { Tag = new JsonPathInfo { RawValue = lines[i] }, NodeFont = displayFont };
-                treeView.Nodes.Add(node);
+                case JsonValueKind.Object:
+                    int objectOrdinal = 0;
+                    foreach (var property in element.EnumerateObject())
+                    {
+                        var descriptor = CreateDescriptor(property.Name, null, objectOrdinal++, property.Value,
+                            null);
+                        foreach (var result in VisitDescriptor(descriptor, path)) yield return result;
+                    }
+                    break;
+
+                case JsonValueKind.Array:
+                    int arrayIndex = 0;
+                    foreach (var item in element.EnumerateArray())
+                    {
+                        var descriptor = CreateDescriptor(null, arrayIndex, arrayIndex, item, null);
+                        arrayIndex++;
+                        foreach (var result in VisitDescriptor(descriptor, path)) yield return result;
+                    }
+                    break;
+
+                default:
+                    var rootDescriptor = CreateDescriptor(null, null, 0, element, null);
+                    foreach (var result in VisitDescriptor(rootDescriptor, path)) yield return result;
+                    break;
             }
         }
 
-        treeView.EndUpdate();
-    }
-
-    /// <summary>
-    /// 折叠 TreeView 所有节点，然后展开到指定层级。
-    /// </summary>
-    public static void CollapseToLevel(this TreeView treeView, int level)
-    {
-        treeView.BeginUpdate();
-        treeView.CollapseAll();
-        ExpandToLevel(treeView.Nodes, level, 0);
-        treeView.EndUpdate();
-    }
-
-    /// <summary>
-    /// 搜索 TreeView 中包含关键字的节点，将其加入高亮集合并展开到根节点可见。
-    /// 仅搜索已构建（已展开过）的节点。
-    /// </summary>
-    public static void SearchAndHighlight(this TreeView treeView, HashSet<TreeNode> highlightedNodes, string keyword)
-    {
-        highlightedNodes.Clear();
-        if (string.IsNullOrEmpty(keyword))
+        private IEnumerable<JsonSearchPath> VisitDescriptor(JsonNodeDescriptor descriptor,
+            List<JsonNodeDescriptor> path)
         {
-            treeView.Invalidate();
-            return;
-        }
+            _token.ThrowIfCancellationRequested();
+            path.Add(descriptor);
+            var info = descriptor.Info;
+            bool matched = info.Key?.Contains(_keyword, StringComparison.OrdinalIgnoreCase) == true;
+            string? rawValue = info.ValueKind == JsonValueKind.Null ? "null" : info.RawValue;
+            bool rawMatched = rawValue?.Contains(_keyword, StringComparison.OrdinalIgnoreCase) == true;
+            if (matched) yield return new JsonSearchPath(path.ToArray());
 
-        SearchNodes(treeView.Nodes, keyword, highlightedNodes);
-        foreach (var node in highlightedNodes)
-            ExpandToRoot(node);
-        treeView.Invalidate();
-    }
-
-    /// <summary>
-    /// 仅构建一层节点。Object/Array 节点添加哨兵子节点以显示 [+] 展开指示器，
-    /// 子节点在 BeforeExpand 时由 OnBeforeExpand 懒加载构建。
-    /// </summary>
-    private static void BuildTreeLevel(JsonElement element, TreeNodeCollection parent, string pathPrefix,
-        Font displayFont)
-    {
-        switch (element.ValueKind)
-        {
-            case JsonValueKind.Object:
-                foreach (var prop in element.EnumerateObject())
+            JsonElement? childElement = info.ChildElement;
+            if (info.DeferredContent == JsonDeferredContentKind.EmbeddedJson && info.RawValue != null)
+            {
+                try
                 {
-                    AddPropertyNode(parent, prop.Name, prop.Value, $".{prop.Name}", pathPrefix, displayFont);
+                    using var document = JsonDocument.Parse(info.RawValue);
+                    childElement = document.RootElement.Clone();
+                    info.ChildElement = childElement;
+                    info.DeferredContent = JsonDeferredContentKind.None;
                 }
-
-                break;
-
-            case JsonValueKind.Array:
-                int idx = 0;
-                foreach (var item in element.EnumerateArray())
+                catch (JsonException)
                 {
-                    AddArrayItemNode(parent, idx, item, pathPrefix, displayFont);
-                    idx++;
                 }
+            }
 
-                break;
+            if (childElement is { } child)
+            {
+                foreach (var result in EnumerateElement(child, path)) yield return result;
+            }
 
-            default:
-                var rootInfo = new JsonPathInfo
-                {
-                    PathSegment = "$",
-                    ValueKind = element.ValueKind,
-                    RawValue = GetRawValue(element)
-                };
-                parent.Add(new TreeNode(FormatValue(element)) { Tag = rootInfo, NodeFont = displayFont });
-                break;
+            if (!matched && rawMatched) yield return new JsonSearchPath(path.ToArray());
+            path.RemoveAt(path.Count - 1);
         }
     }
 
-    /// <summary>添加 JSON 对象属性节点，Object/Array 类型的值添加哨兵子节点。</summary>
-    private static void AddPropertyNode(TreeNodeCollection parent, string name, JsonElement value,
-        string pathSegment, string pathPrefix, Font displayFont)
+    internal sealed class JsonPageCursor
+    {
+        private readonly JsonValueKind _kind;
+        private JsonElement.ObjectEnumerator _objectEnumerator;
+        private JsonElement.ArrayEnumerator _arrayEnumerator;
+        private readonly JsonElement _scalar;
+        private JsonNodeDescriptor? _pending;
+        private int _objectIndex;
+        private int _arrayIndex;
+        private bool _scalarRead;
+
+        internal JsonPageCursor(JsonElement source)
+        {
+            _kind = source.ValueKind;
+            _scalar = source;
+            if (_kind == JsonValueKind.Object) _objectEnumerator = source.EnumerateObject();
+            if (_kind == JsonValueKind.Array) _arrayEnumerator = source.EnumerateArray();
+        }
+
+        internal JsonNodePage ReadPage(Regex? imageUrlRegex, CancellationToken token)
+        {
+            var items = new List<JsonNodeDescriptor>(PageSize + 1);
+            if (_pending != null)
+            {
+                items.Add(_pending);
+                _pending = null;
+            }
+
+            while (items.Count <= PageSize && TryReadNext(imageUrlRegex, token, out var descriptor))
+                items.Add(descriptor);
+
+            object? nextPage = null;
+            if (items.Count > PageSize)
+            {
+                _pending = items[^1];
+                items.RemoveAt(items.Count - 1);
+                nextPage = new JsonPageRequest(this);
+            }
+            return new JsonNodePage(items, nextPage);
+        }
+
+        private bool TryReadNext(Regex? imageUrlRegex, CancellationToken token,
+            out JsonNodeDescriptor descriptor)
+        {
+            token.ThrowIfCancellationRequested();
+            switch (_kind)
+            {
+                case JsonValueKind.Object when _objectEnumerator.MoveNext():
+                    var property = _objectEnumerator.Current;
+                    descriptor = CreateDescriptor(property.Name, null, _objectIndex++, property.Value, imageUrlRegex);
+                    return true;
+                case JsonValueKind.Array when _arrayEnumerator.MoveNext():
+                    descriptor = CreateDescriptor(null, _arrayIndex, _arrayIndex++, _arrayEnumerator.Current,
+                        imageUrlRegex);
+                    return true;
+                default:
+                    if (!_scalarRead && _kind is not JsonValueKind.Object and not JsonValueKind.Array)
+                    {
+                        _scalarRead = true;
+                        descriptor = CreateDescriptor(null, null, 0, _scalar, imageUrlRegex);
+                        return true;
+                    }
+                    descriptor = null!;
+                    return false;
+            }
+        }
+    }
+
+    internal static JsonNodePage CreateJsonPage(JsonElement element, Regex? imageUrlRegex,
+        CancellationToken token) => new JsonPageCursor(element).ReadPage(imageUrlRegex, token);
+
+    internal static JsonNodePage CreateJsonPage(JsonPageCursor cursor, Regex? imageUrlRegex,
+        CancellationToken token) => cursor.ReadPage(imageUrlRegex, token);
+
+    internal static JsonNodePage CreateTextPage(string text, int offset, Regex? imageUrlRegex,
+        CancellationToken token)
+    {
+        var items = new List<JsonNodeDescriptor>(PageSize);
+        int position = offset;
+        while (position < text.Length && items.Count < PageSize)
+        {
+            token.ThrowIfCancellationRequested();
+            int chunkIndex = position / TextChunkSize;
+            var descriptor = CreateTextDescriptor(text, chunkIndex, imageUrlRegex);
+            items.Add(descriptor);
+            position += descriptor.Info.RawValue?.Length ?? TextChunkSize;
+        }
+
+        object? nextPage = position < text.Length ? new TextPageRequest(text, position) : null;
+        return new JsonNodePage(items, nextPage);
+    }
+
+    internal static JsonNodeDescriptor CreateTextDescriptor(string text, int chunkIndex, Regex? imageUrlRegex)
+    {
+        int position = chunkIndex * TextChunkSize;
+        int length = Math.Min(TextChunkSize, Math.Max(0, text.Length - position));
+        string chunk = length == 0 ? string.Empty : text.Substring(position, length);
+        var info = new JsonPathInfo
+        {
+            PathSegment = $"[text:{chunkIndex}]",
+            ChildOrdinal = chunkIndex,
+            ValueKind = JsonValueKind.String,
+            RawValue = chunk,
+            CachedImageUrl = FindImageUrl(chunk, imageUrlRegex)
+        };
+        string escaped = JsonSerializer.Serialize(chunk);
+        return new JsonNodeDescriptor($" [{chunkIndex + 1}]: {escaped}", info, false);
+    }
+
+    internal static JsonNodeDescriptor CloneForUi(JsonNodeDescriptor descriptor, bool searchProjection) =>
+        new(descriptor.Text, descriptor.Info.CloneForUi(searchProjection), descriptor.HasChildren);
+
+    internal static TreeNode CreateTreeNode(JsonNodeDescriptor descriptor)
+    {
+        var node = new TreeNode(descriptor.Text) { Tag = descriptor.Info };
+        if (descriptor.HasChildren) node.Nodes.Add(new TreeNode { Tag = LazyMarker });
+        return node;
+    }
+
+    internal static TreeNode CreatePageNode(object request)
+    {
+        var node = new TreeNode($"\u25B6 {Language.JsonLoadMore}") { Tag = request };
+        node.Nodes.Add(new TreeNode { Tag = LazyMarker });
+        return node;
+    }
+
+    private static JsonNodeDescriptor CreateDescriptor(string? key, int? index, int childOrdinal,
+        JsonElement value, Regex? imageUrlRegex)
     {
         var info = new JsonPathInfo
         {
-            Key = name,
-            PathSegment = pathSegment,
-            ValueKind = value.ValueKind
+            Key = key,
+            DisplayKey = key == null ? null : FormatKeyForDisplay(key),
+            PathSegment = key != null ? $".{key}" : index.HasValue ? $"[{index.Value}]" : "$",
+            ChildOrdinal = childOrdinal,
+            ValueKind = value.ValueKind,
+            Element = value
         };
 
-        if (value.ValueKind == JsonValueKind.Object || value.ValueKind == JsonValueKind.Array)
+        if (value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
         {
-            info.Element = value;
-            int count = value.ValueKind == JsonValueKind.Object
-                ? value.EnumerateObject().Count()
-                : value.GetArrayLength();
-            var summary = value.ValueKind == JsonValueKind.Object ? $"{{{count}}}" : $"[{count}]";
-            var node = new TreeNode($"\u25B6 \"{name}\": {summary}")
+            info.ChildElement = value;
+            string summary = value.ValueKind == JsonValueKind.Object ? "{...}" : $"[{value.GetArrayLength()}]";
+            return new JsonNodeDescriptor(BuildNodeText(key, index, summary, true), info, true);
+        }
+
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            string rawValue = value.GetString() ?? string.Empty;
+            info.RawValue = rawValue;
+            info.CachedImageUrl = FindImageUrl(rawValue, imageUrlRegex);
+
+            if (LooksLikeJsonContainer(rawValue))
             {
-                Tag = info,
-                NodeFont = displayFont
-            };
-            node.Nodes.Add(new TreeNode { Tag = LazyMarker });
-            parent.Add(node);
+                info.DeferredContent = JsonDeferredContentKind.EmbeddedJson;
+                return new JsonNodeDescriptor(
+                    BuildNodeText(key, index, Language.EmbeddedJsonSummary(rawValue.Length), true), info, true);
+            }
+
+            if (rawValue.Length > LongTextThreshold || rawValue.IndexOfAny(['\r', '\n']) >= 0)
+            {
+                info.DeferredContent = JsonDeferredContentKind.LongText;
+                return new JsonNodeDescriptor(
+                    BuildNodeText(key, index, Language.LongTextSummary(rawValue.Length), true), info, true);
+            }
         }
         else
         {
             info.RawValue = GetRawValue(value);
-            var node = new TreeNode($" \"{name}\": {FormatValue(value)}")
+            if (info.RawValue is { Length: > LongTextThreshold } rawValue)
             {
-                Tag = info,
-                NodeFont = displayFont
-            };
-            parent.Add(node);
+                info.DeferredContent = JsonDeferredContentKind.LongText;
+                return new JsonNodeDescriptor(
+                    BuildNodeText(key, index, Language.LongTextSummary(rawValue.Length), true), info, true);
+            }
         }
+
+        return new JsonNodeDescriptor(BuildNodeText(key, index, FormatValue(value), false), info, false);
     }
 
-    /// <summary>添加 JSON 数组元素节点，Object/Array 类型的项添加哨兵子节点。</summary>
-    private static void AddArrayItemNode(TreeNodeCollection parent, int index, JsonElement item,
-        string pathPrefix, Font displayFont)
+    private static string BuildNodeText(string? key, int? index, string value, bool expandable)
     {
-        var info = new JsonPathInfo
-        {
-            Key = $"[{index}]",
-            PathSegment = $"[{index}]",
-            ValueKind = item.ValueKind
-        };
-
-        if (item.ValueKind == JsonValueKind.Object || item.ValueKind == JsonValueKind.Array)
-        {
-            info.Element = item;
-            int count = item.ValueKind == JsonValueKind.Object
-                ? item.EnumerateObject().Count()
-                : item.GetArrayLength();
-            var summary = item.ValueKind == JsonValueKind.Object ? $"{{{count}}}" : $"[{count}]";
-            var node = new TreeNode($"\u25B6 [{index}]: {summary}")
-            {
-                Tag = info,
-                NodeFont = displayFont
-            };
-            node.Nodes.Add(new TreeNode { Tag = LazyMarker });
-            parent.Add(node);
-        }
-        else
-        {
-            info.RawValue = GetRawValue(item);
-            var node = new TreeNode($" [{index}]: {FormatValue(item)}")
-            {
-                Tag = info,
-                NodeFont = displayFont
-            };
-            parent.Add(node);
-        }
+        string marker = expandable ? "\u25B6 " : " ";
+        if (key != null) return $"{marker}\"{FormatKeyForDisplay(key)}\": {value}";
+        if (index.HasValue) return $"{marker}[{index.Value}]: {value}";
+        return marker + value;
     }
 
-    /// <summary>沿父节点向上拼接 PathSegment，生成当前节点的 JSONPath 前缀。</summary>
-    private static string GetPathPrefix(TreeNode node)
+    private static string FormatKeyForDisplay(string key)
     {
-        var parts = new List<string>();
-        var current = node;
-        while (current != null && current.Tag is JsonPathInfo info)
-        {
-            parts.Insert(0, info.PathSegment);
-            current = current.Parent;
-        }
+        string preview = key.Length <= MaxKeyDisplayLength
+            ? key
+            : $"{key[..96]}...{key[^16..]} <{key.Length:N0}>";
+        return preview.Replace("\\", "\\\\").Replace("\"", "\\\"")
+            .Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
+    }
 
-        return string.Join(".", parts);
+    private static bool LooksLikeJsonContainer(string text)
+    {
+        ReadOnlySpan<char> trimmed = text.AsSpan().Trim();
+        return trimmed.Length >= 2 &&
+               ((trimmed[0] == '{' && trimmed[^1] == '}') || (trimmed[0] == '[' && trimmed[^1] == ']'));
+    }
+
+    private static string? FindImageUrl(string text, Regex? imageUrlRegex)
+    {
+        if (imageUrlRegex == null || text.Length == 0) return null;
+        try
+        {
+            var match = imageUrlRegex.Match(text);
+            return match.Success ? match.Value : null;
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -228,7 +350,7 @@ public static class JsonTreeViewLoader
     {
         return element.ValueKind switch
         {
-            JsonValueKind.String => $"\"{element.GetString()}\"",
+            JsonValueKind.String => element.GetRawText(),
             JsonValueKind.Number => element.GetRawText(),
             JsonValueKind.True => "true",
             JsonValueKind.False => "false",
@@ -253,48 +375,4 @@ public static class JsonTreeViewLoader
         };
     }
 
-    /// <summary>
-    /// 递归展开/折叠节点到指定层级。
-    /// </summary>
-    private static void ExpandToLevel(TreeNodeCollection nodes, int targetLevel, int currentLevel)
-    {
-        foreach (TreeNode node in nodes)
-        {
-            if (currentLevel < targetLevel)
-            {
-                node.Expand();
-                ExpandToLevel(node.Nodes, targetLevel, currentLevel + 1);
-            }
-            else
-            {
-                node.Collapse();
-            }
-        }
-    }
-
-    /// <summary>
-    /// 递归搜索节点集合，将文本包含关键字的节点加入结果集。
-    /// </summary>
-    private static void SearchNodes(TreeNodeCollection nodes, string keyword, HashSet<TreeNode> result)
-    {
-        foreach (TreeNode node in nodes)
-        {
-            if (node.Text.Contains(keyword, StringComparison.OrdinalIgnoreCase))
-                result.Add(node);
-            SearchNodes(node.Nodes, keyword, result);
-        }
-    }
-
-    /// <summary>
-    /// 从指定节点向上逐级展开父节点，确保该节点可见。
-    /// </summary>
-    private static void ExpandToRoot(TreeNode node)
-    {
-        var current = node.Parent;
-        while (current != null)
-        {
-            current.Expand();
-            current = current.Parent;
-        }
-    }
 }

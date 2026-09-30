@@ -53,6 +53,7 @@
 | `DevicePanel.cs` | 左侧 ADB 设备操控面板（设备选择 + scrcpy 宿主 + 控制条） |
 | `SystemLogSnapshot.cs` | systemlogs 当前 scope/filter 快照，支持稳定 viewIndex/key |
 | `BufferedListView.cs` | ListView 双缓冲/顶部锚点恢复辅助，供 networklogs/systemlogs 共用 |
+| `PagedTextView.cs` | VirtualMode 长文本原文视图，后台建立分段索引、可视行按需渲染 |
 | `SettingsDialog.cs` | 设置对话框（ADB 路径检测 + scrcpy 自动部署/高级覆盖） |
 
 ### 静态资源层 (Static/)
@@ -239,6 +240,11 @@ rtk git diff                                                # Git 差异
 | ShowLogDetail 归属 | ShowLogDetail 操作预览面板控件，从 NetworkLogs.cs 移入 MainForm.Preview.cs。NetworkLogForm 通过 LogEntrySelected 事件通知 MainForm |
 | 导出逻辑归属 | OnExportJson/OnExportTxt 留在 MainForm，因为需要协调 Network/Normal 两种缓冲区，通过 Form.GetCurrentLogBuffer()/GetCurrentNormalLogBuffer() 获取数据 |
 | ScrollToBottom/IsAtBottom/ScrollToTop/GetApproxVisibleRowCount | 已提取为 BufferedListViewHelper 的 public static 方法，三个 Form 和 MainForm 共用 |
+| TreeView 超长节点禁止存全文 | `ShowNodeToolTips=false` 不能阻止 WinForms 对被裁剪标签弹出全文气泡；内部 TreeView 必须加 `TVS_NOTOOLTIPS`，完整值放元数据，节点只显示有界摘要 |
+| 字符串内嵌 JSON 按需解析 | 初次选择日志只做后台根解析；疑似 `{}`/`[]` 字符串在首次展开时后台二次解析，宽对象/数组用游标分页，旧版本结果禁止回写 |
+| Raw 长文本禁止写入 TextBox 全文 | 使用 `PagedTextView + ListView.VirtualMode`，后台建立行/分段索引，UI 仅生成可视项；避免 `AppendText` 随文本增长退化并阻塞消息循环 |
+| WinForms Font 相同值替换陷阱 | `Control.Font` 可能因新旧 Font 属性相同而跳过引用替换；此时释放旧 Font 会在 `OnHandleCreated → Font.ToHfont()` 抛 `Parameter is not valid`。相同字体必须复用，不同字体确认替换后再释放，且自有 Font 要在子控件 Dispose 后释放 |
+| 折叠 JSON 搜索不能依赖 TreeNode | 完整搜索必须遍历根 `JsonElement` 快照，使用 `ChildOrdinal` 定位重复键/远端数组项；命中后只投影路径，正常分页按序号去重接管，禁止为搜索展开或物化整棵树 |
 
 ---
 

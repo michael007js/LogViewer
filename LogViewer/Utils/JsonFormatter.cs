@@ -8,6 +8,28 @@ namespace LogViewer.Utils;
 /// </summary>
 public static class JsonFormatter
 {
+    private static readonly JsonSerializerOptions IndentedOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    private static readonly SemaphoreSlim BackgroundJsonGate = new(2, 2);
+
+    internal static async Task<T> RunBackgroundAsync<T>(Func<T> work, CancellationToken token)
+    {
+        await BackgroundJsonGate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            token.ThrowIfCancellationRequested();
+            return await Task.Run(work).ConfigureAwait(false);
+        }
+        finally
+        {
+            BackgroundJsonGate.Release();
+        }
+    }
+
     /// <summary>
     /// 将原始 JSON 字符串格式化为缩进美化的输出。
     /// 使用 UnsafeRelaxedJsonEscaping 避免中文等 Unicode 字符被转义为 \uXXXX。
@@ -19,12 +41,8 @@ public static class JsonFormatter
         if (string.IsNullOrWhiteSpace(raw)) return raw;
         try
         {
-            var doc = JsonDocument.Parse(raw);
-            return JsonSerializer.Serialize(doc, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            });
+            using var doc = JsonDocument.Parse(raw);
+            return JsonSerializer.Serialize(doc, IndentedOptions);
         }
         catch
         {
@@ -42,7 +60,7 @@ public static class JsonFormatter
         if (string.IsNullOrWhiteSpace(text)) return false;
         try
         {
-            JsonDocument.Parse(text);
+            using var doc = JsonDocument.Parse(text);
             return true;
         }
         catch
@@ -89,14 +107,24 @@ public static class JsonFormatter
     }
 }
 
+internal enum JsonDeferredContentKind
+{
+    None,
+    EmbeddedJson,
+    LongText
+}
+
 /// <summary>
 /// JSON 路径信息，附加到 TreeView 节点的 Tag 上，
 /// 用于标识节点在 JSON 结构中的位置、值类型和原始值。
 /// </summary>
 public class JsonPathInfo
 {
-    /// <summary>JSON 对象的属性键名。</summary>
+    /// <summary>JSON 对象的完整属性键名。</summary>
     public string? Key { get; set; }
+
+    /// <summary>经过单行转义和长度限制的键名，仅用于 UI 绘制。</summary>
+    internal string? DisplayKey { get; set; }
 
     /// <summary>JSONPath 路径片段（如属性名或数组索引）。</summary>
     public string PathSegment { get; set; } = "";
@@ -107,6 +135,55 @@ public class JsonPathInfo
     /// <summary>节点对应的原始 JSON 值文本。</summary>
     public string? RawValue { get; set; }
 
-    /// <summary>懒加载：存储当前节点的 JsonElement 引用，BeforeExpand 时用于构建子节点。</summary>
+    /// <summary>节点对应的原始 JsonElement，用于完整复制且不依赖显示文本。</summary>
     internal JsonElement? Element { get; set; }
+
+    /// <summary>对象、数组或解析后的内嵌 JSON 子节点数据源。</summary>
+    internal JsonElement? ChildElement { get; set; }
+
+    /// <summary>需要按需加载的内嵌 JSON 或长文本类型。</summary>
+    internal JsonDeferredContentKind DeferredContent { get; set; }
+
+    /// <summary>后台预计算的图片 URL，悬浮时不再扫描完整值。</summary>
+    internal string? CachedImageUrl { get; set; }
+
+    /// <summary>节点在直接父容器中的原始顺序，用于搜索投影和分页去重。</summary>
+    internal int ChildOrdinal { get; set; }
+
+    /// <summary>节点是否由搜索路径临时物化，正常分页加载后会接管该节点。</summary>
+    internal bool IsSearchProjection { get; set; }
+
+    /// <summary>节点是否正在异步加载，防止重复展开启动多个任务。</summary>
+    internal bool IsLoading { get; set; }
+
+    internal JsonPathInfo CloneForUi(bool searchProjection)
+    {
+        return new JsonPathInfo
+        {
+            Key = Key,
+            DisplayKey = DisplayKey,
+            PathSegment = PathSegment,
+            ValueKind = ValueKind,
+            RawValue = RawValue,
+            Element = Element,
+            ChildElement = ChildElement,
+            DeferredContent = DeferredContent,
+            CachedImageUrl = CachedImageUrl,
+            ChildOrdinal = ChildOrdinal,
+            IsSearchProjection = searchProjection
+        };
+    }
+
+    internal string? GetFullValue()
+    {
+        if (RawValue != null) return RawValue;
+        if (Element is not { } element) return null;
+        return element.ValueKind == JsonValueKind.String ? element.GetString() : element.GetRawText();
+    }
+
+    internal string? GetNodeJson()
+    {
+        if (Element is { } element) return element.GetRawText();
+        return ValueKind == JsonValueKind.String ? JsonSerializer.Serialize(RawValue) : RawValue;
+    }
 }

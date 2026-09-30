@@ -264,6 +264,27 @@ public static class Language
     /// <summary>JSON 详情窗口标题格式，参数依次为：方法、URL路径、状态码、耗时(ms)。</summary>
     public const string JsonDetailTitle = "{0} {1} {2} {3}ms";
 
+    /// <summary>JSON 树后台解析中的占位文本。</summary>
+    public const string JsonParsing = "正在解析...";
+
+    /// <summary>JSON 树分页加载后续内容的节点文本。</summary>
+    public const string JsonLoadMore = "加载后续内容...";
+
+    /// <summary>JSON 内嵌内容解析失败后的提示。</summary>
+    public const string JsonParseFailed = "解析失败，已按完整文本分段显示";
+
+    /// <summary>分页原文视图：复制选中内容。</summary>
+    public const string CopySelectedText = "复制选中内容";
+
+    /// <summary>分页原文视图：复制全部原文。</summary>
+    public const string CopyAllRawText = "复制全部原文";
+
+    /// <summary>生成内嵌 JSON 字符串摘要。</summary>
+    public static string EmbeddedJsonSummary(int length) => $"<内嵌 JSON，{length:N0} 字符>";
+
+    /// <summary>生成超长文本摘要。</summary>
+    public static string LongTextSummary(int length) => $"<完整文本，{length:N0} 字符>";
+
     /// <summary>生成设备数量状态文本。</summary>
     /// <param name="count">已连接设备数量。</param>
     public static string DevicesCount(int count) => $"设备：{count}";

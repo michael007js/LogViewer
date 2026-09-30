@@ -52,7 +52,7 @@ LogViewer/                            ← 项目根目录
 │   ├── DeviceConnection.cs                 ← 单设备连接+协议解析+按type分发网络/普通日志+ArrayPool+异步Pong回复+LastActiveTime
 │   └── LogcatReader.cs                     ← adb logcat进程流式读取+正则解析threadtime格式
 │
-├── UI/                                     ← 界面层（26 .cs + 1 .resx）
+├── UI/                                     ← 界面层（27 .cs + 1 .resx）
 │   ├── MainForm.cs                         ← 主窗口共用字段/构造函数/Form嵌入/服务器事件/窗口生命周期
 │   ├── MainForm.Preview.cs                 ← JSON预览面板初始化/视图切换/详情显示+ShowLogDetail（partial class）
 │   ├── MainForm.Scrcpy.cs                  ← scrcpy投屏生命周期/状态同步/截图（partial class）
@@ -66,10 +66,11 @@ LogViewer/                            ← 项目根目录
 │   ├── JsonDetailToolbar.cs                ← JSON详情工具栏UserControl（搜索/展开/折叠/层级/视图切换）
 │   ├── JsonDetailToolbar.Designer.cs       ← JSON详情工具栏设计器控件树（TextBox+5 Button）
 │   ├── BufferedListView.cs                 ← ListView 双缓冲/精确顶部索引/滚动恢复辅助
+│   ├── PagedTextView.cs                    ← VirtualMode 长文本分页视图（原文按需渲染，避免 UI 阻塞）
 │   ├── ClipboardTextHelper.cs              ← 剪贴板安全写入辅助（统一规避 null/empty 复制崩溃）
 │   ├── FilterPanel.cs                      ← 过滤面板用户组件（Keyword+Regex+双ComboBox，回调事件驱动）
 │   ├── FilterPanel.Designer.cs             ← 过滤面板设计器控件树（TableLayoutPanel单行布局）
-│   ├── EmbeddedWindowHost.cs               ← scrcpy内嵌窗口宿主（Win32 API嵌入外部进程窗口）
+│   ├── ImagePreviewPopup.cs                ← JSON 图片 URL 悬浮预览弹窗（异步下载，最大 400×400）
 │   ├── JsonDetailForm.cs                   ← JSON详情窗口手写逻辑（加载/切换/搜索）
 │   ├── JsonDetailForm.Designer.cs          ← JSON详情窗口设计器控件树（左右分栏+工具栏）
 │   ├── JsonTreeView.cs                     ← JSON折叠+语法高亮TreeView（OwnerDrawText自绘+渲染/交互）

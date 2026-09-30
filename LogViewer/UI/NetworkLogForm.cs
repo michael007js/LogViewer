@@ -204,36 +204,38 @@ public partial class NetworkLogForm : Form
     private ContextMenuStrip CreateNetworkLogMenu()
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add(Language.CopyUrl, null, (s, e) =>
+        menu.Items.Add(Language.CopyUrl, null, async (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
-            ClipboardTextHelper.TrySetText(entry?.Url);
+            await ClipboardTextHelper.TrySetTextAsync(entry?.Url);
         });
-        menu.Items.Add(Language.CopyMethodUrl, null, (s, e) =>
+        menu.Items.Add(Language.CopyMethodUrl, null, async (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
-            ClipboardTextHelper.TrySetText(entry == null ? null : $"{entry.Method} {entry.Url}".Trim());
+            await ClipboardTextHelper.TrySetTextAsync(entry == null ? null : $"{entry.Method} {entry.Url}".Trim());
         });
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(Language.CopyRequestBody, null, (s, e) =>
+        menu.Items.Add(Language.CopyRequestBody, null, async (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
-            ClipboardTextHelper.TrySetText(entry?.Send);
+            await ClipboardTextHelper.TrySetTextAsync(entry?.Send);
         });
-        menu.Items.Add(Language.CopyUrlRequestBody, null, (s, e) =>
+        menu.Items.Add(Language.CopyUrlRequestBody, null, async (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
-            ClipboardTextHelper.TrySetText(entry == null ? null : FormatUrlWithBody(entry.Url, entry.Send));
+            string? text = entry == null ? null : await Task.Run(() => FormatUrlWithBody(entry.Url, entry.Send));
+            await ClipboardTextHelper.TrySetTextAsync(text);
         });
-        menu.Items.Add(Language.CopyResponseBody, null, (s, e) =>
+        menu.Items.Add(Language.CopyResponseBody, null, async (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
-            ClipboardTextHelper.TrySetText(entry?.Content);
+            await ClipboardTextHelper.TrySetTextAsync(entry?.Content);
         });
-        menu.Items.Add(Language.CopyUrlResponseBody, null, (s, e) =>
+        menu.Items.Add(Language.CopyUrlResponseBody, null, async (s, e) =>
         {
             var entry = GetSelectedNetworkEntry();
-            ClipboardTextHelper.TrySetText(entry == null ? null : FormatUrlWithBody(entry.Url, entry.Content));
+            string? text = entry == null ? null : await Task.Run(() => FormatUrlWithBody(entry.Url, entry.Content));
+            await ClipboardTextHelper.TrySetTextAsync(text);
         });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(Language.ViewDetail, null, (s, e) =>
