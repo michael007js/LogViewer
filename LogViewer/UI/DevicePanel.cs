@@ -336,25 +336,33 @@ public sealed partial class DevicePanel : UserControl
     }
 
     /// <summary>
-    /// 移除不在当前 ADB 扫描结果中的 ADB-only 设备。若选中设备被移除则清空选中状态。
+    /// 移除本次成功扫描中已不存在的 ADB-only 设备，以及既未连接 TCP、也不再在线的旧设备。
     /// </summary>
-    /// <param name="currentAdbSerials">当前 ADB 扫描发现的序列号集合。</param>
-    public void RemoveMissingAdbDevices(HashSet<string> currentAdbSerials)
+    /// <param name="currentAdbSerials">当前处于 device 状态的 ADB 序列号集合。</param>
+    /// <returns>被移除的设备键，供 MainForm 同步清理关联运行时状态。</returns>
+    public List<string> RemoveMissingAdbDevices(HashSet<string> currentAdbSerials)
     {
-        var toRemove = _devices.Where(kvp => kvp.Value.IsAdbOnly && !currentAdbSerials.Contains(kvp.Key)).ToList();
-        foreach (var kvp in toRemove)
-        {
-            _devices.Remove(kvp.Key);
-            if (_selectedDeviceId == kvp.Key)
+        var toRemove = _devices
+            .Where(pair =>
             {
-                _selectedDeviceId = null;
-            }
+                var record = pair.Value;
+                if (record.IsAdbOnly) return !currentAdbSerials.Contains(pair.Key);
+                if (record.Info.IsConnected) return false;
+
+                var adbSerial = record.Info.AdbSerial;
+                return string.IsNullOrEmpty(adbSerial) || !currentAdbSerials.Contains(adbSerial);
+            })
+            .Select(pair => pair.Key)
+            .ToList();
+
+        foreach (var deviceId in toRemove)
+        {
+            _devices.Remove(deviceId);
+            if (_selectedDeviceId == deviceId) _selectedDeviceId = null;
         }
 
-        if (toRemove.Count > 0)
-        {
-            RefreshList();
-        }
+        if (toRemove.Count > 0) RefreshList();
+        return toRemove;
     }
 
     /// <summary>

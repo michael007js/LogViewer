@@ -92,13 +92,21 @@ public class AdbHelper
     }
 
     /// <summary>
-    /// 获取已连接的 ADB 设备列表。
+    /// 获取已连接的 ADB 设备列表。扫描失败时返回空列表。
     /// </summary>
-    /// <returns>设备列表，如果 ADB 不可用则返回空列表。</returns>
     public List<AdbDevice> GetDevices()
     {
+        return TryGetDevices(out var devices) ? devices : new();
+    }
+
+    /// <summary>
+    /// 尝试获取当前处于 device 状态的 ADB 设备，并区分“扫描成功但无设备”和“扫描失败”。
+    /// </summary>
+    public bool TryGetDevices(out List<AdbDevice> devices)
+    {
+        devices = new List<AdbDevice>();
         var adbPath = GetAdbPath();
-        if (adbPath == null) return new();
+        if (adbPath == null) return false;
 
         try
         {
@@ -112,12 +120,11 @@ public class AdbHelper
                 CreateNoWindow = true
             };
             using var proc = Process.Start(psi);
-            if (proc == null) return new();
+            if (proc == null) return false;
 
             var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(3000);
+            if (!proc.WaitForExit(3000) || proc.ExitCode != 0) return false;
 
-            var devices = new List<AdbDevice>();
             var lines = output.Split('\n');
             foreach (var line in lines.Skip(1))
             {
@@ -142,16 +149,17 @@ public class AdbHelper
                 devices.Add(new AdbDevice { Serial = serial, State = state, Model = model });
             }
 
-            foreach (var d in devices)
+            foreach (var device in devices)
             {
-                d.Model = GetDeviceModel(adbPath, d.Serial, d.Model);
+                device.Model = GetDeviceModel(adbPath, device.Serial, device.Model);
             }
 
-            return devices;
+            return true;
         }
         catch
         {
-            return new();
+            devices.Clear();
+            return false;
         }
     }
 
