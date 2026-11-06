@@ -288,7 +288,12 @@ public partial class MainForm : Form
             {
                 Text = $"[{entry.Method ?? ""}] {msgPreview}",
                 Size = new Size(800, 500),
-                StartPosition = FormStartPosition.CenterParent
+                StartPosition = FormStartPosition.CenterParent,
+                KeyPreview = true
+            };
+            form.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Escape) form.Close();
             };
             var txt = new TextBox
             {
