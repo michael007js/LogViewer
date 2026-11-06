@@ -84,7 +84,7 @@ public partial class MainForm : Form
     {
         var line = $"[BOOT] {msg}";
         Debug.WriteLine(line);
-        try { File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "boot.log"), $"{DateTime.Now:HH:mm:ss.fff} {line}\n"); } catch { }
+        // try { File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "boot.log"), $"{DateTime.Now:HH:mm:ss.fff} {line}\n"); } catch { }
     }
 
     public MainForm()
