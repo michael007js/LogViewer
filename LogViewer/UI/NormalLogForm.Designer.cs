@@ -96,6 +96,7 @@ public partial class NormalLogForm
         // 
         // _lblNormalLogCount
         // 
+        _lblNormalLogCount.AutoSize = true;
         _lblNormalLogCount.Dock = System.Windows.Forms.DockStyle.Right;
         _lblNormalLogCount.Location = new System.Drawing.Point(450, 0);
         _lblNormalLogCount.Name = "_lblNormalLogCount";

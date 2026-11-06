@@ -96,6 +96,7 @@ public partial class NetworkLogForm
         // 
         // _lblLogCount
         // 
+        _lblLogCount.AutoSize = true;
         _lblLogCount.Dock = System.Windows.Forms.DockStyle.Right;
         _lblLogCount.Location = new System.Drawing.Point(450, 0);
         _lblLogCount.Name = "_lblLogCount";
