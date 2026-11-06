@@ -78,6 +78,7 @@ public partial class MainForm : Form
     private Button _btnClear;
     private Button _btnExportJson;
     private Button _btnExportTxt;
+    private Button _btnToggleLeftPanel;
 
     private static void BootLog(string msg)
     {
@@ -330,6 +331,7 @@ public partial class MainForm : Form
             if (_scrcpySession?.IsRunning != true) return;
             _userResizedMirror = true;
         };
+        _outerSplit.Panel1Collapsed = true; // 左侧设备区初始默认折叠
         Load += OnMainFormLoad;
         Shown += async (s, e) => await OnMainFormShownAsync();
         ResizeEnd += (_, _) =>
@@ -346,6 +348,13 @@ public partial class MainForm : Form
         var result = MessageBox.Show(Language.MissingAdbMessage, Language.MissingAdbTitle,
             MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (result == DialogResult.Yes) OnSettingsClick(this, EventArgs.Empty);
+    }
+
+    /// <summary>切换左侧设备区折叠状态，同步切换按钮箭头方向（▶=展开，◀=收起）。</summary>
+    private void OnToggleLeftPanel(object? sender, EventArgs e)
+    {
+        _outerSplit.Panel1Collapsed = !_outerSplit.Panel1Collapsed;
+        _btnToggleLeftPanel.Text = _outerSplit.Panel1Collapsed ? "▶" : "◀";
     }
 
     private static bool IsDesignTimeMode()

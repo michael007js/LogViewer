@@ -44,6 +44,7 @@ public partial class MainForm
         _btnClear = new System.Windows.Forms.Button();
         _btnExportJson = new System.Windows.Forms.Button();
         _btnExportTxt = new System.Windows.Forms.Button();
+        _btnToggleLeftPanel = new System.Windows.Forms.Button();
         _statusStrip = new System.Windows.Forms.StatusStrip();
         _lblServerStatus = new System.Windows.Forms.ToolStripStatusLabel();
         _lblDeviceCountStatus = new System.Windows.Forms.ToolStripStatusLabel();
@@ -114,9 +115,21 @@ public partial class MainForm
         _lblStatus.Name = "_lblStatus";
         _lblStatus.Size = new System.Drawing.Size(67, 22);
         _lblStatus.Text = "● Running";
-        // 
+        //
+        // _btnToggleLeftPanel
+        //
+        _btnToggleLeftPanel.Dock = System.Windows.Forms.DockStyle.Left;
+        _btnToggleLeftPanel.Font = new System.Drawing.Font("Consolas", 8F);
+        _btnToggleLeftPanel.Location = new System.Drawing.Point(0, 50);
+        _btnToggleLeftPanel.Name = "_btnToggleLeftPanel";
+        _btnToggleLeftPanel.Size = new System.Drawing.Size(14, 461);
+        _btnToggleLeftPanel.TabIndex = 5;
+        _btnToggleLeftPanel.Text = "▶";
+        _btnToggleLeftPanel.UseVisualStyleBackColor = true;
+        _btnToggleLeftPanel.Click += OnToggleLeftPanel;
+        //
         // _outerSplit
-        // 
+        //
         _outerSplit.Dock = System.Windows.Forms.DockStyle.Fill;
         _outerSplit.Location = new System.Drawing.Point(0, 50);
         _outerSplit.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
@@ -446,6 +459,7 @@ public partial class MainForm
         BackColor = System.Drawing.SystemColors.Control;
         ClientSize = new System.Drawing.Size(1264, 557);
         Controls.Add(_outerSplit);
+        Controls.Add(_btnToggleLeftPanel);
         Controls.Add(_toolStrip);
         Controls.Add(_menuStrip);
         Controls.Add(_pnlBottomBar);
